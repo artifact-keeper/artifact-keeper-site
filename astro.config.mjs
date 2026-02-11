@@ -84,9 +84,10 @@ export default defineConfig({
         {
           label: 'Deployment',
           items: [
-            { label: 'AWS', slug: 'docs/deployment/aws' },
-            { label: 'Docker Compose', slug: 'docs/deployment/docker' },
+            { label: 'Helm Chart', slug: 'docs/deployment/helm' },
             { label: 'Kubernetes', slug: 'docs/deployment/kubernetes' },
+            { label: 'Docker Compose', slug: 'docs/deployment/docker' },
+            { label: 'AWS', slug: 'docs/deployment/aws' },
           ],
         },
         {
