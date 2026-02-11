@@ -22,14 +22,14 @@ Deploy Artifact Keeper on Kubernetes using the official Helm chart. The chart in
 ### 1. Add the chart
 
 ```bash
-git clone https://github.com/artifact-keeper/artifact-keeper.git
-cd artifact-keeper
+git clone https://github.com/artifact-keeper/artifact-keeper-iac.git
+cd artifact-keeper-iac
 ```
 
 ### 2. Install with default values (dev)
 
 ```bash
-helm install ak deploy/helm/artifact-keeper/ \
+helm install ak helm/ \
   --namespace artifact-keeper \
   --create-namespace
 ```
@@ -37,8 +37,8 @@ helm install ak deploy/helm/artifact-keeper/ \
 ### 3. Install with production values
 
 ```bash
-helm install ak deploy/helm/artifact-keeper/ \
-  -f deploy/helm/artifact-keeper/values-production.yaml \
+helm install ak helm/ \
+  -f helm/values-production.yaml \
   --namespace artifact-keeper \
   --create-namespace \
   --set ingress.host=registry.example.com \
@@ -154,8 +154,8 @@ For production, we recommend:
 
 ```bash
 # Upgrade with new values
-helm upgrade ak deploy/helm/artifact-keeper/ \
-  -f deploy/helm/artifact-keeper/values-production.yaml \
+helm upgrade ak helm/ \
+  -f helm/values-production.yaml \
   --namespace artifact-keeper
 
 # Check rollout status
