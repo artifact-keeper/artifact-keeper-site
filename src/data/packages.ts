@@ -17,12 +17,14 @@ export const packages: PackageFormat[] = [
   { name: "Pub", category: "Languages" },
   { name: "CRAN", category: "Languages" },
   { name: "sbt", category: "Languages" },
+  { name: "Ansible", category: "Languages" },
 
   // Containers & Cloud
   { name: "Docker/OCI", category: "Containers & Cloud" },
   { name: "Helm", category: "Containers & Cloud" },
   { name: "Terraform", category: "Containers & Cloud" },
   { name: "Vagrant", category: "Containers & Cloud" },
+  { name: "Protobuf/BSR", category: "Containers & Cloud" },
 
   // ML/AI
   { name: "HuggingFace", category: "ML/AI" },

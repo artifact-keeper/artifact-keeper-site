@@ -3,12 +3,12 @@ const features = [
   {
     icon: "\u{1F6E1}\uFE0F",
     title: "Vulnerability Scanning",
-    description: "Integrated CVE database, automatic alerts",
+    description: "Trivy + OpenSCAP integrated, automatic CVE alerts",
   },
   {
     icon: "\u{1F512}",
     title: "Access Control",
-    description: "Fine-grained permissions, RBAC",
+    description: "Fine-grained permissions, RBAC, API keys",
   },
   {
     icon: "\u{1F4CB}",
@@ -17,13 +17,28 @@ const features = [
   },
   {
     icon: "\u{1F511}",
-    title: "Encryption",
-    description: "At-rest and in-transit encryption standard",
+    title: "Artifact Signing",
+    description: "GPG and cosign support for provenance verification",
   },
   {
     icon: "\u{1F91A}",
     title: "SSO",
     description: "LDAP, SAML, OIDC out of the box",
+  },
+  {
+    icon: "\u{1F4E6}",
+    title: "SBOM & Dependency-Track",
+    description: "CycloneDX SBOM generation, dependency analysis",
+  },
+  {
+    icon: "\u{1F50D}",
+    title: "OpenSCAP Compliance",
+    description: "SCAP policy scanning for container images",
+  },
+  {
+    icon: "\u{1F510}",
+    title: "Encryption",
+    description: "At-rest and in-transit encryption standard",
   },
 ];
 ---
@@ -34,7 +49,7 @@ const features = [
       Security built in, not bolted on
     </h2>
 
-    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
       {features.map((feature) => (
         <div class="p-6">
           <div class="text-3xl mb-3">{feature.icon}</div>
@@ -51,8 +66,9 @@ const features = [
     </div>
 
     <p class="text-center text-white/50 text-xs mt-6 max-w-4xl mx-auto">
-      Security scanning powered by <a href="https://trivy.dev/" class="text-white/70 underline hover:text-white">Trivy</a> (Aqua Security)
-      and <a href="https://dependencytrack.org/" class="text-white/70 underline hover:text-white">OWASP Dependency-Track</a> &mdash; both Apache 2.0 licensed.
+      Security scanning powered by <a href="https://trivy.dev/" class="text-white/70 underline hover:text-white">Trivy</a>,
+      <a href="https://www.open-scap.org/" class="text-white/70 underline hover:text-white">OpenSCAP</a>,
+      and <a href="https://dependencytrack.org/" class="text-white/70 underline hover:text-white">OWASP Dependency-Track</a> &mdash; all open-source.
     </p>
   </div>
 </section>

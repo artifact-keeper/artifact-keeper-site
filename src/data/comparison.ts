@@ -20,7 +20,13 @@ export const columns: ComparisonColumn[] = [
 
 export const rows: ComparisonRow[] = [
   {
-    feature: "All package formats",
+    feature: "All package formats (45+)",
+    artifactKeeper: true,
+    artifactoryPro: true,
+    artifactoryEnterprise: true,
+  },
+  {
+    feature: "Proxy & virtual repositories",
     artifactKeeper: true,
     artifactoryPro: true,
     artifactoryEnterprise: true,
@@ -32,13 +38,31 @@ export const rows: ComparisonRow[] = [
     artifactoryEnterprise: true,
   },
   {
+    feature: "Artifact signing",
+    artifactKeeper: true,
+    artifactoryPro: false,
+    artifactoryEnterprise: true,
+  },
+  {
+    feature: "SBOM generation",
+    artifactKeeper: true,
+    artifactoryPro: false,
+    artifactoryEnterprise: true,
+  },
+  {
     feature: "High availability",
     artifactKeeper: true,
     artifactoryPro: false,
     artifactoryEnterprise: true,
   },
   {
-    feature: "Replication",
+    feature: "Peer-to-peer replication",
+    artifactKeeper: true,
+    artifactoryPro: false,
+    artifactoryEnterprise: true,
+  },
+  {
+    feature: "OpenTelemetry & Prometheus",
     artifactKeeper: true,
     artifactoryPro: false,
     artifactoryEnterprise: true,
@@ -50,10 +74,10 @@ export const rows: ComparisonRow[] = [
     artifactoryEnterprise: true,
   },
   {
-    feature: "REST API",
+    feature: "REST API & gRPC",
     artifactKeeper: true,
-    artifactoryPro: true,
-    artifactoryEnterprise: true,
+    artifactoryPro: "REST only",
+    artifactoryEnterprise: "REST only",
   },
   {
     feature: "Migration tooling",
