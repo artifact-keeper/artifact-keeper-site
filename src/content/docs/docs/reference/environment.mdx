@@ -182,14 +182,14 @@ Configure Artifact Keeper using environment variables. This page provides a comp
 | `BLOCK_VULNERABLE_UPLOADS` | No | `false` | Block uploads with critical vulnerabilities |
 | `VULNERABILITY_SEVERITY_THRESHOLD` | No | `HIGH` | Severity threshold (CRITICAL, HIGH, MEDIUM, LOW) |
 
-## Monitoring
+## Monitoring & Observability
 
 | Variable | Required | Default | Description |
 |----------|----------|---------|-------------|
 | `METRICS_ENABLED` | No | `true` | Enable Prometheus metrics |
 | `METRICS_PATH` | No | `/metrics` | Metrics endpoint path |
-| `TRACING_ENABLED` | No | `false` | Enable distributed tracing |
-| `TRACING_ENDPOINT` | No | - | Jaeger/OpenTelemetry endpoint |
+| `OTEL_EXPORTER_OTLP_ENDPOINT` | No | - | OTLP gRPC endpoint for distributed tracing (e.g., `http://jaeger:4317`). When unset, tracing exports are disabled and logging is stdout-only. |
+| `OTEL_SERVICE_NAME` | No | `artifact-keeper` | Service name reported in traces |
 | `AUDIT_LOG_ENABLED` | No | `true` | Enable audit logging |
 | `AUDIT_LOG_PATH` | No | `/var/log/artifact-keeper/audit.log` | Audit log file path |
 

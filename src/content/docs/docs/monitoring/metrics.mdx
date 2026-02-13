@@ -1,0 +1,235 @@
+---
+title: "Prometheus Metrics"
+description: "Monitor Artifact Keeper with Prometheus metrics covering HTTP performance, artifact operations, security scanning, backups, and infrastructure health"
+---
+
+Artifact Keeper exposes Prometheus-compatible metrics at `/api/v1/admin/metrics`. These metrics cover HTTP request performance, artifact operations, security scanning, backup operations, and infrastructure health, giving you full observability into your registry.
+
+## Accessing Metrics
+
+Scrape the metrics endpoint directly:
+
+```bash
+curl http://localhost:8080/api/v1/admin/metrics
+```
+
+:::caution
+The metrics endpoint requires admin authentication in production. Include your API key or bearer token:
+
+```bash
+curl -H "Authorization: Bearer $ADMIN_TOKEN" \
+  https://registry.example.com/api/v1/admin/metrics
+```
+:::
+
+The response is in standard Prometheus exposition format, ready for ingestion by any Prometheus-compatible scraper.
+
+## HTTP Request Metrics
+
+These metrics track all inbound HTTP traffic to the backend API.
+
+| Metric | Type | Labels | Description |
+|--------|------|--------|-------------|
+| `ak_http_requests_total` | Counter | `method`, `path` | Total HTTP requests received |
+| `ak_http_responses_total` | Counter | `method`, `path`, `status` | Total HTTP responses sent |
+| `ak_http_request_duration_seconds` | Histogram | `method`, `path`, `status` | Request latency distribution |
+| `ak_http_requests_in_flight` | Gauge | `method`, `path` | Number of currently active requests |
+
+:::tip
+Paths are normalized to prevent high-cardinality label explosion. UUIDs are replaced with `:id` and numeric identifiers are replaced with `:id`. For example, `/api/v1/repositories/550e8400-e29b-41d4-a716-446655440000/artifacts` becomes `/api/v1/repositories/:id/artifacts`.
+:::
+
+### Example Queries
+
+Request rate over the last 5 minutes:
+
+```promql
+rate(ak_http_requests_total[5m])
+```
+
+95th percentile latency by path:
+
+```promql
+histogram_quantile(0.95, rate(ak_http_request_duration_seconds_bucket[5m]))
+```
+
+## Artifact Metrics
+
+Track upload and download activity across repositories and package formats.
+
+| Metric | Type | Labels | Description |
+|--------|------|--------|-------------|
+| `ak_artifact_uploads_total` | Counter | `repository`, `format` | Total artifact uploads |
+| `ak_artifact_upload_size_bytes` | Histogram | `format` | Upload size distribution |
+| `ak_artifact_downloads_total` | Counter | `repository`, `format` | Total artifact downloads |
+
+### Example Queries
+
+Upload rate by format over the last hour:
+
+```promql
+sum(rate(ak_artifact_uploads_total[1h])) by (format)
+```
+
+Average upload size by format:
+
+```promql
+rate(ak_artifact_upload_size_bytes_sum[5m]) / rate(ak_artifact_upload_size_bytes_count[5m])
+```
+
+## Infrastructure Gauges
+
+These gauges are updated every 5 minutes from the database and provide a high-level view of registry state.
+
+| Metric | Type | Labels | Description |
+|--------|------|--------|-------------|
+| `ak_storage_used_bytes` | Gauge | - | Total storage consumed by artifacts |
+| `ak_artifacts_total` | Gauge | - | Total number of stored artifacts |
+| `ak_repositories_total` | Gauge | - | Total number of repositories |
+| `ak_users_total` | Gauge | - | Total number of registered users |
+
+These metrics are useful for capacity planning dashboards and tracking growth trends over time.
+
+## Database Connection Pool
+
+The database connection pool metrics are critical for detecting connection exhaustion and ensuring query throughput.
+
+| Metric | Type | Labels | Description |
+|--------|------|--------|-------------|
+| `ak_db_pool_connections_active` | Gauge | - | Connections currently in use |
+| `ak_db_pool_connections_idle` | Gauge | - | Idle connections available in pool |
+| `ak_db_pool_connections_max` | Gauge | - | Configured maximum connections |
+| `ak_db_pool_connections_size` | Gauge | - | Total connections in pool (active + idle) |
+
+:::caution
+When `ak_db_pool_connections_active` approaches `ak_db_pool_connections_max`, new database queries will start queuing. Sustained saturation leads to request timeouts and degraded performance. Monitor the ratio closely and scale your pool size or database resources before reaching capacity.
+:::
+
+### Example Queries
+
+Pool utilization percentage:
+
+```promql
+ak_db_pool_connections_active / ak_db_pool_connections_max * 100
+```
+
+## Operations Metrics
+
+Track background operations including backups, security scanning, webhooks, and lifecycle cleanup.
+
+| Metric | Type | Labels | Description |
+|--------|------|--------|-------------|
+| `ak_backup_operations_total` | Counter | `type`, `status` | Backup operations by type and outcome (success/failure) |
+| `ak_backup_duration_seconds` | Histogram | `type` | Backup duration distribution |
+| `ak_security_scans_total` | Counter | `scanner`, `status` | Security scan operations by scanner and outcome |
+| `ak_security_scan_duration_seconds` | Histogram | `scanner` | Scan duration distribution |
+| `ak_webhook_deliveries_total` | Counter | `event`, `status` | Webhook delivery attempts by event type and outcome |
+| `ak_cleanup_items_removed_total` | Counter | `type` | Items removed by lifecycle cleanup policies |
+
+### Example Queries
+
+Backup failure rate:
+
+```promql
+rate(ak_backup_operations_total{status="failure"}[1h])
+```
+
+Average scan duration by scanner:
+
+```promql
+rate(ak_security_scan_duration_seconds_sum[5m]) / rate(ak_security_scan_duration_seconds_count[5m])
+```
+
+## Kubernetes ServiceMonitor
+
+If you run Prometheus Operator in your Kubernetes cluster, create a `ServiceMonitor` to automatically discover and scrape the metrics endpoint:
+
+```yaml
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: artifact-keeper
+  namespace: artifact-keeper
+spec:
+  selector:
+    matchLabels:
+      app: backend
+  endpoints:
+    - port: http
+      path: /api/v1/admin/metrics
+      interval: 30s
+```
+
+:::tip
+If admin authentication is required, configure the `ServiceMonitor` with a bearer token from a Kubernetes Secret:
+
+```yaml
+endpoints:
+  - port: http
+    path: /api/v1/admin/metrics
+    interval: 30s
+    bearerTokenSecret:
+      name: artifact-keeper-secrets
+      key: metrics-token
+```
+:::
+
+## Grafana Dashboard
+
+Build a Grafana dashboard with the following recommended panels for a complete operational overview:
+
+- **Request rate and latency** -- Use `ak_http_request_duration_seconds` to show request throughput and p50/p95/p99 latency over time.
+- **Error rate by status code** -- Graph `rate(ak_http_responses_total{status=~"5.."}[5m])` to surface server-side failures.
+- **Upload and download rates by format** -- Break down `ak_artifact_uploads_total` and `ak_artifact_downloads_total` by the `format` label to see which package ecosystems are most active.
+- **Database pool utilization** -- Plot the ratio `ak_db_pool_connections_active / ak_db_pool_connections_max` as a gauge to visualize headroom.
+- **Storage growth over time** -- Track `ak_storage_used_bytes` to forecast when you will need to expand capacity.
+- **Backup and scan status** -- Show `ak_backup_operations_total` and `ak_security_scans_total` split by `status` to catch failures quickly.
+
+## Alerting Examples
+
+Below are example Prometheus alerting rules you can adapt for your environment. Save these as part of your Prometheus rule files or `PrometheusRule` custom resource:
+
+```yaml
+groups:
+  - name: artifact-keeper
+    rules:
+      - alert: HighErrorRate
+        expr: >
+          rate(ak_http_responses_total{status=~"5.."}[5m])
+          / rate(ak_http_responses_total[5m]) > 0.05
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Error rate above 5%"
+          description: "More than 5% of HTTP responses have been 5xx errors for the last 5 minutes."
+
+      - alert: DBPoolExhaustion
+        expr: ak_db_pool_connections_active / ak_db_pool_connections_max > 0.9
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "DB connection pool above 90% utilization"
+          description: "Active connections are near the pool maximum. Queries may begin queuing."
+
+      - alert: BackupFailure
+        expr: increase(ak_backup_operations_total{status="failure"}[1h]) > 0
+        for: 0m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Backup operation failed"
+          description: "At least one backup operation has failed in the last hour. Check logs for details."
+```
+
+:::tip
+Tune the `for` duration and threshold values to match your environment. A 5% error rate threshold is a reasonable starting point, but high-traffic registries may want a tighter threshold, while low-traffic instances may need a wider window to avoid false positives.
+:::
+
+## See Also
+
+- [Kubernetes Deployment](/docs/deployment/kubernetes) -- ServiceMonitor setup and production deployment
+- [Backup & Recovery](/docs/advanced/backup) -- Backup metrics and alerting
+- [Vulnerability Scanning](/docs/security/scanning) -- Security scan metrics and monitoring
+- [Configuration Reference](/docs/reference/environment) -- Environment variables for tuning metrics collection

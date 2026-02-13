@@ -1,0 +1,333 @@
+---
+title: "Health Checks"
+description: "Health check endpoints for Kubernetes probes, Docker healthchecks, and monitoring dashboards"
+---
+
+Artifact Keeper exposes multiple health check endpoints, each designed for a specific use case. Lightweight probes keep Kubernetes from restarting pods unnecessarily, while the full health dashboard gives operators visibility into every dependent service.
+
+## Endpoints Reference
+
+| Endpoint | Purpose | Checks performed | Recommended use |
+|----------|---------|------------------|-----------------|
+| `/livez` | Liveness probe | None (if Axum routes the request, the process is alive) | Kubernetes `livenessProbe` |
+| `/readyz` | Readiness probe | Database connectivity, migrations, setup completion | Kubernetes `readinessProbe` and `startupProbe` |
+| `/health` | Full health dashboard | Database, Trivy, Meilisearch, OpenSCAP, Dependency-Track, storage backend, DB pool stats | Monitoring dashboards, alerting |
+| `/healthz` | Alias for `/health` | Same as `/health` | Monitoring dashboards |
+| `/ready` | Legacy alias for `/readyz` | Same as `/readyz` | Backward compatibility |
+
+## Endpoint Details
+
+### `/livez` -- Liveness Probe
+
+A zero-dependency check. If the Axum HTTP server can route the request, the process is alive. No database queries, no external service checks.
+
+Returns `200 OK` with:
+
+```json
+{"status":"ok"}
+```
+
+This endpoint always succeeds as long as the process is running. Use it as the Kubernetes liveness probe because it never triggers unnecessary restarts due to external service failures.
+
+### `/readyz` -- Readiness Probe
+
+Verifies that the server is ready to accept traffic by checking three things:
+
+1. **Database connectivity** -- executes `SELECT 1` against PostgreSQL
+2. **Migrations** -- queries the `_sqlx_migrations` table to confirm all migrations have been applied
+3. **Setup completion** -- confirms the admin password has been set (first-time setup is complete)
+
+Returns `200 OK` when all checks pass, or `503 Service Unavailable` when any check fails.
+
+```json
+{
+  "status": "ok",
+  "checks": {
+    "database": {
+      "status": "healthy",
+      "message": null
+    },
+    "migrations": {
+      "status": "healthy",
+      "message": null
+    },
+    "setup_complete": {
+      "status": "healthy",
+      "message": null
+    }
+  }
+}
+```
+
+### `/health` -- Full Health Dashboard
+
+Performs a comprehensive check of every dependent service and includes database connection pool statistics. Checks:
+
+- **Database** -- connection and query execution
+- **Trivy** -- vulnerability scanner reachability
+- **Meilisearch** -- search engine reachability
+- **OpenSCAP** -- compliance scanner reachability
+- **Dependency-Track** -- SBOM analysis platform reachability
+- **Storage backend** -- active read/write probe (see [Storage Health Check Details](#storage-health-check-details))
+- **DB pool** -- connection pool utilization statistics
+
+Returns `200 OK` when all services are healthy, or `503 Service Unavailable` when any service is degraded.
+
+:::caution
+Do not use `/health` as a Kubernetes liveness probe. If an external service like Trivy or Meilisearch goes down, the `/health` endpoint returns 503, which would cause Kubernetes to restart your backend pods -- even though the backend itself is functioning correctly. This creates cascading failures. Use `/livez` for liveness instead.
+:::
+
+## Response Examples
+
+### Liveness probe
+
+```bash
+curl -s http://localhost:8080/livez | jq .
+```
+
+```json
+{
+  "status": "ok"
+}
+```
+
+### Readiness probe
+
+```bash
+curl -s http://localhost:8080/readyz | jq .
+```
+
+```json
+{
+  "status": "ok",
+  "checks": {
+    "database": {
+      "status": "healthy",
+      "message": null
+    },
+    "migrations": {
+      "status": "healthy",
+      "message": null
+    },
+    "setup_complete": {
+      "status": "healthy",
+      "message": null
+    }
+  }
+}
+```
+
+### Full health dashboard
+
+```bash
+curl -s http://localhost:8080/health | jq .
+```
+
+```json
+{
+  "status": "healthy",
+  "checks": {
+    "database": {
+      "status": "healthy",
+      "message": null
+    },
+    "trivy": {
+      "status": "healthy",
+      "message": null
+    },
+    "meilisearch": {
+      "status": "healthy",
+      "message": null
+    },
+    "openscap": {
+      "status": "healthy",
+      "message": null
+    },
+    "dependency_track": {
+      "status": "healthy",
+      "message": null
+    },
+    "storage": {
+      "status": "healthy",
+      "message": null
+    }
+  },
+  "db_pool": {
+    "active": 2,
+    "idle": 18,
+    "max": 20,
+    "size": 20
+  }
+}
+```
+
+## Kubernetes Configuration
+
+The recommended probe configuration uses each endpoint for the purpose it was designed for:
+
+```yaml
+containers:
+  - name: backend
+    image: ghcr.io/artifact-keeper/artifact-keeper-backend:latest
+    ports:
+      - containerPort: 8080
+    startupProbe:
+      httpGet:
+        path: /readyz
+        port: 8080
+      periodSeconds: 5
+      failureThreshold: 30        # 150s max startup for slow migrations
+    livenessProbe:
+      httpGet:
+        path: /livez
+        port: 8080
+      periodSeconds: 15
+      timeoutSeconds: 3
+      failureThreshold: 3
+    readinessProbe:
+      httpGet:
+        path: /readyz
+        port: 8080
+      periodSeconds: 10
+      timeoutSeconds: 5
+      failureThreshold: 3
+```
+
+### Why each endpoint is chosen
+
+**`startupProbe` uses `/readyz`** -- During startup, the server needs time to connect to PostgreSQL and run migrations. The startup probe gives it up to 150 seconds (5s period x 30 failures) before Kubernetes considers the container failed. Once the startup probe succeeds, the liveness and readiness probes take over.
+
+**`livenessProbe` uses `/livez`** -- The liveness probe answers one question: is the process still running and able to handle HTTP requests? By using `/livez`, which has zero external dependencies, you avoid cascading restarts when a downstream service (database, Trivy, Meilisearch) is temporarily unavailable. Kubernetes only restarts the pod if the backend process itself is hung or crashed.
+
+**`readinessProbe` uses `/readyz`** -- The readiness probe controls whether the pod receives traffic. If the database becomes unreachable or migrations are pending after a rolling update, `/readyz` returns 503 and Kubernetes removes the pod from the Service endpoints. Traffic shifts to healthy pods without restarting anything.
+
+:::tip
+The startup probe prevents the liveness probe from running during initial boot. Without it, a slow migration could cause Kubernetes to kill the pod before it finishes starting. Always configure a startup probe for Artifact Keeper deployments.
+:::
+
+## Docker Compose Healthcheck
+
+For Docker Compose deployments, use `/readyz` to gate dependent services:
+
+```yaml
+services:
+  backend:
+    image: ghcr.io/artifact-keeper/artifact-keeper-backend:latest
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/readyz"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+```
+
+Other services can then use `depends_on` with a health condition:
+
+```yaml
+services:
+  frontend:
+    image: ghcr.io/artifact-keeper/artifact-keeper-web:latest
+    depends_on:
+      backend:
+        condition: service_healthy
+```
+
+## Storage Health Check Details
+
+The `/health` endpoint performs an active probe of the configured storage backend, not just a connectivity check.
+
+### Filesystem storage
+
+When `STORAGE_BACKEND=filesystem`, the health check:
+
+1. **Writes** a `.health-probe` file to the configured `STORAGE_PATH`
+2. **Reads** the file back and verifies its contents
+3. **Deletes** the file
+
+This validates that the storage path exists, the process has read/write/delete permissions, and the filesystem is responsive. If any step fails, the storage check reports `unhealthy` with a descriptive error message.
+
+### S3 storage
+
+When `STORAGE_BACKEND=s3`, the health check validates that the required S3 configuration (bucket, region, credentials) is present and correctly specified.
+
+## DB Pool Statistics
+
+The `db_pool` field in the `/health` response provides real-time connection pool metrics from SQLx:
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `active` | integer | Connections currently checked out and executing queries |
+| `idle` | integer | Connections sitting in the pool, available for immediate use |
+| `max` | integer | Configured maximum pool size (set via `DB_POOL_SIZE`, default `20`) |
+| `size` | integer | Total connections currently in the pool (`active + idle`) |
+
+These metrics are useful for capacity planning and diagnosing connection exhaustion:
+
+- **`active` approaching `max`** -- The application is under heavy database load. Consider increasing `DB_POOL_SIZE` or optimizing slow queries.
+- **`size` less than `max`** -- The pool has not yet needed to open all allowed connections. This is normal under light load.
+- **`idle` at zero, `active` at `max`** -- All connections are in use. New requests will block waiting for a connection. This typically indicates the pool is undersized for the workload or a query is holding connections too long.
+
+## Troubleshooting
+
+### `/readyz` returning 503 during startup
+
+This is expected behavior. The readiness probe returns 503 until:
+
+1. PostgreSQL is reachable
+2. All database migrations have completed
+3. The admin password has been set (first-time setup is finished)
+
+If using Kubernetes, the startup probe handles this gracefully. For Docker Compose, the `start_period` setting in the healthcheck gives the backend time to initialize before Docker considers it unhealthy.
+
+If `/readyz` continues to return 503 after startup:
+
+```bash
+# Check the response body for which check is failing
+curl -s http://localhost:8080/readyz | jq .
+```
+
+- **`database: unhealthy`** -- Verify `DATABASE_URL` is correct and PostgreSQL is reachable
+- **`migrations: unhealthy`** -- Check backend logs for migration errors
+- **`setup_complete: unhealthy`** -- Complete the first-time setup by setting the admin password, or set the `ADMIN_PASSWORD` environment variable
+
+### `/health` showing unhealthy storage
+
+The storage health check performs real I/O operations. Common causes of failure:
+
+- **Permission denied** -- The backend process does not have read/write access to `STORAGE_PATH`. Verify ownership and permissions:
+  ```bash
+  ls -la /var/lib/artifact-keeper/artifacts
+  ```
+- **Path does not exist** -- The `STORAGE_PATH` directory has not been created. Create it and set appropriate permissions:
+  ```bash
+  mkdir -p /var/lib/artifact-keeper/artifacts
+  chown -R artifact-keeper:artifact-keeper /var/lib/artifact-keeper/artifacts
+  ```
+- **Disk full** -- The health probe write will fail if the filesystem has no free space. Check disk usage:
+  ```bash
+  df -h /var/lib/artifact-keeper/artifacts
+  ```
+- **S3 misconfiguration** -- When using S3 storage, verify that `S3_BUCKET`, `S3_REGION`, and credentials are set correctly.
+
+### `/health` showing unhealthy external services
+
+External service checks (Trivy, Meilisearch, OpenSCAP, Dependency-Track) report unhealthy when the service is unreachable or not responding.
+
+:::tip
+External service failures do not affect `/livez` or `/readyz`. The backend continues to serve artifacts and API requests normally -- only features that depend on the specific service (vulnerability scanning, full-text search, compliance checks) are degraded.
+:::
+
+To diagnose:
+
+- **Trivy unhealthy** -- Verify `TRIVY_URL` is correct and the Trivy server is running:
+  ```bash
+  curl -s http://localhost:8090/healthz
+  ```
+- **Meilisearch unhealthy** -- Verify `MEILISEARCH_URL` and check if the Meilisearch process is running:
+  ```bash
+  curl -s http://localhost:7700/health
+  ```
+- **OpenSCAP unhealthy** -- Verify the OpenSCAP service is running on port 8091
+- **Dependency-Track unhealthy** -- Verify Dependency-Track is running on port 8092
+
+If you do not use a particular service, it is safe to ignore its unhealthy status in the `/health` response. The service will show as unhealthy if its URL is not configured or the service is not deployed.

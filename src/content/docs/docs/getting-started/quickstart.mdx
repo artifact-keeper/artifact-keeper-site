@@ -84,7 +84,13 @@ Always enable 2FA on the admin account. This protects against credential theft a
 5. **Verify everything works**:
 
 ```bash
-# Health check
+# Quick liveness check
+curl http://localhost:30080/livez
+
+# Readiness check (DB + migrations + setup)
+curl http://localhost:30080/readyz
+
+# Full health dashboard
 curl http://localhost:30080/health
 
 # List repositories

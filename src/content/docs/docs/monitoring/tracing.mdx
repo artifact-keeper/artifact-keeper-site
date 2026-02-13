@@ -1,0 +1,166 @@
+---
+title: "Distributed Tracing"
+description: "Configure OpenTelemetry distributed tracing in Artifact Keeper for full request visibility across services"
+---
+
+Artifact Keeper supports opt-in OpenTelemetry distributed tracing. When enabled, spans are exported via OTLP gRPC to any compatible collector such as Jaeger, Grafana Tempo, Datadog, or AWS X-Ray. When disabled (the default), behavior is identical to stdout-only logging with zero overhead.
+
+## Configuration
+
+Tracing is controlled entirely through environment variables. No code changes or config files are required.
+
+| Variable | Required | Default | Description |
+|----------|----------|---------|-------------|
+| `OTEL_EXPORTER_OTLP_ENDPOINT` | No | _(unset)_ | OTLP collector endpoint (e.g., `http://jaeger:4317`). When unset, tracing exports are disabled. |
+| `OTEL_SERVICE_NAME` | No | `artifact-keeper` | Service name that appears in traces. |
+| `RUST_LOG` | No | `info,sqlx::query=info` | Log and trace filter directive. The default includes `sqlx::query=info` which enables database query spans. |
+
+:::tip
+Setting `OTEL_EXPORTER_OTLP_ENDPOINT` is the only variable required to activate tracing. Leave it unset to keep tracing fully disabled with no runtime cost.
+:::
+
+## Quick Start with Jaeger
+
+The fastest way to get tracing working locally is with Jaeger's all-in-one image.
+
+### 1. Add Jaeger to Docker Compose
+
+Add the following service to your `docker-compose.yml` (or a `docker-compose.override.yml`):
+
+```yaml
+jaeger:
+  image: jaegertracing/all-in-one:1.62
+  ports:
+    - "16686:16686"   # Jaeger UI
+    - "4317:4317"     # OTLP gRPC
+    - "4318:4318"     # OTLP HTTP
+```
+
+### 2. Configure the Backend
+
+Point the backend at the Jaeger OTLP endpoint:
+
+```yaml
+backend:
+  environment:
+    OTEL_EXPORTER_OTLP_ENDPOINT: http://jaeger:4317
+    OTEL_SERVICE_NAME: artifact-keeper
+```
+
+### 3. View Traces
+
+Start the stack, then open the Jaeger UI at [http://localhost:16686](http://localhost:16686). Select service **artifact-keeper** from the dropdown and click **Find Traces**.
+
+Each trace shows the full lifecycle of an HTTP request, including nested database queries, giving you a waterfall view of where time is spent.
+
+## What Gets Traced
+
+When tracing is enabled, Artifact Keeper emits the following span hierarchy:
+
+### HTTP Requests
+
+Every incoming HTTP request creates an `http_request` span containing:
+
+| Attribute | Description |
+|-----------|-------------|
+| `http.method` | HTTP method (`GET`, `POST`, `PUT`, `DELETE`, etc.) |
+| `http.route` | Matched route path (e.g., `/api/v1/artifacts/:id`) |
+| `http.status_code` | Response status code |
+| `correlation_id` | Unique request correlation ID |
+
+### Database Queries
+
+SQLx automatically emits a span for every SQL query executed during a request. These spans include the query text and execution time. Database query spans are enabled by the `sqlx::query=info` filter level in `RUST_LOG`.
+
+### Nested Span Tree
+
+Database query spans appear as children of the HTTP request span that triggered them. This gives you full request waterfall visibility -- you can see exactly which queries a handler executes and how long each one takes.
+
+```
+http_request GET /api/v1/artifacts/search?q=openssl  [45ms]
+  sqlx::query SELECT * FROM artifacts WHERE ...       [12ms]
+  sqlx::query SELECT * FROM scan_results WHERE ...     [8ms]
+  sqlx::query SELECT * FROM artifact_tags WHERE ...    [3ms]
+```
+
+## W3C Trace Context
+
+Artifact Keeper's correlation ID middleware supports the W3C `traceparent` header for distributed trace propagation across services.
+
+### Header Priority
+
+When determining the correlation ID for a request, the following priority order is used:
+
+| Priority | Source | Description |
+|----------|--------|-------------|
+| 1 (highest) | `X-Correlation-ID` header | Explicit correlation ID set by the caller |
+| 2 | `traceparent` header | Trace ID extracted from W3C Trace Context |
+| 3 (lowest) | Auto-generated | A new UUID is generated if no header is present |
+
+### Cross-Service Propagation
+
+If an upstream service (such as an API gateway or load balancer) sets a `traceparent` header, Artifact Keeper will extract the trace ID and use it as the correlation ID. This means the same trace ID appears in both the upstream service's spans and Artifact Keeper's spans, linking them together in your tracing backend.
+
+```bash
+# Example: calling Artifact Keeper with an existing trace context
+curl -H "traceparent: 00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01" \
+  http://localhost:8080/api/v1/artifacts
+```
+
+:::tip
+If you are already using a service mesh or API gateway that propagates W3C Trace Context, Artifact Keeper will automatically participate in your existing distributed traces with no additional configuration.
+:::
+
+## Production Backends
+
+Artifact Keeper exports traces using the standard OTLP gRPC protocol, which is supported by all major observability platforms. Point `OTEL_EXPORTER_OTLP_ENDPOINT` at your collector.
+
+### Grafana Tempo
+
+```bash
+OTEL_EXPORTER_OTLP_ENDPOINT=http://tempo:4317
+```
+
+### Datadog Agent
+
+```bash
+OTEL_EXPORTER_OTLP_ENDPOINT=http://datadog-agent:4317
+```
+
+### AWS X-Ray (via ADOT Collector)
+
+```bash
+OTEL_EXPORTER_OTLP_ENDPOINT=http://aws-otel-collector:4317
+```
+
+:::caution
+Ensure your collector is reachable from the Artifact Keeper backend container. If you are running in Kubernetes, the collector is typically deployed as a DaemonSet or sidecar. In Docker Compose, place the collector on the same Docker network as the backend.
+:::
+
+## Graceful Shutdown
+
+The OpenTelemetry tracer provider is wrapped in a guard (`OtelGuard`) that flushes all pending spans when the Artifact Keeper process shuts down. This ensures no trace data is lost during rolling deployments or container restarts.
+
+The flush happens automatically as part of the server's graceful shutdown sequence -- there is nothing to configure. If the process receives a `SIGTERM` (the standard signal used by Docker and Kubernetes), pending spans are exported to the collector before the process exits.
+
+## Local Development
+
+The local development Docker Compose file includes Jaeger pre-configured and ready to use. No additional setup is needed.
+
+```bash
+docker compose -f docker-compose.local-dev.yml up -d
+```
+
+Once the stack is running, the Jaeger UI is available at [http://localhost:16686](http://localhost:16686).
+
+The backend in the local dev compose is already configured with `OTEL_EXPORTER_OTLP_ENDPOINT` pointing at the local Jaeger instance. Make a few requests to the API or web UI, then open Jaeger and select the **artifact-keeper** service to see traces.
+
+:::tip
+To see database query detail in your traces, make sure `RUST_LOG` includes `sqlx::query=info` (this is the default). If you override `RUST_LOG`, add `sqlx::query=info` to your custom filter to preserve database span visibility.
+:::
+
+## See Also
+
+- [Configuration](/docs/getting-started/configuration) - Full environment variable reference
+- [Docker Compose Deployment](/docs/deployment/docker) - Production Docker Compose setup
+- [Vulnerability Scanning](/docs/security/scanning) - Security scanning configuration

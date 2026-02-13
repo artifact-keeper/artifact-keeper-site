@@ -83,6 +83,14 @@ export default defineConfig({
           ],
         },
         {
+          label: 'Monitoring & Observability',
+          items: [
+            { label: 'Health Checks', slug: 'docs/monitoring/health-checks' },
+            { label: 'Distributed Tracing', slug: 'docs/monitoring/tracing' },
+            { label: 'Prometheus Metrics', slug: 'docs/monitoring/metrics' },
+          ],
+        },
+        {
           label: 'Deployment',
           items: [
             { label: 'Helm Chart', slug: 'docs/deployment/helm' },
