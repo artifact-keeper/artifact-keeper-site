@@ -643,6 +643,56 @@ Always test packages in a staging environment:
 /debian/unstable      # Development builds
 ```
 
+## Remote & Virtual Repositories
+
+Use Artifact Keeper as a pull-through cache for public system package repositories or aggregate multiple package sources.
+
+Remote proxy and virtual repository support is available for all system package formats: RPM (yum/dnf), Debian (apt), and Alpine (apk).
+
+### Pull-Through Cache Examples
+
+```bash
+# RPM - cache from CentOS/EPEL
+curl -X POST http://localhost:8080/api/v1/repositories \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $TOKEN" \
+  -d '{
+    "key": "rpm-remote",
+    "name": "RPM Remote",
+    "format": "rpm",
+    "repo_type": "remote",
+    "upstream_url": "https://mirror.centos.org/centos/8/BaseOS/x86_64/os"
+  }'
+
+# Debian - cache from Ubuntu archive
+curl -X POST http://localhost:8080/api/v1/repositories \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $TOKEN" \
+  -d '{
+    "key": "deb-remote",
+    "name": "Debian Remote",
+    "format": "debian",
+    "repo_type": "remote",
+    "upstream_url": "http://archive.ubuntu.com/ubuntu"
+  }'
+
+# Alpine - cache from Alpine Linux
+curl -X POST http://localhost:8080/api/v1/repositories \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $TOKEN" \
+  -d '{
+    "key": "alpine-remote",
+    "name": "Alpine Remote",
+    "format": "alpine",
+    "repo_type": "remote",
+    "upstream_url": "https://dl-cdn.alpinelinux.org/alpine"
+  }'
+```
+
+### Virtual Repositories
+
+Combine internal and cached packages behind a single source for each format. See the [Remote & Virtual Repositories](/docs/advanced/remote-virtual) guide for full details on setting up virtual repositories, cache TTL, and priority ordering.
+
 ## See Also
 
 - [Repository Signing](/docs/security/signing/) - Sign packages and repository metadata

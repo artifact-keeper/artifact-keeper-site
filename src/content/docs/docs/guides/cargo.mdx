@@ -552,6 +552,59 @@ cargo doc --no-deps
 cargo package --list
 ```
 
+## Remote & Virtual Repositories
+
+Use Artifact Keeper as a pull-through cache for crates.io or aggregate multiple Cargo registries behind a single URL.
+
+### Pull-Through Cache
+
+Create a remote repository to cache crates from crates.io:
+
+```bash
+curl -X POST http://localhost:8080/api/v1/repositories \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $TOKEN" \
+  -d '{
+    "key": "cargo-remote",
+    "name": "Cargo Remote",
+    "format": "cargo",
+    "repo_type": "remote",
+    "upstream_url": "https://crates.io"
+  }'
+```
+
+Configure Cargo to use the remote repository in `.cargo/config.toml`:
+
+```toml
+[registries.cache]
+index = "sparse+http://localhost:8080/cargo/cargo-remote/index/"
+```
+
+### Virtual Repository
+
+Combine internal crates with a crates.io cache:
+
+```bash
+# Create virtual repository
+curl -X POST http://localhost:8080/api/v1/repositories \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $TOKEN" \
+  -d '{"key":"cargo-virtual","name":"Cargo Virtual","format":"cargo","repo_type":"virtual"}'
+
+# Add local repo first, remote as fallback
+curl -X POST http://localhost:8080/api/v1/repositories/cargo-virtual/members \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $TOKEN" \
+  -d '{"member_key":"cargo-local","priority":1}'
+
+curl -X POST http://localhost:8080/api/v1/repositories/cargo-virtual/members \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $TOKEN" \
+  -d '{"member_key":"cargo-remote","priority":2}'
+```
+
+For full details on cache TTL, priority ordering, and monitoring, see the [Remote & Virtual Repositories](/docs/advanced/remote-virtual) guide.
+
 ## See Also
 
 - [Security Scanning](/security/scanning) - Automatic vulnerability scanning for Rust crates

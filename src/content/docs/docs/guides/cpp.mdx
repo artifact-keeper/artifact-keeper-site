@@ -431,6 +431,56 @@ cat ~/.netrc
 curl -n https://artifacts.example.com/bazel/main
 ```
 
+## Remote & Virtual Repositories
+
+Use Artifact Keeper as a pull-through cache for Conan Center or aggregate multiple Conan remotes.
+
+### Pull-Through Cache
+
+Create a remote repository to cache packages from Conan Center:
+
+```bash
+curl -X POST http://localhost:8080/api/v1/repositories \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $TOKEN" \
+  -d '{
+    "key": "conan-remote",
+    "name": "Conan Center Remote",
+    "format": "conan",
+    "repo_type": "remote",
+    "upstream_url": "https://center.conan.io"
+  }'
+```
+
+Add the remote to Conan:
+
+```bash
+conan remote add ak-cache http://localhost:8080/conan/conan-remote/
+```
+
+### Virtual Repository
+
+Combine internal recipes with a Conan Center cache:
+
+```bash
+curl -X POST http://localhost:8080/api/v1/repositories \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $TOKEN" \
+  -d '{"key":"conan-virtual","name":"Conan Virtual","format":"conan","repo_type":"virtual"}'
+
+curl -X POST http://localhost:8080/api/v1/repositories/conan-virtual/members \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $TOKEN" \
+  -d '{"member_key":"conan-local","priority":1}'
+
+curl -X POST http://localhost:8080/api/v1/repositories/conan-virtual/members \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $TOKEN" \
+  -d '{"member_key":"conan-remote","priority":2}'
+```
+
+For full details on cache TTL, priority ordering, and monitoring, see the [Remote & Virtual Repositories](/docs/advanced/remote-virtual) guide.
+
 ## Next Steps
 
 - Learn about [repository management](/docs/concepts/repositories)

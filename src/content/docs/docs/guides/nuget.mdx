@@ -801,6 +801,57 @@ Use package lock files for reproducible builds:
 </PropertyGroup>
 ```
 
+## Remote & Virtual Repositories
+
+Use Artifact Keeper as a pull-through cache for nuget.org or aggregate multiple NuGet feeds behind a single source.
+
+### Pull-Through Cache
+
+Create a remote repository to cache packages from nuget.org:
+
+```bash
+curl -X POST http://localhost:8080/api/v1/repositories \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $TOKEN" \
+  -d '{
+    "key": "nuget-remote",
+    "name": "NuGet Remote",
+    "format": "nuget",
+    "repo_type": "remote",
+    "upstream_url": "https://api.nuget.org"
+  }'
+```
+
+Add the remote feed as a NuGet source:
+
+```bash
+dotnet nuget add source http://localhost:8080/nuget/nuget-remote/v3/index.json \
+  --name artifact-keeper-cache
+```
+
+### Virtual Repository
+
+Combine internal packages with a nuget.org cache:
+
+```bash
+curl -X POST http://localhost:8080/api/v1/repositories \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $TOKEN" \
+  -d '{"key":"nuget-virtual","name":"NuGet Virtual","format":"nuget","repo_type":"virtual"}'
+
+curl -X POST http://localhost:8080/api/v1/repositories/nuget-virtual/members \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $TOKEN" \
+  -d '{"member_key":"nuget-local","priority":1}'
+
+curl -X POST http://localhost:8080/api/v1/repositories/nuget-virtual/members \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $TOKEN" \
+  -d '{"member_key":"nuget-remote","priority":2}'
+```
+
+For full details on cache TTL, priority ordering, and monitoring, see the [Remote & Virtual Repositories](/docs/advanced/remote-virtual) guide.
+
 ## See Also
 
 - [Security Scanning](/docs/security/scanning) - Automatic vulnerability scanning for NuGet packages

@@ -610,6 +610,34 @@ jobs:
 - Rotate tokens regularly
 - Never commit tokens to source control
 
+## Remote & Virtual Repositories
+
+All formats on this page support remote proxy and virtual repository aggregation.
+
+### Common Upstream URLs
+
+| Format | Upstream URL |
+|--------|-------------|
+| CocoaPods | `https://cdn.cocoapods.org` |
+| Pub (Dart/Flutter) | `https://pub.dev` |
+
+### Example: CocoaPods Pull-Through Cache
+
+```bash
+curl -X POST http://localhost:8080/api/v1/repositories \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $TOKEN" \
+  -d '{
+    "key": "cocoapods-remote",
+    "name": "CocoaPods Remote",
+    "format": "cocoapods",
+    "repo_type": "remote",
+    "upstream_url": "https://cdn.cocoapods.org"
+  }'
+```
+
+Virtual repositories can combine internal and cached packages for any of these formats. See the [Remote & Virtual Repositories](/docs/advanced/remote-virtual) guide for full setup instructions.
+
 ## Next Steps
 
 - Learn about [repository management](/docs/concepts/repositories)

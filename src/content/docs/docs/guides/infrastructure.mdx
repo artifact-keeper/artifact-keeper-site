@@ -913,6 +913,34 @@ Include complete metadata:
 - License information
 - Source repository and documentation links
 
+## Remote & Virtual Repositories
+
+All infrastructure formats support remote proxy and virtual repository aggregation for caching modules from public registries.
+
+### Common Upstream URLs
+
+| Format | Upstream URL |
+|--------|-------------|
+| Terraform | `https://registry.terraform.io` |
+| Ansible | `https://galaxy.ansible.com` |
+
+### Example: Terraform Pull-Through Cache
+
+```bash
+curl -X POST http://localhost:8080/api/v1/repositories \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $TOKEN" \
+  -d '{
+    "key": "terraform-remote",
+    "name": "Terraform Remote",
+    "format": "terraform",
+    "repo_type": "remote",
+    "upstream_url": "https://registry.terraform.io"
+  }'
+```
+
+Virtual repositories can combine internal and cached modules. See the [Remote & Virtual Repositories](/docs/advanced/remote-virtual) guide for full details on cache TTL, priority ordering, and monitoring.
+
 ## See Also
 
 - [Security Scanning](/security/scanning) - Automatic vulnerability scanning

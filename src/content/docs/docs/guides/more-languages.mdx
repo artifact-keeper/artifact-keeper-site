@@ -437,6 +437,40 @@ conda create -n myenv \
 
 ---
 
+## Remote & Virtual Repositories
+
+All formats covered on this page support remote proxy and virtual repository aggregation.
+
+### Common Upstream URLs
+
+| Format | Upstream URL |
+|--------|-------------|
+| Hex (Elixir/Erlang) | `https://repo.hex.pm` |
+| CRAN (R) | `https://cran.r-project.org` |
+| Conda | `https://repo.anaconda.com/pkgs/main` |
+| Sbt (Scala) | `https://repo1.maven.org/maven2` |
+
+### Example: Hex Pull-Through Cache
+
+```bash
+curl -X POST http://localhost:8080/api/v1/repositories \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $TOKEN" \
+  -d '{
+    "key": "hex-remote",
+    "name": "Hex Remote",
+    "format": "hex",
+    "repo_type": "remote",
+    "upstream_url": "https://repo.hex.pm"
+  }'
+```
+
+```bash
+mix hex.repo add ak-cache http://localhost:8080/hex/hex-remote/
+```
+
+Virtual repositories can combine internal and cached packages for any of these formats. See the [Remote & Virtual Repositories](/docs/advanced/remote-virtual) guide for full setup instructions, cache TTL configuration, and priority ordering.
+
 ## See Also
 
 - [Security Scanning](/docs/security/scanning) - Configure vulnerability scanning for packages

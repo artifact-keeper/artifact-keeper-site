@@ -455,6 +455,70 @@ Or clear local cache:
 rm -rf ~/.m2/repository/com/example/myapp
 ```
 
+## Remote & Virtual Repositories
+
+Use Artifact Keeper as a pull-through cache for Maven Central or aggregate multiple Maven repositories behind a single URL.
+
+### Pull-Through Cache
+
+Create a remote repository to cache artifacts from Maven Central:
+
+```bash
+curl -X POST http://localhost:8080/api/v1/repositories \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $TOKEN" \
+  -d '{
+    "key": "maven-remote",
+    "name": "Maven Central Remote",
+    "format": "maven",
+    "repo_type": "remote",
+    "upstream_url": "https://repo1.maven.org/maven2"
+  }'
+```
+
+Add the remote repository to your `settings.xml` or `pom.xml`:
+
+```xml
+<repository>
+  <id>artifact-keeper-cache</id>
+  <url>http://localhost:8080/maven/maven-remote/</url>
+</repository>
+```
+
+### Virtual Repository
+
+Combine internal artifacts with a Maven Central cache:
+
+```bash
+# Create virtual repository
+curl -X POST http://localhost:8080/api/v1/repositories \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $TOKEN" \
+  -d '{"key":"maven-virtual","name":"Maven Virtual","format":"maven","repo_type":"virtual"}'
+
+# Add local repo first, remote as fallback
+curl -X POST http://localhost:8080/api/v1/repositories/maven-virtual/members \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $TOKEN" \
+  -d '{"member_key":"maven-local","priority":1}'
+
+curl -X POST http://localhost:8080/api/v1/repositories/maven-virtual/members \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $TOKEN" \
+  -d '{"member_key":"maven-remote","priority":2}'
+```
+
+Use the virtual repository as a single source:
+
+```xml
+<repository>
+  <id>artifact-keeper</id>
+  <url>http://localhost:8080/maven/maven-virtual/</url>
+</repository>
+```
+
+For full details on cache TTL, priority ordering, and monitoring, see the [Remote & Virtual Repositories](/docs/advanced/remote-virtual) guide.
+
 ## See Also
 
 - [Security Scanning](/security/scanning) - Automatic vulnerability scanning for Java dependencies

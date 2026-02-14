@@ -582,6 +582,71 @@ __pycache__/
 .venv/
 ```
 
+## Remote & Virtual Repositories
+
+Use Artifact Keeper as a pull-through cache for PyPI or aggregate multiple Python repositories behind a single URL.
+
+### Pull-Through Cache
+
+Create a remote repository to cache packages from PyPI:
+
+```bash
+curl -X POST http://localhost:8080/api/v1/repositories \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $TOKEN" \
+  -d '{
+    "key": "pypi-remote",
+    "name": "PyPI Remote",
+    "format": "pypi",
+    "repo_type": "remote",
+    "upstream_url": "https://pypi.org"
+  }'
+```
+
+Then point pip at the remote repository:
+
+```bash
+pip install --index-url http://localhost:8080/pypi-remote/simple my-package
+```
+
+Packages are fetched from PyPI on first request and cached locally. Subsequent installs are served from the cache.
+
+### Virtual Repository
+
+Combine your internal packages with a PyPI cache behind one URL:
+
+```bash
+# Create virtual repository
+curl -X POST http://localhost:8080/api/v1/repositories \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $TOKEN" \
+  -d '{"key":"python","name":"Python Virtual","format":"pypi","repo_type":"virtual"}'
+
+# Add local repo (checked first)
+curl -X POST http://localhost:8080/api/v1/repositories/python/members \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $TOKEN" \
+  -d '{"member_key":"pypi-local","priority":1}'
+
+# Add remote cache (fallback)
+curl -X POST http://localhost:8080/api/v1/repositories/python/members \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $TOKEN" \
+  -d '{"member_key":"pypi-remote","priority":2}'
+```
+
+Configure pip to use the virtual repository:
+
+```ini
+[global]
+index-url = http://localhost:8080/python/simple
+trusted-host = localhost
+```
+
+Internal packages resolve first, public packages are transparently cached from PyPI.
+
+For full details on cache TTL configuration, priority ordering, and monitoring, see the [Remote & Virtual Repositories](/docs/advanced/remote-virtual) guide.
+
 ## See Also
 
 - [Security Scanning](/security/scanning) - Automatic vulnerability scanning for Python packages

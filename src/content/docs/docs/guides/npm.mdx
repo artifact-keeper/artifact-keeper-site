@@ -530,6 +530,64 @@ coverage
 node_modules
 ```
 
+## Remote & Virtual Repositories
+
+Use Artifact Keeper as a pull-through cache for npmjs.org or aggregate multiple npm registries behind a single URL.
+
+### Pull-Through Cache
+
+Create a remote repository to cache packages from the public npm registry:
+
+```bash
+curl -X POST http://localhost:8080/api/v1/repositories \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $TOKEN" \
+  -d '{
+    "key": "npm-remote",
+    "name": "npm Remote",
+    "format": "npm",
+    "repo_type": "remote",
+    "upstream_url": "https://registry.npmjs.org"
+  }'
+```
+
+Point npm at the remote repository:
+
+```bash
+npm config set registry http://localhost:8080/npm-remote/
+```
+
+### Virtual Repository
+
+Combine internal packages with the npm cache:
+
+```bash
+# Create virtual repository
+curl -X POST http://localhost:8080/api/v1/repositories \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $TOKEN" \
+  -d '{"key":"npm-virtual","name":"npm Virtual","format":"npm","repo_type":"virtual"}'
+
+# Add local repo first, remote as fallback
+curl -X POST http://localhost:8080/api/v1/repositories/npm-virtual/members \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $TOKEN" \
+  -d '{"member_key":"npm-local","priority":1}'
+
+curl -X POST http://localhost:8080/api/v1/repositories/npm-virtual/members \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $TOKEN" \
+  -d '{"member_key":"npm-remote","priority":2}'
+```
+
+Configure npm/yarn/pnpm to use the virtual repository:
+
+```ini
+registry=http://localhost:8080/npm-virtual/
+```
+
+For full details on cache TTL, priority ordering, and monitoring, see the [Remote & Virtual Repositories](/docs/advanced/remote-virtual) guide.
+
 ## See Also
 
 - [Security Scanning](/security/scanning) - Automatic vulnerability scanning for npm packages

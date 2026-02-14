@@ -819,6 +819,56 @@ Follow Ruby naming conventions:
 - Module names use CamelCase: `MyAwesomeGem`
 - Avoid conflicts with standard library
 
+## Remote & Virtual Repositories
+
+Use Artifact Keeper as a pull-through cache for RubyGems.org or aggregate multiple gem sources.
+
+### Pull-Through Cache
+
+Create a remote repository to cache gems from RubyGems.org:
+
+```bash
+curl -X POST http://localhost:8080/api/v1/repositories \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $TOKEN" \
+  -d '{
+    "key": "gems-remote",
+    "name": "RubyGems Remote",
+    "format": "rubygems",
+    "repo_type": "remote",
+    "upstream_url": "https://rubygems.org"
+  }'
+```
+
+Configure Bundler or gem to use the cache:
+
+```bash
+bundle config mirror.https://rubygems.org http://localhost:8080/rubygems/gems-remote/
+```
+
+### Virtual Repository
+
+Combine internal gems with a RubyGems.org cache:
+
+```bash
+curl -X POST http://localhost:8080/api/v1/repositories \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $TOKEN" \
+  -d '{"key":"gems-virtual","name":"RubyGems Virtual","format":"rubygems","repo_type":"virtual"}'
+
+curl -X POST http://localhost:8080/api/v1/repositories/gems-virtual/members \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $TOKEN" \
+  -d '{"member_key":"gems-local","priority":1}'
+
+curl -X POST http://localhost:8080/api/v1/repositories/gems-virtual/members \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $TOKEN" \
+  -d '{"member_key":"gems-remote","priority":2}'
+```
+
+For full details on cache TTL, priority ordering, and monitoring, see the [Remote & Virtual Repositories](/docs/advanced/remote-virtual) guide.
+
 ## See Also
 
 - [Security Scanning](/security/scanning) - Automatic vulnerability scanning for Ruby gems

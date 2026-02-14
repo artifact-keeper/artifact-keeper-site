@@ -785,6 +785,63 @@ git add composer.lock
 composer.lock
 ```
 
+## Remote & Virtual Repositories
+
+Use Artifact Keeper as a pull-through cache for Packagist or aggregate multiple Composer repositories.
+
+### Pull-Through Cache
+
+Create a remote repository to cache packages from Packagist:
+
+```bash
+curl -X POST http://localhost:8080/api/v1/repositories \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $TOKEN" \
+  -d '{
+    "key": "composer-remote",
+    "name": "Packagist Remote",
+    "format": "composer",
+    "repo_type": "remote",
+    "upstream_url": "https://repo.packagist.org"
+  }'
+```
+
+Configure Composer to use the cache in `composer.json`:
+
+```json
+{
+  "repositories": [
+    {
+      "type": "composer",
+      "url": "http://localhost:8080/composer/composer-remote/"
+    }
+  ]
+}
+```
+
+### Virtual Repository
+
+Combine internal packages with a Packagist cache:
+
+```bash
+curl -X POST http://localhost:8080/api/v1/repositories \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $TOKEN" \
+  -d '{"key":"composer-virtual","name":"Composer Virtual","format":"composer","repo_type":"virtual"}'
+
+curl -X POST http://localhost:8080/api/v1/repositories/composer-virtual/members \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $TOKEN" \
+  -d '{"member_key":"composer-local","priority":1}'
+
+curl -X POST http://localhost:8080/api/v1/repositories/composer-virtual/members \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $TOKEN" \
+  -d '{"member_key":"composer-remote","priority":2}'
+```
+
+For full details on cache TTL, priority ordering, and monitoring, see the [Remote & Virtual Repositories](/docs/advanced/remote-virtual) guide.
+
 ## See Also
 
 - [Security Scanning](/security/scanning) - Automatic vulnerability scanning for Composer packages
