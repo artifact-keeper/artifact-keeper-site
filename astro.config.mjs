@@ -73,6 +73,7 @@ export default defineConfig({
         {
           label: 'Advanced',
           items: [
+            { label: 'Remote & Virtual Repos', slug: 'docs/advanced/remote-virtual' },
             { label: 'Authentication & RBAC', slug: 'docs/advanced/auth' },
             { label: 'Staging & Promotion', slug: 'docs/advanced/staging-promotion' },
             { label: 'Storage Backends', slug: 'docs/advanced/storage' },

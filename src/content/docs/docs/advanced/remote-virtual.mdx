@@ -1,0 +1,260 @@
+---
+title: "Remote & Virtual Repositories"
+description: "Set up pull-through caching with remote repositories and aggregate multiple sources with virtual repositories."
+---
+
+Artifact Keeper supports three repository types beyond standard hosted repositories:
+
+| Type | Purpose |
+|------|---------|
+| **Local** | Hosted repository — you upload artifacts directly |
+| **Remote** | Pull-through cache — proxies and caches artifacts from an upstream registry |
+| **Virtual** | Aggregator — merges multiple local and remote repos behind a single URL |
+
+Remote and virtual repositories let you use Artifact Keeper as a transparent caching proxy in front of public registries like PyPI, npmjs.com, crates.io, Maven Central, and others.
+
+## Supported Formats
+
+Remote proxy and virtual resolution is supported for **all** package formats:
+
+npm, PyPI, Maven, Cargo, Go, Hex, RubyGems, NuGet, Helm, Conan, Composer, CocoaPods, Swift SPM, Pub (Dart/Flutter), Sbt, CRAN, Conda, RPM, Debian, Alpine, Git LFS, Chef, Puppet, Ansible, Terraform, VS Code Extensions, JetBrains Plugins, Hugging Face, and Protobuf/BSR.
+
+## Creating a Remote Repository
+
+A remote repository acts as a pull-through cache. When a client requests a package that isn't cached locally, Artifact Keeper fetches it from the upstream registry, caches it, and serves it to the client. Subsequent requests are served from the local cache.
+
+### API
+
+```bash
+curl -X POST http://localhost:8080/api/v1/repositories \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $TOKEN" \
+  -d '{
+    "key": "pypi-remote",
+    "name": "PyPI Remote",
+    "description": "Pull-through cache for PyPI",
+    "format": "pypi",
+    "repo_type": "remote",
+    "upstream_url": "https://pypi.org"
+  }'
+```
+
+The `upstream_url` field is required for remote repositories and should point to the root of the upstream registry.
+
+### Common Upstream URLs
+
+| Format | Upstream URL |
+|--------|-------------|
+| PyPI | `https://pypi.org` |
+| npm | `https://registry.npmjs.org` |
+| Maven Central | `https://repo1.maven.org/maven2` |
+| Cargo (crates.io) | `https://crates.io` |
+| Go (proxy.golang.org) | `https://proxy.golang.org` |
+| RubyGems | `https://rubygems.org` |
+| NuGet | `https://api.nuget.org` |
+| Hex (Erlang/Elixir) | `https://repo.hex.pm` |
+| Packagist (Composer) | `https://repo.packagist.org` |
+| Helm (stable) | `https://charts.helm.sh/stable` |
+| CocoaPods | `https://cdn.cocoapods.org` |
+| CRAN | `https://cran.r-project.org` |
+| Conda (defaults) | `https://repo.anaconda.com/pkgs/main` |
+
+### Cache Behavior
+
+- **Default TTL**: 24 hours — cached artifacts are re-validated against the upstream after this period
+- **ETag support**: When the upstream supports ETags, Artifact Keeper uses conditional requests to avoid re-downloading unchanged content
+- **SHA-256 validation**: Cached content is checksummed on storage and validated on retrieval
+- **Cache invalidation**: You can manually invalidate cached artifacts via the API
+
+### Configuring Cache TTL
+
+Set a custom cache TTL per repository:
+
+```bash
+curl -X PUT "http://localhost:8080/api/v1/repositories/pypi-remote/config/cache_ttl_secs" \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $TOKEN" \
+  -d '{"value": "3600"}'
+```
+
+### Write Protection
+
+Remote repositories are **read-only**. Attempts to upload or publish to a remote repository return `405 Method Not Allowed`. This prevents accidentally pushing packages to a proxy mirror.
+
+## Creating a Virtual Repository
+
+A virtual repository aggregates multiple repositories (local and/or remote) behind a single URL. When a client requests a package, Artifact Keeper searches each member repository in priority order and returns the first match.
+
+This lets you give developers a single registry URL that transparently checks your internal packages first, then falls back to the public registry cache.
+
+### API
+
+First, create your local and remote repos:
+
+```bash
+# Local repo for internal packages
+curl -X POST http://localhost:8080/api/v1/repositories \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $TOKEN" \
+  -d '{
+    "key": "pypi-local",
+    "name": "PyPI Local",
+    "format": "pypi",
+    "repo_type": "local"
+  }'
+
+# Remote repo for PyPI cache
+curl -X POST http://localhost:8080/api/v1/repositories \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $TOKEN" \
+  -d '{
+    "key": "pypi-remote",
+    "name": "PyPI Remote",
+    "format": "pypi",
+    "repo_type": "remote",
+    "upstream_url": "https://pypi.org"
+  }'
+```
+
+Then create the virtual repo and add members:
+
+```bash
+# Virtual repo that combines both
+curl -X POST http://localhost:8080/api/v1/repositories \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $TOKEN" \
+  -d '{
+    "key": "pypi",
+    "name": "PyPI Virtual",
+    "format": "pypi",
+    "repo_type": "virtual"
+  }'
+
+# Add local repo as highest priority (checked first)
+curl -X POST http://localhost:8080/api/v1/repositories/pypi/members \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $TOKEN" \
+  -d '{"member_key": "pypi-local", "priority": 1}'
+
+# Add remote repo as fallback
+curl -X POST http://localhost:8080/api/v1/repositories/pypi/members \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $TOKEN" \
+  -d '{"member_key": "pypi-remote", "priority": 2}'
+```
+
+### Priority
+
+Members with a **lower priority number** are checked first. If a package is found in the local repo (priority 1), the remote repo (priority 2) is never consulted.
+
+### Write Protection
+
+Like remote repos, virtual repositories are **read-only**. Uploads must target a specific local repository directly.
+
+## Client Configuration
+
+Once your repositories are set up, point your package manager at the virtual (or remote) repository URL. The URL pattern is the same as for local repositories — the format handler is determined by the repository's configured format.
+
+### PyPI / pip
+
+```bash
+pip install --index-url http://localhost:8080/pypi/simple my-package
+```
+
+### npm
+
+```bash
+npm config set registry http://localhost:8080/npm/
+npm install my-package
+```
+
+### Cargo
+
+```toml
+# .cargo/config.toml
+[registries.myregistry]
+index = "sparse+http://localhost:8080/cargo/pypi-remote/index/"
+```
+
+### Maven
+
+```xml
+<repository>
+  <id>artifact-keeper</id>
+  <url>http://localhost:8080/maven/maven-virtual/</url>
+</repository>
+```
+
+### Go
+
+```bash
+export GOPROXY=http://localhost:8080/go/go-remote/,direct
+```
+
+### Hex (Elixir/Erlang)
+
+```bash
+mix hex.repo add myrepo http://localhost:8080/hex/hex-remote/
+```
+
+Replace `localhost:8080` with your Artifact Keeper instance URL and the repo key with your repository's key.
+
+## Example: Full PyPI Setup
+
+Here's a complete example setting up a PyPI pull-through cache with a local repo for internal packages:
+
+```bash
+export AK_URL="http://localhost:8080"
+export TOKEN="your-api-token"
+
+# 1. Create a local repo for your internal packages
+curl -s -X POST "$AK_URL/api/v1/repositories" \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $TOKEN" \
+  -d '{"key":"pypi-internal","name":"Internal Python Packages","format":"pypi","repo_type":"local"}'
+
+# 2. Create a remote repo caching PyPI
+curl -s -X POST "$AK_URL/api/v1/repositories" \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $TOKEN" \
+  -d '{"key":"pypi-cache","name":"PyPI Cache","format":"pypi","repo_type":"remote","upstream_url":"https://pypi.org"}'
+
+# 3. Create a virtual repo combining both
+curl -s -X POST "$AK_URL/api/v1/repositories" \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $TOKEN" \
+  -d '{"key":"python","name":"Python (Virtual)","format":"pypi","repo_type":"virtual"}'
+
+# 4. Add members (internal first, then cache)
+curl -s -X POST "$AK_URL/api/v1/repositories/python/members" \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $TOKEN" \
+  -d '{"member_key":"pypi-internal","priority":1}'
+
+curl -s -X POST "$AK_URL/api/v1/repositories/python/members" \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $TOKEN" \
+  -d '{"member_key":"pypi-cache","priority":2}'
+
+# 5. Configure pip to use it
+pip config set global.index-url "$AK_URL/python/simple"
+pip config set global.trusted-host "$(echo $AK_URL | sed 's|https\?://||;s|:.*||')"
+
+# 6. Install packages — internal packages resolve first, public ones are cached
+pip install requests    # Fetched from PyPI, cached locally
+pip install my-internal-lib  # Served from your local repo
+```
+
+## Monitoring
+
+Check cache status and upstream connectivity:
+
+```bash
+# List all repositories with their types
+curl -s "$AK_URL/api/v1/repositories" \
+  -H "Authorization: Bearer $TOKEN" | jq '.items[] | {key, repo_type, format}'
+
+# View virtual repo members and priorities
+curl -s "$AK_URL/api/v1/repositories/python/members" \
+  -H "Authorization: Bearer $TOKEN" | jq .
+```
