@@ -59,6 +59,8 @@ export default defineConfig({
             { label: 'Vulnerability Scanning', slug: 'docs/security/scanning' },
             { label: 'OpenSCAP Compliance', slug: 'docs/security/openscap' },
             { label: 'SBOM & Dependency-Track', slug: 'docs/security/sbom' },
+            { label: 'Health Scores', slug: 'docs/security/health-scores' },
+            { label: 'Quality Gates', slug: 'docs/security/quality-gates' },
             { label: 'Security Policies', slug: 'docs/security/policies' },
             { label: 'Artifact Signing', slug: 'docs/security/signing' },
             { label: 'Security Testing', slug: 'docs/security/red-team' },

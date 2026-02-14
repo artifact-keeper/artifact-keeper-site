@@ -1,0 +1,175 @@
+---
+title: "Artifact Health Scores"
+description: "Unified health scoring system for artifacts and repositories combining security, license, quality, and metadata dimensions."
+---
+
+Artifact Keeper computes a unified **health score** for every artifact, combining security scanning results, license compliance, format-specific quality checks, and metadata completeness into a single 0-100 score with an A-F letter grade.
+
+## How Scores Work
+
+### Dimensions & Weights
+
+The health score is a weighted composite of four dimensions:
+
+| Dimension | Weight | What It Measures |
+|-----------|--------|-----------------|
+| **Security** | 40% | CVE counts from Trivy, Grype, and Dependency-Track scans |
+| **Quality** | 25% | Format-specific lint results (e.g., Helm chart validation) |
+| **License** | 20% | SBOM-based license compliance (denied licenses, unknown licenses) |
+| **Metadata** | 15% | Completeness of artifact metadata (name, version, description, etc.) |
+
+### Adaptive Weighting
+
+If a dimension has no data (e.g., no security scan has run yet), it is excluded from the calculation and its weight is redistributed proportionally across the remaining dimensions. This means an artifact with only metadata checks completed still gets a meaningful score rather than being penalized for missing scans.
+
+If **no** dimensions have data, the health score defaults to 100 (healthy until proven otherwise).
+
+### Letter Grades
+
+| Grade | Score Range |
+|-------|-------------|
+| **A** | 90 - 100 |
+| **B** | 75 - 89 |
+| **C** | 50 - 74 |
+| **D** | 25 - 49 |
+| **F** | 0 - 24 |
+
+## Viewing Health Scores
+
+### Per-Artifact
+
+```bash
+curl "https://registry.example.com/api/v1/quality/health/artifacts/{artifact_id}" \
+  -H "Authorization: Bearer $TOKEN"
+```
+
+**Response:**
+
+```json
+{
+  "artifact_id": "550e8400-...",
+  "health_score": 82,
+  "health_grade": "B",
+  "security_score": 75,
+  "license_score": 100,
+  "quality_score": 90,
+  "metadata_score": 60,
+  "total_issues": 4,
+  "critical_issues": 0,
+  "checks_passed": 3,
+  "checks_total": 4,
+  "last_checked_at": "2026-02-10T15:30:00Z",
+  "checks": [
+    {
+      "check_type": "metadata_completeness",
+      "score": 60,
+      "passed": true,
+      "status": "completed",
+      "issues_count": 2,
+      "completed_at": "2026-02-10T15:30:00Z"
+    }
+  ]
+}
+```
+
+### Per-Repository
+
+```bash
+curl "https://registry.example.com/api/v1/quality/health/repositories/{repo_key}" \
+  -H "Authorization: Bearer $TOKEN"
+```
+
+Returns aggregate health across all artifacts in the repository, including average component scores and pass/fail artifact counts.
+
+### Organization Dashboard (Admin)
+
+```bash
+curl "https://registry.example.com/api/v1/quality/health/dashboard" \
+  -H "Authorization: Bearer $TOKEN"
+```
+
+Returns organization-wide health metrics: total repositories and artifacts evaluated, average health score, and grade distribution across all repos. Requires admin privileges.
+
+The web UI provides this at **Administration > Health Dashboard** with visual grade distribution, key metric cards, and a sortable repository health table.
+
+## Quality Checks
+
+Quality checks are the individual evaluations that feed into the health score. Each check produces a score, a pass/fail result, and a list of issues.
+
+### Built-In Checkers
+
+| Checker | Applies To | What It Checks |
+|---------|-----------|---------------|
+| **Metadata Completeness** | All formats | Presence of name, version, description, and format-specific fields |
+| **Helm Lint** | Helm charts | Chart.yaml validity, template rendering, deprecated API versions |
+
+### Triggering Checks
+
+Checks run automatically after artifact upload. You can also trigger them manually:
+
+```bash
+# Check a single artifact
+curl -X POST "https://registry.example.com/api/v1/quality/checks/trigger" \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"artifact_id": "550e8400-..."}'
+
+# Check all artifacts in a repository
+curl -X POST "https://registry.example.com/api/v1/quality/checks/trigger" \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"repository_id": "660e8400-..."}'
+```
+
+Checks run asynchronously. The response returns immediately with the count of artifacts queued.
+
+### Viewing Check Results
+
+```bash
+# List all checks for an artifact
+curl "https://registry.example.com/api/v1/quality/checks?artifact_id={id}" \
+  -H "Authorization: Bearer $TOKEN"
+
+# View issues from a specific check
+curl "https://registry.example.com/api/v1/quality/checks/{check_id}/issues" \
+  -H "Authorization: Bearer $TOKEN"
+```
+
+### Suppressing Issues
+
+If a check flags an issue you've reviewed and accepted, you can suppress it:
+
+```bash
+# Suppress an issue
+curl -X POST "https://registry.example.com/api/v1/quality/issues/{issue_id}/suppress" \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"reason": "False positive - internal-only package"}'
+
+# Remove suppression
+curl -X DELETE "https://registry.example.com/api/v1/quality/issues/{issue_id}/suppress" \
+  -H "Authorization: Bearer $TOKEN"
+```
+
+Suppressions are recorded with the user ID and timestamp for audit purposes.
+
+## Web UI
+
+### Health Dashboard (Admin)
+
+Navigate to **Administration > Health Dashboard** to see:
+
+- **Organization health score** with letter grade and circular progress indicator
+- **Grade distribution bar** showing how many repos fall into each grade
+- **Key metrics**: total repos, total artifacts evaluated, grade A count, failing artifacts count
+- **Repository table**: sortable by score, grade, or any component score, with artifact pass/fail counts
+
+### Artifact Health Tab
+
+On any artifact detail page, the **Health** tab shows:
+
+- Overall health score and grade
+- Component score breakdown with percentage weights
+- Progress bars for each dimension (security, quality, license, metadata)
+- List of checks run with pass/fail status
+- Individual issues with severity levels and suppression controls

@@ -1,0 +1,230 @@
+---
+title: "Quality Gates"
+description: "Define health score thresholds and required checks to control artifact promotion and downloads."
+---
+
+Quality gates define the minimum standards an artifact must meet before it can be promoted from staging to release, or optionally before it can be downloaded. They work alongside [security policies](/docs/security/policies) and [promotion workflows](/docs/advanced/staging-promotion) to enforce organizational standards.
+
+## How Quality Gates Work
+
+A quality gate is a set of rules evaluated against an artifact's [health score](/docs/security/health-scores). When an artifact is promoted, Artifact Keeper evaluates applicable gates and either allows the promotion, issues a warning, or blocks it.
+
+```text
+Promote Request
+     |
+     v
+Quality Gate ── pass ──> Policy Check ── pass ──> Promoted
+     |                       |
+     | fail                  | fail
+     v                       v
+  Block/Warn              Block/Warn
+```
+
+Gates are evaluated **before** CVE and license policy checks. If a quality gate blocks promotion, policy checks are skipped.
+
+## Creating a Quality Gate
+
+### Global Gate
+
+A global gate applies to all repositories that don't have a repository-specific gate:
+
+```bash
+curl -X POST "https://registry.example.com/api/v1/quality/gates" \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "Production Standard",
+    "min_health_score": 75,
+    "min_security_score": 80,
+    "max_critical_issues": 0,
+    "max_high_issues": 5,
+    "enforce_on_promotion": true,
+    "action": "block"
+  }'
+```
+
+### Repository-Specific Gate
+
+Override the global gate for a specific repository:
+
+```bash
+curl -X POST "https://registry.example.com/api/v1/quality/gates" \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "Helm Chart Standard",
+    "repository_id": "550e8400-...",
+    "min_health_score": 80,
+    "min_quality_score": 70,
+    "required_checks": ["metadata_completeness", "helm_lint"],
+    "enforce_on_promotion": true,
+    "action": "block"
+  }'
+```
+
+Repository-specific gates take precedence over global gates.
+
+## Gate Rules
+
+### Score Thresholds
+
+| Rule | Description |
+|------|------------|
+| `min_health_score` | Minimum overall health score (0-100) |
+| `min_security_score` | Minimum security dimension score |
+| `min_quality_score` | Minimum quality/lint dimension score |
+| `min_metadata_score` | Minimum metadata completeness score |
+
+### Issue Limits
+
+| Rule | Description |
+|------|------------|
+| `max_critical_issues` | Maximum number of critical-severity issues allowed |
+| `max_high_issues` | Maximum number of high-severity issues allowed |
+| `max_medium_issues` | Maximum number of medium-severity issues allowed |
+
+### Required Checks
+
+The `required_checks` array specifies which quality checks must have completed successfully before the gate passes. If any listed check hasn't run or has a `failed` status, the gate fails.
+
+Available check types: `metadata_completeness`, `helm_lint`.
+
+## Enforcement Actions
+
+| Action | Behavior |
+|--------|----------|
+| `allow` | Gate is evaluated but never blocks — results are informational only |
+| `warn` | Promotion proceeds but the response includes warning messages |
+| `block` | Promotion is rejected if any rule is violated |
+
+## Evaluating a Gate
+
+### During Promotion
+
+Gates are evaluated automatically when you promote an artifact. If a gate fails with `action: "block"`:
+
+```json
+{
+  "promoted": false,
+  "policy_violations": [
+    {
+      "rule": "min_health_score",
+      "severity": "high",
+      "message": "Health score 65 is below minimum 75"
+    },
+    {
+      "rule": "max_critical_issues",
+      "severity": "critical",
+      "message": "2 critical issues found, maximum allowed is 0"
+    }
+  ],
+  "message": "Promotion blocked by quality gate 'Production Standard'"
+}
+```
+
+### On-Demand Evaluation
+
+Check whether an artifact would pass the gate without actually promoting:
+
+```bash
+curl -X POST "https://registry.example.com/api/v1/quality/gates/evaluate/{artifact_id}" \
+  -H "Authorization: Bearer $TOKEN"
+```
+
+**Response:**
+
+```json
+{
+  "passed": false,
+  "action": "block",
+  "gate_name": "Production Standard",
+  "health_score": 65,
+  "health_grade": "C",
+  "violations": [
+    {
+      "rule": "min_health_score",
+      "expected": ">= 75",
+      "actual": "65",
+      "message": "Health score 65 is below minimum 75"
+    }
+  ],
+  "component_scores": {
+    "security": 50,
+    "license": 100,
+    "quality": 80,
+    "metadata": 60
+  }
+}
+```
+
+## Managing Gates
+
+```bash
+# List all gates
+curl "https://registry.example.com/api/v1/quality/gates" \
+  -H "Authorization: Bearer $TOKEN"
+
+# Update a gate
+curl -X PUT "https://registry.example.com/api/v1/quality/gates/{gate_id}" \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "min_health_score": 80,
+    "action": "warn"
+  }'
+
+# Delete a gate
+curl -X DELETE "https://registry.example.com/api/v1/quality/gates/{gate_id}" \
+  -H "Authorization: Bearer $TOKEN"
+```
+
+## Skipping Gates
+
+For emergency releases, promotion supports `skip_policy_check: true` which bypasses both quality gates and policy checks. This is recorded in the promotion history for audit.
+
+```bash
+curl -X POST ".../artifacts/{id}/promote" \
+  -H "Authorization: Bearer $TOKEN" \
+  -d '{
+    "target_repository": "maven-release",
+    "skip_policy_check": true,
+    "notes": "Emergency hotfix - gate override approved by @security-lead"
+  }'
+```
+
+## Web UI
+
+Quality gates can be managed from **Administration > Quality Gates** in the web UI:
+
+- Create, edit, and delete gates
+- View all gates with their rules and enforcement settings
+- Toggle gates between allow/warn/block actions
+- See which repositories have custom gates vs. falling back to global
+
+The promotion dialog in the staging view shows gate evaluation results inline — passing artifacts show a green checkmark, failing ones show violations with the option to skip (admin only).
+
+## Example: Recommended Setup
+
+```bash
+# Global baseline — warn on low scores
+curl -X POST ".../quality/gates" -d '{
+  "name": "Baseline",
+  "min_health_score": 50,
+  "max_critical_issues": 0,
+  "enforce_on_promotion": true,
+  "action": "warn"
+}'
+
+# Strict gate for production Helm charts
+curl -X POST ".../quality/gates" -d '{
+  "name": "Production Helm",
+  "repository_id": "...",
+  "min_health_score": 80,
+  "min_quality_score": 70,
+  "max_critical_issues": 0,
+  "max_high_issues": 3,
+  "required_checks": ["metadata_completeness", "helm_lint"],
+  "enforce_on_promotion": true,
+  "action": "block"
+}'
+```

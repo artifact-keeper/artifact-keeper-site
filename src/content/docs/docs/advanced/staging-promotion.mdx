@@ -94,9 +94,19 @@ curl -X POST https://registry.example.com/api/v1/repositories/maven-staging/prom
 
 Bulk promotion is not transactional -- partial success is possible. Check individual results.
 
-## Policy Gates
+## Promotion Gates
 
-When promoting, Artifact Keeper evaluates security and license policies against each artifact. If any policy check fails with a **Block** action, the promotion is rejected.
+When promoting, Artifact Keeper evaluates up to three layers of checks against each artifact. If any check fails with a **Block** action, the promotion is rejected.
+
+```text
+Quality Gate ── pass ──> CVE Policy ── pass ──> License Policy ── pass ──> Promoted
+```
+
+### Quality Gates
+
+[Quality gates](/docs/security/quality-gates) evaluate the artifact's [health score](/docs/security/health-scores) against configured thresholds. Gates can enforce minimum scores (overall, security, quality, metadata), maximum issue counts, and required check completion.
+
+Quality gates are evaluated first. If a gate fails with `action: "block"`, promotion stops before CVE and license checks run.
 
 ### CVE Security Policies
 
