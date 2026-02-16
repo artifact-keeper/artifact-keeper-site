@@ -1,0 +1,158 @@
+---
+title: "CLI Quick Start"
+description: "Get up and running with the Artifact Keeper CLI in 5 minutes"
+---
+
+import { Steps, Tabs, TabItem } from '@astrojs/starlight/components';
+
+Get up and running with `ak` — the Artifact Keeper CLI.
+
+<Steps>
+
+1. **Install the CLI**
+
+   <Tabs>
+   <TabItem label="curl">
+   ```bash
+   curl -fsSL https://raw.githubusercontent.com/artifact-keeper/artifact-keeper-cli/main/install.sh | sh
+   ```
+   </TabItem>
+   <TabItem label="Homebrew">
+   ```bash
+   brew install artifact-keeper/tap/ak
+   ```
+   </TabItem>
+   <TabItem label="Cargo">
+   ```bash
+   cargo install artifact-keeper-cli
+   ```
+   </TabItem>
+   </Tabs>
+
+   Verify:
+
+   ```bash
+   ak --version
+   ```
+
+2. **Add your registry instance**
+
+   ```bash
+   ak instance add myserver https://registry.company.com
+   ```
+
+   This saves the server URL locally and sets it as your default instance.
+
+3. **Log in**
+
+   ```bash
+   ak auth login
+   ```
+
+   This opens a browser for authentication. For CI/headless environments, use token auth:
+
+   ```bash
+   ak auth login --token
+   ```
+
+4. **Browse repositories**
+
+   ```bash
+   ak repo list
+   ```
+
+   Filter by format:
+
+   ```bash
+   ak repo list --format npm
+   ak repo list --format docker
+   ```
+
+5. **Upload an artifact**
+
+   ```bash
+   ak artifact push my-repo ./my-package-1.0.0.tar.gz
+   ```
+
+   Upload multiple files with glob patterns:
+
+   ```bash
+   ak artifact push my-repo './dist/*.whl'
+   ```
+
+6. **Download an artifact**
+
+   ```bash
+   ak artifact pull my-repo org/my-package/1.0.0/my-package-1.0.0.jar
+   ```
+
+7. **Configure your package manager**
+
+   Auto-detect your project's toolchains and configure them all at once:
+
+   ```bash
+   ak setup auto
+   ```
+
+   Or configure individually:
+
+   ```bash
+   ak setup npm
+   ak setup pip
+   ak setup cargo
+   ```
+
+</Steps>
+
+## What's Next?
+
+- **Search artifacts**: `ak artifact search "log4j" --format maven`
+- **Run security scans**: `ak scan run my-repo path/to/artifact`
+- **Check diagnostics**: `ak doctor`
+- **Launch the TUI**: `ak tui`
+- **Set up shell completions**: `ak completion bash > ~/.bash_completion.d/ak`
+
+## Common Workflows
+
+### Multiple Instances
+
+```bash
+# Add multiple servers
+ak instance add prod https://registry.company.com
+ak instance add staging https://staging.company.com
+
+# Switch default
+ak instance use staging
+
+# Or use per-command override
+ak repo list --instance prod
+```
+
+### Output Formats
+
+```bash
+# Table (default for interactive terminals)
+ak repo list
+
+# JSON (default when piped)
+ak repo list --format json | jq '.[] | .key'
+
+# YAML
+ak repo list --format yaml
+
+# Quiet (IDs only, great for scripting)
+ak repo list --format quiet | xargs -I{} ak repo show {}
+```
+
+### Non-Interactive Mode
+
+For scripting and CI/CD:
+
+```bash
+export AK_INSTANCE=prod
+export AK_TOKEN=your-api-token
+export AK_NO_INPUT=1
+export AK_FORMAT=json
+
+ak artifact push my-repo ./build/output.tar.gz
+```

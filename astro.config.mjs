@@ -29,6 +29,7 @@ export default defineConfig({
             { label: 'Quickstart', slug: 'docs/getting-started/quickstart' },
             { label: 'Installation', slug: 'docs/getting-started/installation' },
             { label: 'Configuration', slug: 'docs/getting-started/configuration' },
+            { label: 'CLI Quick Start', slug: 'docs/guides/cli-quickstart' },
           ],
         },
         {
@@ -107,8 +108,10 @@ export default defineConfig({
           label: 'Reference',
           items: [
             { label: 'REST API', slug: 'docs/reference/api' },
+            { label: 'CLI Reference (ak)', slug: 'docs/reference/ak-cli' },
             { label: 'Client Configuration', slug: 'docs/reference/cli' },
             { label: 'Environment Variables', slug: 'docs/reference/environment' },
+            { label: 'CI/CD Integration', slug: 'docs/guides/ci-cd' },
           ],
         },
       ],

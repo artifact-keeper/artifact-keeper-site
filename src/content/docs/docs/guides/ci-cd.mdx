@@ -1,0 +1,220 @@
+---
+title: "CI/CD Integration"
+description: "Use the Artifact Keeper CLI in CI/CD pipelines"
+---
+
+import { Tabs, TabItem } from '@astrojs/starlight/components';
+
+The `ak` CLI is designed for CI/CD environments with non-interactive mode, JSON output, and token-based authentication.
+
+## Environment Setup
+
+Set these environment variables in your CI pipeline:
+
+```bash
+AK_INSTANCE=prod                  # Instance name or URL
+AK_TOKEN=your-api-token           # API token for authentication
+AK_NO_INPUT=1                     # Disable interactive prompts
+AK_FORMAT=json                    # Machine-readable output (optional)
+```
+
+## GitHub Actions
+
+### Install and Push Artifacts
+
+```yaml
+name: Publish
+
+on:
+  push:
+    tags: ["v*"]
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build
+        run: make build
+
+      - name: Install ak
+        run: curl -fsSL https://raw.githubusercontent.com/artifact-keeper/artifact-keeper-cli/main/install.sh | sh
+
+      - name: Configure ak
+        run: |
+          ak instance add prod "${{ secrets.AK_URL }}"
+        env:
+          AK_TOKEN: ${{ secrets.AK_TOKEN }}
+          AK_NO_INPUT: "1"
+
+      - name: Push artifact
+        run: ak artifact push my-repo ./dist/package-*.tar.gz
+        env:
+          AK_TOKEN: ${{ secrets.AK_TOKEN }}
+          AK_NO_INPUT: "1"
+```
+
+### Configure Package Manager
+
+```yaml
+- name: Configure npm
+  run: ak setup npm --repo my-npm-repo
+  env:
+    AK_TOKEN: ${{ secrets.AK_TOKEN }}
+    AK_NO_INPUT: "1"
+
+- name: Install dependencies
+  run: npm install
+
+- name: Publish
+  run: npm publish
+```
+
+### Security Scan After Upload
+
+```yaml
+- name: Upload artifact
+  run: ak artifact push my-repo ./build/app.jar
+
+- name: Trigger scan
+  run: ak scan run my-repo app.jar
+  env:
+    AK_TOKEN: ${{ secrets.AK_TOKEN }}
+    AK_FORMAT: json
+```
+
+## GitLab CI
+
+```yaml
+variables:
+  AK_TOKEN: ${AK_TOKEN}
+  AK_NO_INPUT: "1"
+
+.install-ak:
+  before_script:
+    - curl -fsSL https://raw.githubusercontent.com/artifact-keeper/artifact-keeper-cli/main/install.sh | sh
+    - ak instance add prod ${AK_URL}
+
+publish:
+  extends: .install-ak
+  stage: deploy
+  script:
+    - ak artifact push my-repo ./dist/*.tar.gz
+  only:
+    - tags
+```
+
+## Jenkins
+
+### Declarative Pipeline
+
+```groovy
+pipeline {
+    agent any
+
+    environment {
+        AK_TOKEN = credentials('artifact-keeper-token')
+        AK_NO_INPUT = '1'
+    }
+
+    stages {
+        stage('Install ak') {
+            steps {
+                sh 'curl -fsSL https://raw.githubusercontent.com/artifact-keeper/artifact-keeper-cli/main/install.sh | sh'
+                sh 'ak instance add prod ${AK_URL}'
+            }
+        }
+
+        stage('Build') {
+            steps {
+                sh 'make build'
+            }
+        }
+
+        stage('Publish') {
+            steps {
+                sh 'ak artifact push my-repo ./dist/*.tar.gz'
+            }
+        }
+
+        stage('Scan') {
+            steps {
+                sh 'ak scan run my-repo dist/app.tar.gz'
+            }
+        }
+    }
+}
+```
+
+## Docker-based CI
+
+If your CI runs in Docker containers, use the `ak` Docker image:
+
+```yaml
+# GitHub Actions
+- name: Push artifact
+  run: |
+    docker run --rm \
+      -e AK_TOKEN=${{ secrets.AK_TOKEN }} \
+      -e AK_NO_INPUT=1 \
+      -v $(pwd)/dist:/dist \
+      ghcr.io/artifact-keeper/ak:latest \
+      artifact push my-repo /dist/package.tar.gz
+```
+
+## Promotion Pipeline
+
+Use `ak artifact copy` to promote artifacts between repositories:
+
+```yaml
+stages:
+  - build
+  - test
+  - promote
+
+build:
+  script:
+    - make build
+    - ak artifact push staging-repo ./build/app.tar.gz
+
+test:
+  script:
+    - ak artifact pull staging-repo app.tar.gz
+    - make test
+
+promote:
+  script:
+    - ak artifact copy staging-repo/app.tar.gz release-repo/app.tar.gz
+  when: manual
+```
+
+## Bulk Migration
+
+Use `ak migrate` to move artifacts between instances during registry migrations:
+
+```bash
+# Preview what would be migrated
+ak migrate \
+  --from-instance old-registry \
+  --from-repo npm-local \
+  --to-instance new-registry \
+  --to-repo npm-local \
+  --dry-run
+
+# Execute migration
+ak migrate \
+  --from-instance old-registry \
+  --from-repo npm-local \
+  --to-instance new-registry \
+  --to-repo npm-local
+```
+
+## Best Practices
+
+1. **Use API tokens**, not passwords — create scoped tokens with the minimum required permissions
+2. **Set `AK_NO_INPUT=1`** in all CI environments to prevent hanging on prompts
+3. **Use `--format json`** when parsing output in scripts
+4. **Pin the CLI version** by downloading a specific release instead of using `install.sh`
+5. **Store credentials as secrets** — never commit tokens to your repository
+6. **Use `ak doctor`** in your pipeline setup to verify connectivity before running commands
