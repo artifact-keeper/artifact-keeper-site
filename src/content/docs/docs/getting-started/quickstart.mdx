@@ -9,7 +9,7 @@ Get Artifact Keeper up and running in minutes using Docker Compose.
 
 ## Prerequisites
 
-- Docker and Docker Compose installed
+- Docker and Docker Compose (or Podman with `podman-compose`) installed
 
 ## Quick Start
 
@@ -18,9 +18,20 @@ Get Artifact Keeper up and running in minutes using Docker Compose.
 ```bash
 mkdir artifact-keeper && cd artifact-keeper
 curl -fsSLO https://raw.githubusercontent.com/artifact-keeper/artifact-keeper/main/docker-compose.yml
-curl -fsSLO https://raw.githubusercontent.com/artifact-keeper/artifact-keeper/main/Caddyfile
+mkdir docker
+curl -fsSLo docker/Caddyfile https://raw.githubusercontent.com/artifact-keeper/artifact-keeper/main/docker/Caddyfile
+curl -fsSLo docker/init-db.sql https://raw.githubusercontent.com/artifact-keeper/artifact-keeper/main/docker/init-db.sql
+curl -fsSLo docker/init-pg-ssl.sh https://raw.githubusercontent.com/artifact-keeper/artifact-keeper/main/docker/init-pg-ssl.sh
+curl -fsSLo docker/init-dtrack.sh https://raw.githubusercontent.com/artifact-keeper/artifact-keeper/main/docker/init-dtrack.sh
 docker compose up -d
 ```
+
+:::note[Using Podman?]
+Replace `docker compose` with `podman-compose`. Podman 4.4+ with podman-compose 1.0+ is supported. If running rootless Podman on RHEL/Fedora, enable linger so containers persist after logout:
+```bash
+sudo loginctl enable-linger $USER
+```
+:::
 
 This starts the full stack:
 - **Backend** — Rust API server with 45+ format handlers
