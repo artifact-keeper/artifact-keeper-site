@@ -13,6 +13,7 @@ Configure Artifact Keeper using environment variables. This page provides a comp
 | `HOST` | No | `0.0.0.0` | HTTP server bind address |
 | `RUST_LOG` | No | `info` | Log level (trace, debug, info, warn, error) |
 | `LOG_FORMAT` | No | `json` | Log format (json, pretty, compact) |
+| `ENVIRONMENT` | No | `production` | Runtime environment. Set to `development` to disable the `Secure` flag on auth cookies, allowing cookie-based auth over plain HTTP. See [Reverse Proxy & TLS](/docs/deployment/reverse-proxy). |
 | `DEMO_MODE` | No | `false` | Enable demo mode (read-only) |
 | `BASE_URL` | No | - | Public base URL (e.g., https://registry.example.com) |
 

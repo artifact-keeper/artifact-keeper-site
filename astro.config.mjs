@@ -102,6 +102,7 @@ export default defineConfig({
             { label: 'Helm Chart', slug: 'docs/deployment/helm' },
             { label: 'Kubernetes', slug: 'docs/deployment/kubernetes' },
             { label: 'Docker Compose', slug: 'docs/deployment/docker' },
+            { label: 'Reverse Proxy & TLS', slug: 'docs/deployment/reverse-proxy' },
             { label: 'AWS', slug: 'docs/deployment/aws' },
           ],
         },

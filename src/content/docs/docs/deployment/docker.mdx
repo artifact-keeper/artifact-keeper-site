@@ -219,6 +219,12 @@ HTTP_PORT=8080
 HTTPS_PORT=8443
 ```
 
+### Login Works but API Returns 401
+
+If you can submit the login form without errors but the UI redirects back to login (or the network tab shows 401 "Missing authorization header" on API calls), auth cookies are likely being dropped by the browser. This happens when the backend runs in production mode (`ENVIRONMENT=production`, the default) but the browser connects over HTTP instead of HTTPS. Production cookies have the `Secure` flag, which browsers enforce strictly.
+
+Fix: configure TLS on your reverse proxy, or set `ENVIRONMENT=development` on the backend for HTTP-only setups. See [Reverse Proxy & TLS](/docs/deployment/reverse-proxy) for details.
+
 ### Out of Disk Space
 
 ```bash

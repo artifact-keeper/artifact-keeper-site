@@ -1,0 +1,200 @@
+---
+title: "Reverse Proxy & TLS"
+description: "Configure Caddy, Nginx, or other reverse proxies with TLS termination for Artifact Keeper"
+---
+
+When deploying Artifact Keeper behind a reverse proxy, TLS termination needs to be configured correctly for cookie-based authentication to work. This page covers the requirements, common proxy configurations, and troubleshooting.
+
+## How Authentication Cookies Work
+
+Artifact Keeper uses httpOnly cookies (`ak_access_token`, `ak_refresh_token`) to maintain browser sessions. In production mode, these cookies are set with the `Secure` flag, which tells browsers to only send them over HTTPS connections.
+
+The `ENVIRONMENT` env var on the backend container controls this behavior:
+
+| Value | Cookie Flags | Use Case |
+|-------|-------------|----------|
+| `production` (default) | `HttpOnly; Secure; SameSite=Strict` | Any deployment exposed to a network |
+| `development` | `HttpOnly; SameSite=Strict` | Local development over HTTP |
+
+If the connection between the browser and the reverse proxy is plain HTTP, the browser silently drops `Secure` cookies. Login appears to succeed, but no session is established.
+
+## Architecture
+
+TLS only needs to terminate at the reverse proxy. Internal traffic between the proxy and backend/web containers can stay HTTP.
+
+```
+Browser ──HTTPS──▶ Reverse Proxy ──HTTP──▶ Backend (:8080)
+                                  ──HTTP──▶ Web UI  (:3000)
+```
+
+The reverse proxy handles two routing rules:
+
+- `/api/*`, `/health`, `/livez`, `/readyz`, `/metrics` go to the backend
+- Everything else goes to the web UI
+
+## Caddy
+
+Caddy is the default proxy in Artifact Keeper's Docker Compose setup. It provisions TLS certificates from Let's Encrypt automatically when given a domain name.
+
+### Caddyfile
+
+```
+{$SITE_ADDRESS:localhost} {
+    reverse_proxy /api/* backend:8080
+    reverse_proxy /health backend:8080
+    reverse_proxy /livez backend:8080
+    reverse_proxy /readyz backend:8080
+    reverse_proxy /metrics backend:8080
+    reverse_proxy web:3000
+}
+```
+
+Set `SITE_ADDRESS` to your domain (e.g., `registry.example.com`). Caddy will obtain and renew certificates automatically. No additional TLS configuration is needed.
+
+### Docker Compose
+
+```yaml
+services:
+  caddy:
+    image: caddy:2-alpine
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      SITE_ADDRESS: registry.example.com
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+
+volumes:
+  caddy_data:
+  caddy_config:
+```
+
+The `caddy_data` volume stores TLS certificates. Keep it persistent across restarts to avoid hitting Let's Encrypt rate limits.
+
+### Using IP addresses
+
+Caddy cannot obtain Let's Encrypt certificates for bare IP addresses. If you must use an IP, either provide your own certificate files or set `ENVIRONMENT=development` on the backend to disable the `Secure` cookie flag:
+
+```yaml
+services:
+  backend:
+    environment:
+      ENVIRONMENT: development   # Disables Secure flag on auth cookies
+```
+
+This is acceptable for internal networks but should not be used for internet-facing deployments.
+
+## Nginx
+
+### Site Configuration
+
+```nginx
+upstream ak_backend {
+    server backend:8080;
+}
+
+upstream ak_web {
+    server web:3000;
+}
+
+server {
+    listen 443 ssl http2;
+    server_name registry.example.com;
+
+    ssl_certificate     /etc/nginx/ssl/fullchain.pem;
+    ssl_certificate_key /etc/nginx/ssl/privkey.pem;
+
+    client_max_body_size 10G;    # Match MAX_UPLOAD_SIZE_MB
+
+    # Backend API
+    location /api/ {
+        proxy_pass http://ak_backend;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_read_timeout 600s;    # Large uploads
+    }
+
+    location /health  { proxy_pass http://ak_backend; }
+    location /livez   { proxy_pass http://ak_backend; }
+    location /readyz  { proxy_pass http://ak_backend; }
+    location /metrics { proxy_pass http://ak_backend; }
+
+    # Web UI (everything else)
+    location / {
+        proxy_pass http://ak_web;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+}
+
+server {
+    listen 80;
+    server_name registry.example.com;
+    return 301 https://$host$request_uri;
+}
+```
+
+Key settings:
+
+- `client_max_body_size` must be large enough for your biggest artifacts (default backend limit is 10 GB)
+- `proxy_read_timeout` should be high for large uploads that take time to process
+- The HTTP-to-HTTPS redirect on port 80 prevents accidental unencrypted access
+
+## Traefik
+
+If you're using Traefik (common in Kubernetes or Docker Swarm), add labels to your backend and web services:
+
+```yaml
+services:
+  backend:
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.ak-api.rule=Host(`registry.example.com`) && PathPrefix(`/api`, `/health`, `/livez`, `/readyz`, `/metrics`)"
+      - "traefik.http.routers.ak-api.tls=true"
+      - "traefik.http.routers.ak-api.tls.certresolver=letsencrypt"
+      - "traefik.http.services.ak-api.loadbalancer.server.port=8080"
+
+  web:
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.ak-web.rule=Host(`registry.example.com`)"
+      - "traefik.http.routers.ak-web.tls=true"
+      - "traefik.http.routers.ak-web.tls.certresolver=letsencrypt"
+      - "traefik.http.services.ak-web.loadbalancer.server.port=3000"
+      - "traefik.http.routers.ak-web.priority=1"
+```
+
+Set a lower priority on the web router so API routes match first.
+
+## Troubleshooting
+
+### Login works but every page shows "unauthenticated"
+
+**Symptom:** You can submit the login form without errors, but the UI immediately redirects back to login. Network tab shows 401 responses with "Missing authorization header" on `/api/v1/auth/me` and other API calls.
+
+**Cause:** Auth cookies have the `Secure` flag but the browser is connecting over HTTP. The browser stores the cookie from the login response only if the connection is HTTPS. Over HTTP, the `Set-Cookie` header is silently ignored.
+
+**Fix:** Either configure TLS on your reverse proxy (recommended) or set `ENVIRONMENT=development` on the backend container to drop the `Secure` flag.
+
+### Cookies not sent after proxy change
+
+If you switch from the built-in Docker Compose setup to a custom reverse proxy and auth stops working, check that:
+
+1. The proxy forwards the `Cookie` header to the backend (most proxies do this by default)
+2. The proxy does not strip or rewrite `Set-Cookie` headers from the backend response
+3. The domain the user accesses in their browser matches across all requests (don't mix `http://192.168.1.10` with `http://registry.local`)
+
+### Large uploads fail with 413
+
+Your reverse proxy has its own upload size limit that's separate from the backend's `MAX_UPLOAD_SIZE_MB`. Set it to match or exceed the backend limit:
+
+- **Caddy:** No limit by default (handled automatically)
+- **Nginx:** `client_max_body_size 10G;`
+- **Traefik:** `traefik.http.middlewares.size.buffering.maxRequestBodyBytes=10737418240`
