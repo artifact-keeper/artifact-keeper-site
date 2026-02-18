@@ -1,0 +1,275 @@
+---
+title: "Incus/LXC Container Image Guide"
+description: "Hosting Incus and LXC container images with SimpleStreams protocol support"
+---
+
+Artifact Keeper can serve as a private image server for [Incus](https://linuxcontainers.org/incus/) and [LXC](https://linuxcontainers.org/lxc/) container and virtual machine images using the [SimpleStreams](https://launchpad.net/simplestreams) discovery protocol.
+
+## Endpoint
+
+All Incus operations use the `/incus` endpoint:
+
+```
+http://localhost:8080/incus/{repository-key}
+```
+
+SimpleStreams discovery:
+- `GET /incus/{repo}/streams/v1/index.json` — SimpleStreams index
+- `GET /incus/{repo}/streams/v1/images.json` — Product catalog
+
+Image operations:
+- `GET /incus/{repo}/images/{product}/{version}/{file}` — Download
+- `PUT /incus/{repo}/images/{product}/{version}/{file}` — Upload
+- `DELETE /incus/{repo}/images/{product}/{version}/{file}` — Delete
+
+## Creating a Repository
+
+Create a hosted Incus repository via the API:
+
+```bash
+curl -X POST http://localhost:8080/api/v1/repositories \
+  -u admin:password \
+  -H "Content-Type: application/json" \
+  -d '{
+    "key": "incus-images",
+    "name": "Incus Images",
+    "format": "incus",
+    "repo_type": "hosted"
+  }'
+```
+
+Use the `lxc` format key if you want to label the repository for legacy LXC use — both formats share the same handler.
+
+## Uploading Images
+
+### Unified Tarball
+
+A unified tarball contains both `metadata.yaml` and the rootfs in a single `.tar.xz` or `.tar.gz` archive:
+
+```bash
+curl -X PUT http://localhost:8080/incus/incus-images/images/ubuntu-noble/20240215/incus.tar.xz \
+  -u admin:password \
+  -H "Content-Type: application/x-xz" \
+  --data-binary @ubuntu-noble-20240215.tar.xz
+```
+
+### Split Format
+
+Split format uploads metadata and rootfs separately:
+
+```bash
+# Upload metadata tarball
+curl -X PUT http://localhost:8080/incus/incus-images/images/debian-bookworm/20240301/metadata.tar.xz \
+  -u admin:password \
+  -H "Content-Type: application/x-xz" \
+  --data-binary @metadata.tar.xz
+
+# Upload container rootfs (squashfs)
+curl -X PUT http://localhost:8080/incus/incus-images/images/debian-bookworm/20240301/rootfs.squashfs \
+  -u admin:password \
+  -H "Content-Type: application/octet-stream" \
+  --data-binary @rootfs.squashfs
+
+# Upload VM disk image (qcow2)
+curl -X PUT http://localhost:8080/incus/incus-images/images/debian-bookworm/20240301/rootfs.img \
+  -u admin:password \
+  -H "Content-Type: application/octet-stream" \
+  --data-binary @disk.qcow2
+```
+
+### Path Layout
+
+Images follow a `{product}/{version}/{file}` structure:
+
+| Path | Description |
+|------|-------------|
+| `ubuntu-noble/20240215/incus.tar.xz` | Unified image tarball |
+| `debian-bookworm/v1.0/metadata.tar.xz` | Split: metadata tarball |
+| `debian-bookworm/v1.0/rootfs.squashfs` | Split: container rootfs |
+| `debian-bookworm/v1.0/rootfs.img` | Split: VM disk image (qcow2) |
+
+## Configuring Incus
+
+### Add as Remote Image Server
+
+Point Incus at your Artifact Keeper instance:
+
+```bash
+incus remote add myregistry http://localhost:8080/incus/incus-images \
+  --protocol simplestreams \
+  --public
+```
+
+:::note
+SimpleStreams remotes are read-only from the Incus client's perspective. Image uploads are done via the HTTP API (curl/CI).
+:::
+
+### List Available Images
+
+```bash
+incus image list myregistry:
+```
+
+### Launch a Container
+
+```bash
+incus launch myregistry:ubuntu-noble my-container
+```
+
+### Launch a Virtual Machine
+
+```bash
+incus launch myregistry:debian-bookworm my-vm --vm
+```
+
+### Import an Image Locally
+
+```bash
+incus image copy myregistry:ubuntu-noble local: --alias ubuntu-noble
+```
+
+## SimpleStreams Protocol
+
+Artifact Keeper automatically generates the SimpleStreams JSON endpoints from your uploaded images.
+
+### index.json
+
+The index at `streams/v1/index.json` lists all available product catalogs:
+
+```json
+{
+  "format": "index:1.0",
+  "index": {
+    "images": {
+      "datatype": "image-downloads",
+      "format": "products:1.0",
+      "path": "streams/v1/images.json",
+      "products": ["ubuntu-noble", "debian-bookworm"]
+    }
+  }
+}
+```
+
+### images.json
+
+The catalog at `streams/v1/images.json` describes every product, version, and downloadable file:
+
+```json
+{
+  "format": "products:1.0",
+  "products": {
+    "ubuntu-noble": {
+      "arch": "x86_64",
+      "os": "Ubuntu",
+      "release": "noble",
+      "versions": {
+        "20240215": {
+          "items": {
+            "incus.tar.xz": {
+              "ftype": "incus.tar.xz",
+              "sha256": "abc123...",
+              "path": "/incus/incus-images/images/ubuntu-noble/20240215/incus.tar.gz",
+              "size": 123456789
+            }
+          }
+        }
+      }
+    }
+  }
+}
+```
+
+Architecture, OS, and release metadata are extracted automatically from `metadata.yaml` inside uploaded tarballs.
+
+## Vulnerability Scanning
+
+Artifact Keeper scans Incus container images for OS-level package vulnerabilities using Trivy:
+
+- **Unified tarballs**: Extracted and scanned for installed packages (`.deb`, `.rpm`, etc.)
+- **SquashFS rootfs**: Extracted with `unsquashfs` and scanned
+- **QCOW2 disk images**: Not scannable (require mounting)
+- **Metadata-only tarballs**: Skipped (no rootfs to scan)
+
+Scan results appear in the Security dashboard alongside other artifact types.
+
+## CI/CD Integration
+
+### GitHub Actions
+
+```yaml
+- name: Upload Incus image
+  run: |
+    curl -X PUT \
+      -u ${{ secrets.REGISTRY_USER }}:${{ secrets.REGISTRY_PASS }} \
+      -H "Content-Type: application/x-xz" \
+      --data-binary @output/incus.tar.xz \
+      ${{ vars.REGISTRY_URL }}/incus/incus-images/images/${{ env.PRODUCT }}/${{ env.VERSION }}/incus.tar.xz
+```
+
+### GitLab CI
+
+```yaml
+upload-image:
+  stage: publish
+  script:
+    - |
+      curl -X PUT \
+        -u ${REGISTRY_USER}:${REGISTRY_PASS} \
+        -H "Content-Type: application/x-xz" \
+        --data-binary @output/incus.tar.xz \
+        ${REGISTRY_URL}/incus/incus-images/images/${PRODUCT}/${VERSION}/incus.tar.xz
+```
+
+### distrobuilder
+
+If you build images with [distrobuilder](https://linuxcontainers.org/distrobuilder/), upload the output directly:
+
+```bash
+distrobuilder build-incus ubuntu.yaml
+curl -X PUT -u admin:password \
+  -H "Content-Type: application/x-xz" \
+  --data-binary @incus.tar.xz \
+  http://localhost:8080/incus/incus-images/images/ubuntu-noble/$(date +%Y%m%d)/incus.tar.xz
+```
+
+## Deleting Images
+
+```bash
+curl -X DELETE http://localhost:8080/incus/incus-images/images/ubuntu-noble/20240215/incus.tar.xz \
+  -u admin:password
+```
+
+Deleted images are soft-deleted and no longer appear in SimpleStreams catalogs.
+
+## Troubleshooting
+
+### "Repository not found" or format mismatch
+
+Ensure the repository was created with `"format": "incus"` or `"format": "lxc"`.
+
+### Incus remote shows no images
+
+Check that images were uploaded with the correct path structure (`product/version/file`). Run `curl` against the `streams/v1/images.json` endpoint to inspect the generated catalog.
+
+### Upload returns 401
+
+Write operations require Basic authentication. Read operations (downloads, SimpleStreams discovery) are public.
+
+### Large image uploads timing out
+
+The endpoint supports uploads up to 4 GB. For very large VM images, ensure your reverse proxy (Nginx, Caddy) also allows large request bodies.
+
+## Best Practices
+
+- **Use consistent product names** that match your distro naming convention (e.g., `ubuntu-noble`, `debian-bookworm-cloud`)
+- **Use date-based versions** (e.g., `20240215`) for daily builds or semver for release images
+- **Upload both container and VM variants** under the same product/version for maximum flexibility
+- **Enable vulnerability scanning** to catch OS package CVEs in your container images
+- **Use split format** for large images where you want to update metadata without re-uploading the rootfs
+
+## See Also
+
+- [Docker / OCI Guide](/docs/guides/docker/) — OCI container registry
+- [Vulnerability Scanning](/docs/security/scanning/) — Scanning container images
+- [Artifact Signing](/docs/security/signing/) — Signing artifacts
+- [Peer Replication](/docs/advanced/replication/) — Distributing images across regions

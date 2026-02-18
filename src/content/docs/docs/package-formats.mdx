@@ -13,7 +13,7 @@ This page is a quick reference index. Click through to the detailed guide pages 
 
 ## Complete Format Reference
 
-**36 native formats** with full wire-protocol support, plus **14 aliases** for alternative clients that share an underlying protocol. Custom formats can be added at any time via [WASM plugins](/docs/advanced/plugins/).
+**37 native formats** with full wire-protocol support, plus **14 aliases** for alternative clients that share an underlying protocol. Custom formats can be added at any time via [WASM plugins](/docs/advanced/plugins/).
 
 | # | Format | Key | Category | Native Clients |
 |---|--------|-----|----------|----------------|
@@ -34,25 +34,26 @@ This page is a quick reference index. Click through to the detailed guide pages 
 | 15 | Conda | `conda_native` | Languages | conda, mamba, micromamba |
 | 16 | Protobuf / BSR | `protobuf` | Schemas | buf CLI |
 | 17 | Docker / OCI | `docker` | Containers | Docker, Podman, Buildx, ORAS |
-| 18 | Helm | `helm` | Infrastructure | helm |
-| 19 | Terraform | `terraform` | Infrastructure | terraform, tofu |
-| 20 | Vagrant | `vagrant` | Infrastructure | vagrant |
-| 21 | Chef | `chef` | Infrastructure | knife, Berkshelf |
-| 22 | Puppet | `puppet` | Infrastructure | puppet module |
-| 23 | Ansible | `ansible` | Infrastructure | ansible-galaxy |
-| 24 | Debian / APT | `debian` | System Packages | apt, dpkg |
-| 25 | RPM / YUM | `rpm` | System Packages | yum, dnf, zypper |
-| 26 | Alpine / APK | `alpine` | System Packages | apk |
-| 27 | OPKG | `opkg` | System Packages | opkg (OpenWrt) |
-| 28 | Conan | `conan` | C / C++ | conan (v2) |
-| 29 | Bazel | `bazel` | C / C++ | bazel, bazelisk |
-| 30 | HuggingFace | `huggingface` | ML / AI | huggingface_hub, transformers |
-| 31 | ML Model | `mlmodel` | ML / AI | Generic model storage |
-| 32 | VS Code | `vscode` | Editor Extensions | VS Code, Cursor, Windsurf, Kiro |
-| 33 | JetBrains | `jetbrains` | Editor Extensions | IntelliJ, PyCharm, WebStorm |
-| 34 | Git LFS | `gitlfs` | Other | git lfs |
-| 35 | P2 | `p2` | Other | Eclipse IDE |
-| 36 | Generic | `generic` | Other | curl, wget, any HTTP client |
+| 18 | Incus / LXC | `incus` | Containers | incus, lxc |
+| 19 | Helm | `helm` | Infrastructure | helm |
+| 20 | Terraform | `terraform` | Infrastructure | terraform, tofu |
+| 21 | Vagrant | `vagrant` | Infrastructure | vagrant |
+| 22 | Chef | `chef` | Infrastructure | knife, Berkshelf |
+| 23 | Puppet | `puppet` | Infrastructure | puppet module |
+| 24 | Ansible | `ansible` | Infrastructure | ansible-galaxy |
+| 25 | Debian / APT | `debian` | System Packages | apt, dpkg |
+| 26 | RPM / YUM | `rpm` | System Packages | yum, dnf, zypper |
+| 27 | Alpine / APK | `alpine` | System Packages | apk |
+| 28 | OPKG | `opkg` | System Packages | opkg (OpenWrt) |
+| 29 | Conan | `conan` | C / C++ | conan (v2) |
+| 30 | Bazel | `bazel` | C / C++ | bazel, bazelisk |
+| 31 | HuggingFace | `huggingface` | ML / AI | huggingface_hub, transformers |
+| 32 | ML Model | `mlmodel` | ML / AI | Generic model storage |
+| 33 | VS Code | `vscode` | Editor Extensions | VS Code, Cursor, Windsurf, Kiro |
+| 34 | JetBrains | `jetbrains` | Editor Extensions | IntelliJ, PyCharm, WebStorm |
+| 35 | Git LFS | `gitlfs` | Other | git lfs |
+| 36 | P2 | `p2` | Other | Eclipse IDE |
+| 37 | Generic | `generic` | Other | curl, wget, any HTTP client |
 
 ---
 
@@ -95,8 +96,9 @@ BSR-compatible Connect RPC endpoints for hosting protobuf modules with commit tr
 | Format | Key | Native Clients | Guide |
 |--------|-----|----------------|-------|
 | **Docker / OCI** | `docker` | Docker, Podman, Buildx, ORAS, Helm OCI, WASM OCI | [Docker & OCI Guide](/docs/guides/docker/) |
+| **Incus / LXC** | `incus` | incus, lxc | [Incus / LXC Guide](/docs/guides/incus/) |
 
-Full OCI Distribution Spec implementation supporting containers, WASM modules, and generic OCI artifacts.
+Full OCI Distribution Spec implementation for Docker containers, plus SimpleStreams protocol support for Incus/LXC system containers and VM images.
 
 ---
 
@@ -180,6 +182,7 @@ Many package managers share underlying protocols. These aliases automatically re
 | `poetry` | pypi | `helm_oci` | docker |
 | `conda` | pypi | `chocolatey` | nuget |
 | `powershell` | nuget | `opentofu` | terraform |
+| `lxc` | incus | | |
 
 ---
 

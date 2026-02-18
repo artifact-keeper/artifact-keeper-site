@@ -37,6 +37,7 @@ export default defineConfig({
           items: [
             { label: 'Overview', slug: 'docs/package-formats' },
             { label: 'Docker / OCI', slug: 'docs/guides/docker' },
+            { label: 'Incus / LXC', slug: 'docs/guides/incus' },
             { label: 'Maven', slug: 'docs/guides/maven' },
             { label: 'npm', slug: 'docs/guides/npm' },
             { label: 'PyPI', slug: 'docs/guides/pypi' },
