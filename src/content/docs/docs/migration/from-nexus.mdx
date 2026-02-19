@@ -3,33 +3,7 @@ title: "Migrate from Nexus"
 description: "Migrate your artifacts from Sonatype Nexus Repository to Artifact Keeper"
 ---
 
-Switch from Sonatype Nexus Repository Manager to Artifact Keeper with the built-in migration API.
-
-## Why Migrate?
-
-### Cost Comparison
-
-| | Nexus OSS | Nexus Pro | Artifact Keeper |
-|---|---|---|---|
-| **Annual Cost** | $0 | $12,000 - $30,000+ | **$0** |
-| **HA / Clustering** | Not available | Pro only | **Included** |
-| **Security Scanning** | Not included | Lifecycle add-on | **Included** |
-| **WASM Plugins** | Not available | Not available | **Included** |
-| **License** | EPL 2.0 | Proprietary | **MIT** |
-
-### Feature Comparison
-
-| Feature | Nexus OSS | Nexus Pro | Artifact Keeper |
-|---------|-----------|-----------|-----------------|
-| Package Formats | ~20 | ~20 | **45+** |
-| High Availability | No | Pro only | **Included** |
-| Replication | No | Pro only | **Included** |
-| Security Scanning | No | Lifecycle add-on | **Included (Trivy)** |
-| Full-Text Search | Basic | Basic | **Meilisearch** |
-| RBAC | Basic | Advanced | **Full RBAC** |
-| OIDC/LDAP/SAML | LDAP only | LDAP + SAML | **All included** |
-| Staging & Promotion | No | Yes | **Included** |
-| Plugin System | OSGi (Java) | OSGi (Java) | **WASM Plugins** |
+This guide walks through migrating repositories and artifacts from Sonatype Nexus Repository Manager to Artifact Keeper. The built-in migration API connects to Nexus over its REST API and handles the transfer automatically.
 
 ## Migration Overview
 

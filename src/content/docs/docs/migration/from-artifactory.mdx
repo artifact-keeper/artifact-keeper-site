@@ -3,35 +3,7 @@ title: "Migrate from Artifactory"
 description: "Migrate your artifacts from JFrog Artifactory to Artifact Keeper with zero downtime"
 ---
 
-Switch from JFrog Artifactory to Artifact Keeper and save thousands of dollars per year while gaining access to all features with no restrictions.
-
-## Why Migrate?
-
-### Cost Savings
-
-| | Artifactory Pro | Artifactory Enterprise | Artifact Keeper |
-|---|---|---|---|
-| **Annual Cost** | $6,000 - $12,000 | $24,000 - $48,000+ | **$0** |
-| **Per-User Pricing** | Yes | Yes | **No** |
-| **Feature Gates** | Yes (HA, Edge, etc.) | Yes (Xray, etc.) | **None** |
-| **Support Contracts** | Required | Required | **Optional** |
-
-**Real-world savings**: Teams typically save $400-1,400 per month by switching to Artifact Keeper.
-
-### Feature Comparison
-
-| Feature | Artifactory | Artifact Keeper |
-|---------|-------------|-----------------|
-| Package Formats | 30+ | **30+** |
-| High Availability | Enterprise only ($$$) | **Included** |
-| Peer Replication | Pro+ ($$$) | **Included** |
-| Security Scanning | Xray add-on ($$$) | **Included** |
-| Advanced Search | Enterprise only | **Included** |
-| RBAC | All tiers | **Included** |
-| OIDC/LDAP | Pro+ | **Included** |
-| API Access | All tiers | **Included** |
-| Plugin System | Limited | **WASM Plugins** |
-| License | Proprietary | **MIT (Open Source)** |
+This guide walks through migrating repositories and artifacts from JFrog Artifactory to Artifact Keeper. The built-in migration API handles the heavy lifting, and the process is designed for zero-downtime transitions.
 
 ## Migration Overview
 
@@ -254,7 +226,7 @@ Example hybrid configuration (Maven `settings.xml`):
 1. **Verify all clients** are using Artifact Keeper
 2. **Archive Artifactory data** for compliance/backup
 3. **Shut down Artifactory** servers
-4. **Celebrate cost savings**
+4. **Reclaim old infrastructure**
 
 ## Large-Scale Migrations
 
@@ -362,20 +334,6 @@ After migration completes:
 - [ ] Configure backup and disaster recovery
 - [ ] Set up monitoring and alerting
 - [ ] Archive or decommission Artifactory
-
-## Cost Savings Calculator
-
-Estimate your savings from migrating:
-
-**Artifactory Pro**: $6,000 - $12,000/year
-**Artifactory Enterprise**: $24,000 - $48,000/year
-**Artifact Keeper**: $0 (MIT licensed)
-
-**Deployment costs** (one-time):
-- Self-hosted: Server costs only (~$100-500/month for infrastructure)
-- Managed cloud: Variable based on usage
-
-**Break-even**: Typically 1-2 months after migration
 
 ## Next Steps
 
