@@ -1,0 +1,20 @@
+queue_rules:
+  - name: default
+    merge_method: squash
+    update_method: rebase
+
+pull_request_rules:
+  - name: Auto-merge doc fixes
+    conditions:
+      - "title~=^(docs|fix|chore):"
+      - check-success=build
+      - "#approved-reviews-by>=1"
+    actions:
+      queue:
+        name: default
+
+  - name: Clean up merged branches
+    conditions:
+      - merged
+    actions:
+      delete_head_branch: {}
