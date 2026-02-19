@@ -1,0 +1,153 @@
+---
+title: "Migrate from Nexus"
+description: "Migrate your artifacts from Sonatype Nexus Repository to Artifact Keeper"
+---
+
+# Migrate from Nexus
+
+Switch from Sonatype Nexus Repository Manager to Artifact Keeper with the built-in migration API.
+
+## Why Migrate?
+
+### Cost Savings
+
+| | Nexus Repository Pro | Artifact Keeper |
+|---|---|---|
+| **Annual Cost** | $3,000 - $12,000+ | **$0** |
+| **Per-Node Pricing** | Yes | **No** |
+| **Feature Gates** | Yes (HA, Firewall, etc.) | **None** |
+| **License** | Proprietary | **MIT (Open Source)** |
+
+### Feature Comparison
+
+| Feature | Nexus Pro | Artifact Keeper |
+|---------|-----------|-----------------|
+| Package Formats | 20+ | **30+** |
+| High Availability | Pro only ($$$) | **Included** |
+| Peer Replication | Pro only | **Included** |
+| Security Scanning | Firewall add-on ($$$) | **Included (Trivy)** |
+| WASM Plugins | No | **Included** |
+| OIDC/LDAP/SAML | Pro only | **Included** |
+
+## Migration via Built-in API
+
+Artifact Keeper's migration API supports Nexus as a source. The workflow is identical to [Artifactory migration](/docs/migration/from-artifactory) — just use `source_type: "nexus"`.
+
+### Step 1: Configure Source
+
+```bash
+curl -X POST https://registry.example.com/api/v1/migrations/connections \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "my-nexus",
+    "url": "https://nexus.corp.example.com",
+    "source_type": "nexus",
+    "auth_type": "basic_auth",
+    "credentials": {
+      "username": "admin",
+      "password": "admin-password-or-token"
+    }
+  }'
+```
+
+### Step 2: List Available Repositories
+
+```bash
+curl https://registry.example.com/api/v1/migrations/connections/$CONNECTION_ID/repositories \
+  -H "Authorization: Bearer $TOKEN"
+```
+
+### Step 3: Create and Start Migration
+
+```bash
+curl -X POST https://registry.example.com/api/v1/migrations \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "source_connection_id": "'$CONNECTION_ID'",
+    "job_type": "full",
+    "config": {
+      "include_repos": ["maven-releases", "docker-hosted"],
+      "conflict_resolution": "skip",
+      "concurrent_transfers": 4,
+      "verify_checksums": true
+    }
+  }'
+
+# Start the migration
+curl -X POST https://registry.example.com/api/v1/migrations/$JOB_ID/start \
+  -H "Authorization: Bearer $TOKEN"
+```
+
+### Step 4: Monitor Progress
+
+```bash
+curl https://registry.example.com/api/v1/migrations/$JOB_ID \
+  -H "Authorization: Bearer $TOKEN"
+```
+
+## Nexus Repository Types
+
+Artifact Keeper maps Nexus repository types as follows:
+
+| Nexus Type | Artifact Keeper Equivalent |
+|------------|----------------------------|
+| Hosted | Standard repository |
+| Proxy | Remote repository (with caching) |
+| Group | Virtual repository |
+
+## Permission Mapping
+
+| Nexus Role | Artifact Keeper Role |
+|------------|----------------------|
+| nx-admin | Admin |
+| nx-deploy | Write |
+| nx-readonly | Read |
+
+## Manual Migration
+
+For individual repositories, use native clients:
+
+### Maven
+
+```bash
+# Download from Nexus
+mvn dependency:get \
+  -DremoteRepositories=https://nexus.corp.example.com/repository/maven-releases \
+  -DgroupId=com.example -DartifactId=myapp -Dversion=1.0.0
+
+# Deploy to Artifact Keeper
+mvn deploy:deploy-file \
+  -Durl=https://artifacts.example.com/maven/maven-releases \
+  -DrepositoryId=artifact-keeper \
+  -Dfile=target/myapp-1.0.0.jar -DpomFile=pom.xml
+```
+
+### Docker
+
+```bash
+docker pull nexus.corp.example.com/myimage:latest
+docker tag nexus.corp.example.com/myimage:latest \
+  artifacts.example.com/docker/docker-hosted/myimage:latest
+docker push artifacts.example.com/docker/docker-hosted/myimage:latest
+```
+
+### npm
+
+```bash
+# Set Nexus registry
+npm config set registry https://nexus.corp.example.com/repository/npm-proxy/
+
+# Download package
+npm pack some-package@1.0.0
+
+# Publish to Artifact Keeper
+npm publish some-package-1.0.0.tgz --registry https://artifacts.example.com/npm/npm-hosted/
+```
+
+## Next Steps
+
+- [Installation Guide](/docs/getting-started/installation) - Set up Artifact Keeper
+- [Configuration Reference](/docs/getting-started/configuration) - Configure authentication and storage
+- [Migration from Artifactory](/docs/migration/from-artifactory) - If also migrating from Artifactory

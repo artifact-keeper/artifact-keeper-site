@@ -35,6 +35,8 @@ Configure Artifact Keeper using environment variables. This page provides a comp
 | `JWT_REFRESH_TOKEN_EXPIRY` | No | `604800` | Refresh token expiration in seconds (7 days) |
 | `ADMIN_USERNAME` | No | `admin` | Default admin username (first-time setup) |
 | `ADMIN_PASSWORD` | No | auto-generated | Admin password for first-time setup. If not set, a random 20-character password is generated and written to `{STORAGE_PATH}/admin.password` (default: `/data/storage/admin.password`). The API is locked until the admin changes this password. Set this env var to skip the setup lock entirely. |
+| `SKIP_ADMIN_PROVISIONING` | No | `false` | Skip built-in admin user creation on first boot. Use for SSO-only deployments where admin roles are assigned via OIDC/LDAP/SAML group mapping. |
+| `SSO_ENCRYPTION_KEY` | No | - | Encryption key for storing OIDC/LDAP/SAML client secrets in the database |
 | `REQUIRE_HTTPS` | No | `false` | Require HTTPS for all connections |
 | `RATE_LIMIT_LOGIN` | No | `5` | Maximum login attempts |
 | `RATE_LIMIT_WINDOW` | No | `300` | Rate limit window in seconds (5 minutes) |
@@ -67,30 +69,95 @@ Configure Artifact Keeper using environment variables. This page provides a comp
 | `OIDC_NAME_CLAIM` | No | `name` | OIDC claim for full name |
 | `OIDC_GROUPS_CLAIM` | No | `groups` | OIDC claim for groups |
 
-## Storage Backend
+## SAML Integration
+
+SSO via SAML is primarily configured through the Admin API (`/api/v1/admin/sso/saml`), but these environment variables provide bootstrap configuration. Read by the **backend** process.
 
 | Variable | Required | Default | Description |
 |----------|----------|---------|-------------|
-| `STORAGE_BACKEND` | No | `filesystem` | Storage backend type (filesystem, s3) |
+| `SAML_SP_ENTITY_ID` | No | - | Service Provider entity ID |
+| `SAML_ACS_URL` | No | - | Assertion Consumer Service URL |
+| `SAML_IDP_ISSUER` | No | - | Identity Provider issuer |
+| `SAML_IDP_SSO_URL` | No | - | IdP Single Sign-On URL |
+| `SAML_IDP_CERTIFICATE` | No | - | IdP X.509 certificate (PEM format) |
+| `SAML_IDP_METADATA_URL` | No | - | IdP metadata URL (alternative to manual config) |
+| `SAML_SIGN_REQUESTS` | No | `false` | Sign SAML AuthnRequests |
+| `SAML_REQUIRE_SIGNED_ASSERTIONS` | No | `true` | Require signed SAML assertions |
+| `SAML_USERNAME_ATTR` | No | - | SAML attribute for username |
+| `SAML_EMAIL_ATTR` | No | - | SAML attribute for email |
+| `SAML_DISPLAY_NAME_ATTR` | No | - | SAML attribute for display name |
+| `SAML_GROUPS_ATTR` | No | - | SAML attribute for groups |
+| `SAML_ADMIN_GROUP` | No | - | SAML group that grants admin access |
+
+## Storage Backend
+
+All storage variables are read by the **backend** process.
+
+| Variable | Required | Default | Description |
+|----------|----------|---------|-------------|
+| `STORAGE_BACKEND` | No | `filesystem` | Storage backend type (`filesystem`, `s3`, `gcs`, `azure`) |
 | `STORAGE_PATH` | No | `/var/lib/artifact-keeper/artifacts` | Filesystem storage path |
+| `STORAGE_PATH_FORMAT` | No | `native` | Path layout: `native`, `artifactory` (JFrog-compatible), or `migration` (reads both during migration) |
 | `STORAGE_DIRECT_IO` | No | `false` | Enable direct I/O for large files |
 | `STORAGE_BUFFER_SIZE` | No | `1048576` | Buffer size in bytes (1 MB) |
 
 ## S3 Storage
 
+When `STORAGE_BACKEND=s3`. Read by the **backend** process.
+
 | Variable | Required | Default | Description |
 |----------|----------|---------|-------------|
-| `S3_BUCKET` | No | - | S3 bucket name |
+| `S3_BUCKET` | Yes | - | S3 bucket name |
 | `S3_REGION` | No | `us-east-1` | S3 region |
 | `S3_ENDPOINT` | No | - | S3-compatible endpoint (for MinIO, DigitalOcean Spaces, etc.) |
-| `S3_ACCESS_KEY_ID` | No | - | S3 access key ID |
-| `S3_SECRET_ACCESS_KEY` | No | - | S3 secret access key |
-| `S3_PATH_PREFIX` | No | - | Prefix for all S3 keys |
+| `S3_PREFIX` | No | - | Prefix for all S3 keys |
+| `AWS_ACCESS_KEY_ID` | No | - | S3 access key ID (uses standard AWS SDK env var) |
+| `AWS_SECRET_ACCESS_KEY` | No | - | S3 secret access key |
+| `S3_REDIRECT_DOWNLOADS` | No | `false` | Redirect downloads to presigned S3 URLs instead of proxying |
+| `S3_PRESIGN_EXPIRY_SECS` | No | `3600` | Presigned URL expiry in seconds |
+| `S3_PRESIGN_ACCESS_KEY_ID` | No | - | Separate credentials for presigned URLs (optional) |
+| `S3_PRESIGN_SECRET_ACCESS_KEY` | No | - | Separate credentials for presigned URLs (optional) |
 | `S3_FORCE_PATH_STYLE` | No | `false` | Use path-style addressing (required for MinIO) |
 | `S3_MULTIPART_THRESHOLD` | No | `104857600` | Multipart upload threshold in bytes (100 MB) |
 | `S3_MULTIPART_CHUNK_SIZE` | No | `10485760` | Multipart chunk size in bytes (10 MB) |
 | `S3_MAX_CONNECTIONS` | No | `50` | Maximum S3 connections |
 | `S3_USE_TRANSFER_ACCELERATION` | No | `false` | Enable S3 transfer acceleration (AWS only) |
+
+### CloudFront CDN (optional, for S3 backends)
+
+| Variable | Required | Default | Description |
+|----------|----------|---------|-------------|
+| `CLOUDFRONT_DISTRIBUTION_URL` | No | - | CloudFront distribution URL (e.g., `https://dxxxxxxxxxx.cloudfront.net`) |
+| `CLOUDFRONT_KEY_PAIR_ID` | No | - | CloudFront key pair ID for signed URLs |
+| `CLOUDFRONT_PRIVATE_KEY_PATH` | No | - | Path to CloudFront private key PEM file |
+| `CLOUDFRONT_PRIVATE_KEY` | No | - | Inline CloudFront private key (alternative to path) |
+
+## Google Cloud Storage
+
+When `STORAGE_BACKEND=gcs`. Read by the **backend** process.
+
+| Variable | Required | Default | Description |
+|----------|----------|---------|-------------|
+| `GCS_BUCKET` | Yes | - | GCS bucket name |
+| `GCS_PROJECT_ID` | Yes | - | GCP project ID |
+| `GCS_SERVICE_ACCOUNT_EMAIL` | Yes | - | Service account email for signing URLs |
+| `GCS_PRIVATE_KEY_PATH` | No | - | Path to service account PEM private key file |
+| `GCS_PRIVATE_KEY` | No | - | Inline private key (alternative to path) |
+| `GCS_REDIRECT_DOWNLOADS` | No | `false` | Redirect downloads to signed GCS URLs instead of proxying |
+| `GCS_SIGNED_URL_EXPIRY` | No | `3600` | Signed URL expiry in seconds (max 7 days) |
+
+## Azure Blob Storage
+
+When `STORAGE_BACKEND=azure`. Read by the **backend** process.
+
+| Variable | Required | Default | Description |
+|----------|----------|---------|-------------|
+| `AZURE_STORAGE_ACCOUNT` | Yes | - | Azure storage account name |
+| `AZURE_STORAGE_CONTAINER` | Yes | - | Blob container name |
+| `AZURE_STORAGE_ACCESS_KEY` | Yes | - | Storage account access key |
+| `AZURE_STORAGE_ENDPOINT` | No | - | Custom endpoint URL (for Azure Stack or emulators) |
+| `AZURE_REDIRECT_DOWNLOADS` | No | `false` | Redirect downloads to SAS URLs instead of proxying |
+| `AZURE_SAS_EXPIRY` | No | `3600` | SAS URL expiry in seconds |
 
 ## Backup
 
@@ -115,16 +182,32 @@ Configure Artifact Keeper using environment variables. This page provides a comp
 | `BACKUP_RETENTION_WEEKLY` | No | `4` | Weekly backups to keep |
 | `BACKUP_RETENTION_MONTHLY` | No | `12` | Monthly backups to keep |
 
-## Garbage Collection
+## Lifecycle Policies (Garbage Collection)
 
-| Variable | Required | Default | Description |
-|----------|----------|---------|-------------|
-| `GC_ENABLED` | No | `false` | Enable automatic garbage collection |
-| `GC_SCHEDULE` | No | `0 2 * * *` | GC schedule (cron format) |
-| `GC_RETENTION_DAYS` | No | `90` | Keep artifacts for N days |
-| `GC_DRY_RUN` | No | `false` | Dry run mode (log without deleting) |
+Artifact cleanup is managed through **lifecycle policies**, not environment variables. Policies are created and managed via the Admin API (`/api/v1/admin/lifecycle`) or the web UI.
+
+The backend automatically executes all enabled policies every **6 hours** via a background scheduler. No environment variable is needed to enable this — any enabled policy will run automatically.
+
+**Available policy types:**
+
+| Type | Description |
+|------|-------------|
+| `max_age_days` | Delete artifacts older than N days |
+| `max_versions` | Keep only the latest N versions per package (per repo) |
+| `no_downloads_days` | Delete artifacts not downloaded in N days |
+| `tag_pattern_keep` | Keep artifacts matching a regex, delete the rest |
+| `tag_pattern_delete` | Delete artifacts matching a regex |
+| `size_quota_bytes` | Enforce per-repo storage quota (LRU eviction) |
+
+Each policy supports **dry-run** mode (`POST /api/v1/admin/lifecycle/{id}/preview`) to see what would be affected before executing.
+
+:::note
+There is no `GC_RETENTION_DAYS` environment variable. All cleanup behavior is configured through lifecycle policies in the database, giving you per-repository granularity and multiple policy types.
+:::
 
 ## Peer Replication
+
+Read by the **backend** process.
 
 | Variable | Required | Default | Description |
 |----------|----------|---------|-------------|
@@ -206,13 +289,14 @@ Configure Artifact Keeper using environment variables. This page provides a comp
 | `CACHE_TTL_SECONDS` | No | `3600` | Cache TTL (1 hour) |
 | `CACHE_SIZE_MB` | No | `1024` | Cache size (1 GB) |
 
-## Search
+## Search (Meilisearch)
+
+Search is powered by [Meilisearch](https://www.meilisearch.com/). When `MEILISEARCH_URL` is set, the backend indexes artifacts for full-text search. Read by the **backend** process.
 
 | Variable | Required | Default | Description |
 |----------|----------|---------|-------------|
-| `SEARCH_ENABLED` | No | `true` | Enable search functionality |
-| `SEARCH_INDEX_PATH` | No | `/var/lib/artifact-keeper/search` | Search index path |
-| `SEARCH_UPDATE_INTERVAL` | No | `60` | Index update interval (seconds) |
+| `MEILISEARCH_URL` | No | - | Meilisearch server URL (e.g., `http://meilisearch:7700`). Search is disabled when unset. |
+| `MEILISEARCH_API_KEY` | No | - | Meilisearch master key for authentication |
 
 ## CORS
 
