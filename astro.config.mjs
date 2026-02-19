@@ -73,6 +73,7 @@ export default defineConfig({
           label: 'Migration',
           items: [
             { label: 'From Artifactory', slug: 'docs/migration/from-artifactory' },
+            { label: 'From Nexus', slug: 'docs/migration/from-nexus' },
           ],
         },
         {

@@ -1,0 +1,341 @@
+---
+title: "Migrate from Nexus"
+description: "Migrate your artifacts from Sonatype Nexus Repository to Artifact Keeper"
+---
+
+Switch from Sonatype Nexus Repository Manager to Artifact Keeper with the built-in migration API.
+
+## Why Migrate?
+
+### Cost Comparison
+
+| | Nexus OSS | Nexus Pro | Artifact Keeper |
+|---|---|---|---|
+| **Annual Cost** | $0 | $12,000 - $30,000+ | **$0** |
+| **HA / Clustering** | Not available | Pro only | **Included** |
+| **Security Scanning** | Not included | Lifecycle add-on | **Included** |
+| **WASM Plugins** | Not available | Not available | **Included** |
+| **License** | EPL 2.0 | Proprietary | **MIT** |
+
+### Feature Comparison
+
+| Feature | Nexus OSS | Nexus Pro | Artifact Keeper |
+|---------|-----------|-----------|-----------------|
+| Package Formats | ~20 | ~20 | **45+** |
+| High Availability | No | Pro only | **Included** |
+| Replication | No | Pro only | **Included** |
+| Security Scanning | No | Lifecycle add-on | **Included (Trivy)** |
+| Full-Text Search | Basic | Basic | **Meilisearch** |
+| RBAC | Basic | Advanced | **Full RBAC** |
+| OIDC/LDAP/SAML | LDAP only | LDAP + SAML | **All included** |
+| Staging & Promotion | No | Yes | **Included** |
+| Plugin System | OSGi (Java) | OSGi (Java) | **WASM Plugins** |
+
+## Migration Overview
+
+The migration API connects to your Nexus instance over its REST API (`/service/rest/v1/`), enumerates repositories and components, then downloads and re-ingests each artifact into Artifact Keeper. Checksums are verified during transfer.
+
+What gets migrated:
+- All hosted repository artifacts (files, checksums, sizes)
+- Repository names and structure
+- Format metadata (Maven coordinates, npm scopes, Docker tags, etc.)
+
+What does not migrate automatically:
+- Nexus user accounts and roles (Nexus uses a different permission model)
+- Proxy/group repository configurations (set these up as [Remote & Virtual Repos](/docs/advanced/remote-virtual) instead)
+- Cleanup policies and scheduled tasks
+
+## Prerequisites
+
+1. **Nexus Access**:
+   - Admin or user credentials with read access to target repositories
+   - Network connectivity from Artifact Keeper to Nexus (port 8081 by default)
+   - Nexus REST API enabled (enabled by default on Nexus 3.x)
+
+2. **Artifact Keeper Setup**:
+   - Running instance (see [Installation](/docs/getting-started/installation))
+   - Sufficient storage for migrated artifacts
+   - `MIGRATION_ENCRYPTION_KEY` environment variable set (used to encrypt stored credentials)
+
+3. **Nexus Version**:
+   - Nexus Repository Manager 3.x required (the REST API is not available in Nexus 2.x)
+   - If you are still on Nexus 2.x, upgrade to 3.x first or use the manual migration method below
+
+## Migration via the API
+
+### Step 1: Create a Connection
+
+```bash
+curl -X POST https://registry.example.com/api/v1/migrations/connections \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "my-nexus",
+    "url": "https://nexus.corp.example.com",
+    "source_type": "nexus",
+    "auth_type": "basic_auth",
+    "credentials": {
+      "username": "admin",
+      "password": "admin-password-or-token"
+    }
+  }'
+```
+
+The `url` should be the base URL of your Nexus instance (without `/repository/` or `/service/`). The API appends the correct paths internally.
+
+### Step 2: Test the Connection
+
+```bash
+# Verify connectivity and credentials
+curl -X POST https://registry.example.com/api/v1/migrations/connections/$CONNECTION_ID/test \
+  -H "Authorization: Bearer $TOKEN"
+```
+
+A successful test returns the Nexus edition and version:
+```json
+{
+  "status": "connected",
+  "version": "3.70.1",
+  "edition": "OSS"
+}
+```
+
+### Step 3: List Available Repositories
+
+```bash
+curl https://registry.example.com/api/v1/migrations/connections/$CONNECTION_ID/repositories \
+  -H "Authorization: Bearer $TOKEN"
+```
+
+This returns all repositories from Nexus with their format and type:
+```json
+[
+  { "name": "maven-releases", "format": "maven2", "type": "hosted" },
+  { "name": "maven-snapshots", "format": "maven2", "type": "hosted" },
+  { "name": "npm-hosted", "format": "npm", "type": "hosted" },
+  { "name": "docker-hosted", "format": "docker", "type": "hosted" },
+  { "name": "maven-central", "format": "maven2", "type": "proxy" }
+]
+```
+
+Only `hosted` repositories contain artifacts to migrate. Proxy repositories are caches of remote registries, and group repositories are virtual aggregations. You typically only need to migrate hosted repos.
+
+### Step 4: Run a Pre-Migration Assessment
+
+Before starting the actual migration, run an assessment to estimate scope:
+
+```bash
+# Create the migration job
+curl -X POST https://registry.example.com/api/v1/migrations \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "source_connection_id": "'$CONNECTION_ID'",
+    "job_type": "full",
+    "config": {
+      "include_repos": ["maven-releases", "npm-hosted", "docker-hosted"],
+      "conflict_resolution": "skip",
+      "concurrent_transfers": 4,
+      "throttle_delay_ms": 100,
+      "verify_checksums": true
+    }
+  }'
+
+# Run assessment (does not transfer any data)
+curl -X POST https://registry.example.com/api/v1/migrations/$JOB_ID/assess \
+  -H "Authorization: Bearer $TOKEN"
+
+# Check assessment results
+curl https://registry.example.com/api/v1/migrations/$JOB_ID/assessment \
+  -H "Authorization: Bearer $TOKEN"
+```
+
+### Step 5: Start the Migration
+
+```bash
+curl -X POST https://registry.example.com/api/v1/migrations/$JOB_ID/start \
+  -H "Authorization: Bearer $TOKEN"
+```
+
+### Step 6: Monitor Progress
+
+Poll for status or use the SSE stream for real-time updates:
+
+```bash
+# Poll status
+curl https://registry.example.com/api/v1/migrations/$JOB_ID \
+  -H "Authorization: Bearer $TOKEN"
+
+# Or stream progress (Server-Sent Events)
+curl -N https://registry.example.com/api/v1/migrations/$JOB_ID/stream \
+  -H "Authorization: Bearer $TOKEN"
+```
+
+Status response:
+```json
+{
+  "id": "job-uuid",
+  "status": "running",
+  "completed_items": 3200,
+  "failed_items": 2,
+  "skipped_items": 15,
+  "total_items": 8500
+}
+```
+
+### Step 7: Review Results
+
+```bash
+# Final report
+curl https://registry.example.com/api/v1/migrations/$JOB_ID/report \
+  -H "Authorization: Bearer $TOKEN"
+
+# Check any failed items
+curl "https://registry.example.com/api/v1/migrations/$JOB_ID/items?status=failed" \
+  -H "Authorization: Bearer $TOKEN"
+```
+
+## Migration Controls
+
+You can pause, resume, or cancel a running migration:
+
+```bash
+# Pause
+curl -X POST https://registry.example.com/api/v1/migrations/$JOB_ID/pause \
+  -H "Authorization: Bearer $TOKEN"
+
+# Resume
+curl -X POST https://registry.example.com/api/v1/migrations/$JOB_ID/resume \
+  -H "Authorization: Bearer $TOKEN"
+
+# Cancel
+curl -X POST https://registry.example.com/api/v1/migrations/$JOB_ID/cancel \
+  -H "Authorization: Bearer $TOKEN"
+```
+
+If a migration is interrupted (network failure, server restart), restarting it with `/start` picks up where it left off. Already-migrated artifacts are skipped.
+
+## Configuration Options
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `include_repos` | all hosted | List of repository names to migrate |
+| `conflict_resolution` | `skip` | What to do when an artifact already exists: `skip`, `overwrite`, or `fail` |
+| `concurrent_transfers` | 4 | Number of parallel artifact downloads |
+| `throttle_delay_ms` | 100 | Delay between requests to avoid overloading Nexus |
+| `verify_checksums` | true | Verify SHA256/SHA1/MD5 after transfer |
+
+For large Nexus instances, you may want to increase `concurrent_transfers` and decrease `throttle_delay_ms`, but be mindful of Nexus server load.
+
+## Nexus Repository Types
+
+Artifact Keeper maps Nexus repository types as follows:
+
+| Nexus Type | Artifact Keeper Equivalent |
+|------------|----------------------------|
+| Hosted | Standard repository |
+| Proxy | Remote repository (with caching) |
+| Group | Virtual repository |
+
+## Permission Mapping
+
+| Nexus Role | Artifact Keeper Role |
+|------------|----------------------|
+| nx-admin | Admin |
+| nx-deploy | Write |
+| nx-readonly | Read |
+
+User accounts and roles are not migrated automatically. After migration, recreate your access control using Artifact Keeper's [RBAC system](/docs/advanced/auth).
+
+## Manual Migration
+
+For smaller setups or if you need more control, you can migrate artifacts manually using native package clients.
+
+### Maven
+
+```bash
+# Download from Nexus
+mvn dependency:get \
+  -DremoteRepositories=https://nexus.corp.example.com/repository/maven-releases \
+  -DgroupId=com.example -DartifactId=myapp -Dversion=1.0.0
+
+# Deploy to Artifact Keeper
+mvn deploy:deploy-file \
+  -Durl=https://artifacts.example.com/maven/maven-releases \
+  -DrepositoryId=artifact-keeper \
+  -Dfile=target/myapp-1.0.0.jar -DpomFile=pom.xml
+```
+
+### npm
+
+```bash
+# Download from Nexus
+npm pack mypackage --registry=https://nexus.corp.example.com/repository/npm-hosted/
+
+# Publish to Artifact Keeper
+npm publish mypackage-1.0.0.tgz --registry=https://artifacts.example.com/npm/npm-hosted/
+```
+
+### Docker
+
+```bash
+# Pull from Nexus
+docker pull nexus.corp.example.com:8082/myimage:latest
+
+# Tag for Artifact Keeper
+docker tag nexus.corp.example.com:8082/myimage:latest \
+  artifacts.example.com/docker/docker-hosted/myimage:latest
+
+# Push to Artifact Keeper
+docker push artifacts.example.com/docker/docker-hosted/myimage:latest
+```
+
+## Nexus-Specific Notes
+
+**Continuation token pagination**: Nexus uses continuation tokens instead of offset/limit for listing components. The migration API handles this transparently, fetching all pages before starting transfers.
+
+**Properties**: Nexus does not expose artifact properties through the same API pattern as Artifactory. Custom properties set on artifacts in Nexus are not migrated. If you rely on Nexus properties, you will need to re-apply them manually or via the Artifact Keeper metadata API after migration.
+
+**Nexus 2.x**: The REST API used by the migration client (`/service/rest/v1/`) was introduced in Nexus 3. If you are running Nexus 2.x, use the manual migration method or upgrade Nexus first.
+
+**Blob stores**: Nexus organizes storage into blob stores. The migration API does not need to know about blob store configuration. It reads artifacts through the REST API regardless of how Nexus stores them internally.
+
+## Post-Migration Checklist
+
+- [ ] Verify artifact counts match between Nexus and Artifact Keeper
+- [ ] Test downloading key artifacts from migrated repositories
+- [ ] Set up remote repositories in Artifact Keeper for any Nexus proxy repos you were using
+- [ ] Configure virtual repositories to group related repos if needed
+- [ ] Recreate user accounts and permissions in Artifact Keeper's RBAC system
+- [ ] Update CI/CD pipeline configurations with new repository URLs
+- [ ] Update developer documentation and `settings.xml` / `.npmrc` / etc.
+- [ ] Configure monitoring and backup for the new instance
+- [ ] Run Nexus in read-only mode for a transition period before decommissioning
+
+## Troubleshooting
+
+**Connection refused or timeout**:
+Verify the Nexus URL is reachable from the Artifact Keeper server. The default Nexus port is 8081. Check firewalls and DNS resolution.
+
+**401 Unauthorized**:
+Confirm the username and password are correct. Nexus admin credentials work, but you can also create a dedicated read-only user for migration. Ensure the user has `nx-repository-view-*-*-read` privilege.
+
+**Empty repository listing**:
+If no repositories are returned, the credentials may lack the `nx-repository-view-*-*-browse` privilege. Grant broader read access or use the admin account.
+
+**Slow transfers**:
+Nexus throttles API responses under heavy load. Reduce `concurrent_transfers` if you see timeouts, or increase `throttle_delay_ms` to be gentler on the Nexus server.
+
+**Checksum mismatch**:
+Re-check the artifact on the Nexus side. If the source artifact is corrupted, skip it with `conflict_resolution: "skip"` or disable checksum verification:
+```json
+{ "config": { "verify_checksums": false } }
+```
+
+## Next Steps
+
+- [Installation Guide](/docs/getting-started/installation) - Set up Artifact Keeper
+- [Remote & Virtual Repositories](/docs/advanced/remote-virtual) - Set up proxy repos to replace Nexus proxy/group repos
+- [Authentication & RBAC](/docs/advanced/auth) - Configure users and permissions
+- [Configuration Reference](/docs/getting-started/configuration) - Full environment variable reference
+- [Migration from Artifactory](/docs/migration/from-artifactory) - If also migrating from Artifactory
