@@ -115,14 +115,11 @@ Configure Artifact Keeper using environment variables. This page provides a comp
 | `BACKUP_RETENTION_WEEKLY` | No | `4` | Weekly backups to keep |
 | `BACKUP_RETENTION_MONTHLY` | No | `12` | Monthly backups to keep |
 
-## Garbage Collection
+## Lifecycle Policies (Garbage Collection)
 
-| Variable | Required | Default | Description |
-|----------|----------|---------|-------------|
-| `GC_ENABLED` | No | `false` | Enable automatic garbage collection |
-| `GC_SCHEDULE` | No | `0 2 * * *` | GC schedule (cron format) |
-| `GC_RETENTION_DAYS` | No | `90` | Keep artifacts for N days |
-| `GC_DRY_RUN` | No | `false` | Dry run mode (log without deleting) |
+Artifact cleanup is managed through **lifecycle policies**, not environment variables. There is no `GC_RETENTION_DAYS` or similar setting. Policies are created and managed via the Admin API or the web UI, and execute automatically every 6 hours.
+
+See the dedicated [Lifecycle Policies](/docs/advanced/lifecycle) page for full documentation, including policy types, configuration examples, dry-run previews, and scheduling details.
 
 ## Peer Replication
 

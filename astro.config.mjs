@@ -84,6 +84,7 @@ export default defineConfig({
             { label: 'Storage Backends', slug: 'docs/advanced/storage' },
             { label: 'Edge Nodes', slug: 'docs/advanced/edge-nodes' },
             { label: 'WASM Plugins', slug: 'docs/advanced/plugins' },
+            { label: 'Lifecycle Policies', slug: 'docs/advanced/lifecycle' },
             { label: 'Webhooks', slug: 'docs/advanced/webhooks' },
             { label: 'Backup & Recovery', slug: 'docs/advanced/backup' },
           ],
