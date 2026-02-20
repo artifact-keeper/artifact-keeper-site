@@ -83,7 +83,7 @@ export default defineConfig({
             { label: 'Authentication & RBAC', slug: 'docs/advanced/auth' },
             { label: 'Staging & Promotion', slug: 'docs/advanced/staging-promotion' },
             { label: 'Storage Backends', slug: 'docs/advanced/storage' },
-            { label: 'Edge Nodes', slug: 'docs/advanced/edge-nodes' },
+            { label: 'Peer Replication', slug: 'docs/advanced/edge-nodes' },
             { label: 'WASM Plugins', slug: 'docs/advanced/plugins' },
             { label: 'Lifecycle Policies', slug: 'docs/advanced/lifecycle' },
             { label: 'Webhooks', slug: 'docs/advanced/webhooks' },
