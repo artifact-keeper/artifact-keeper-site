@@ -1,0 +1,69 @@
+---
+title: UI Gallery
+description: Auto-generated screenshots of every page in Artifact Keeper
+---
+
+# UI Gallery
+
+Browse screenshots of every page in the Artifact Keeper web interface. These are generated automatically from the Playwright E2E test suite and updated on every release.
+
+## Core Pages
+
+Screenshots are captured at desktop (1280x720) and mobile (375x812) viewports.
+
+### Dashboard
+![Dashboard - Desktop](/screenshots/dashboard-desktop-admin.png)
+
+### Repositories
+![Repositories - Desktop](/screenshots/repositories-desktop-admin.png)
+
+### Packages
+![Packages - Desktop](/screenshots/packages-desktop-admin.png)
+
+### Search
+![Search - Desktop](/screenshots/search-desktop-admin.png)
+
+## Administration
+
+### User Management
+![Users - Desktop](/screenshots/users-desktop-admin.png)
+
+### Groups
+![Groups - Desktop](/screenshots/groups-desktop-admin.png)
+
+### Settings
+![Settings - Desktop](/screenshots/settings-desktop-admin.png)
+
+### Permissions
+![Permissions - Desktop](/screenshots/permissions-desktop-admin.png)
+
+## Security
+
+### Security Dashboard
+![Security - Desktop](/screenshots/security-desktop-admin.png)
+
+### Quality Gates
+![Quality Gates - Desktop](/screenshots/quality-gates-desktop-admin.png)
+
+## Operations
+
+### Analytics
+![Analytics - Desktop](/screenshots/analytics-desktop-admin.png)
+
+### Monitoring
+![Monitoring - Desktop](/screenshots/monitoring-desktop-admin.png)
+
+### Lifecycle Policies
+![Lifecycle - Desktop](/screenshots/lifecycle-desktop-admin.png)
+
+### Backups
+![Backups - Desktop](/screenshots/backups-desktop-admin.png)
+
+---
+
+Screenshots in this gallery are produced by the `e2e-visual` CI job and exported via the `e2e-docs-export` pipeline. To update baselines, run:
+
+```bash
+npx playwright test --project=visual --update-snapshots
+npm run test:e2e:docs-export
+```

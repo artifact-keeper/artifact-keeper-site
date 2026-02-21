@@ -116,6 +116,7 @@ export default defineConfig({
             { label: 'Client Configuration', slug: 'docs/reference/cli' },
             { label: 'Environment Variables', slug: 'docs/reference/environment' },
             { label: 'CI/CD Integration', slug: 'docs/guides/ci-cd' },
+            { label: 'UI Gallery', slug: 'docs/ui-gallery' },
           ],
         },
       ],
