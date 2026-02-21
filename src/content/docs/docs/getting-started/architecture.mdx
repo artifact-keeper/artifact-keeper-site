@@ -245,7 +245,7 @@ flowchart LR
 ```
 
 - **WIT interface** — Plugins implement a `FormatHandler` contract defined in WebAssembly Interface Types
-- **Capabilities** — `parse_metadata`, `validate_artifact`, `generate_index` (each optional)
+- **Capabilities** — `format_key`, `parse_metadata`, `validate`, `generate_index`, plus `handle_request` for v2 plugins that serve native client protocols
 - **Lifecycle** — Install, enable, disable, reload — all without restarting the server
 - **Sandboxing** — Fuel-based CPU metering, memory limits, and execution timeouts via Wasmtime
 
