@@ -1,0 +1,227 @@
+---
+title: "Admin Commands"
+description: "Backup management, user administration, analytics, TOTP setup, plugin management, and migration"
+---
+
+These commands handle server administration, usage analytics, user profile management, two-factor authentication, and cross-instance migration.
+
+## `ak admin`
+
+Server administration commands covering backups, storage cleanup, server metrics, user management, and WASM plugin management. These commands require admin privileges.
+
+### Backup Management
+
+```
+ak admin backup list                      # List available backups
+ak admin backup create                    # Create a new backup
+ak admin backup restore <backup-id>       # Restore from a backup
+```
+
+**Create a backup and list existing ones:**
+
+```bash
+# Create a full backup
+ak admin backup create
+
+# List all backups with timestamps and sizes
+ak admin backup list
+
+# Restore a specific backup
+ak admin backup restore bk_01J7K9X2
+```
+
+### Storage Cleanup
+
+```
+ak admin cleanup --audit-logs             # Purge old audit log entries
+ak admin cleanup --old-backups            # Remove expired backups
+ak admin cleanup --stale-peers            # Remove stale peer references
+```
+
+**Run cleanup tasks:**
+
+```bash
+# Clean up audit logs older than the retention period
+ak admin cleanup --audit-logs
+
+# Remove backups past their expiry
+ak admin cleanup --old-backups
+```
+
+### Server Metrics
+
+```
+ak admin metrics                          # Display server health and resource metrics
+```
+
+```bash
+ak admin metrics --format json
+```
+
+### User Management
+
+```
+ak admin users list                       # List all users
+ak admin users create <username>          # Create a new user
+ak admin users delete <username>          # Delete a user
+ak admin users update <username>          # Update user properties
+ak admin users reset-password <username>  # Reset a user's password
+```
+
+**Create a user and assign admin privileges:**
+
+```bash
+ak admin users create alice --email alice@example.com
+ak admin users update alice --admin true
+```
+
+**List all users:**
+
+```bash
+ak admin users list
+```
+
+**Reset a user's password:**
+
+```bash
+ak admin users reset-password bob
+```
+
+### Plugin Management
+
+```
+ak admin plugins list                     # List installed WASM plugins
+ak admin plugins install <path-or-url>    # Install a plugin from a file or URL
+ak admin plugins remove <plugin-id>       # Remove an installed plugin
+```
+
+**Install and manage plugins:**
+
+```bash
+# Install a plugin from a local file
+ak admin plugins install ./unity-format-plugin.wasm
+
+# List installed plugins
+ak admin plugins list
+
+# Remove a plugin
+ak admin plugins remove plg_01J7K9
+```
+
+## `ak analytics`
+
+View usage statistics and trends for the instance. These commands provide insight into download patterns, storage consumption, and the most active repositories and artifacts.
+
+```
+ak analytics summary                      # High-level instance summary
+ak analytics downloads                    # Download statistics
+ak analytics storage                      # Storage usage breakdown
+ak analytics top-repos                    # Most active repositories
+ak analytics top-artifacts                # Most downloaded artifacts
+ak analytics trends                       # Usage trends over time
+```
+
+**Get an instance overview:**
+
+```bash
+ak analytics summary
+```
+
+**Check which repositories use the most storage:**
+
+```bash
+ak analytics storage --format table
+```
+
+**View download trends over the last 30 days:**
+
+```bash
+ak analytics trends --format json
+```
+
+**Find the most popular artifacts:**
+
+```bash
+ak analytics top-artifacts
+```
+
+## `ak profile`
+
+View and update your own user profile.
+
+```
+ak profile show                           # Display your profile information
+ak profile update                         # Update profile fields
+```
+
+**View your profile:**
+
+```bash
+ak profile show
+```
+
+**Update your display name and email:**
+
+```bash
+ak profile update --display-name "Alice Chen" --email alice@example.com
+```
+
+## `ak totp`
+
+Manage time-based one-time password (TOTP) two-factor authentication for your account.
+
+```
+ak totp setup                             # Generate a TOTP secret and QR code
+ak totp enable                            # Enable TOTP for your account
+ak totp disable                           # Disable TOTP for your account
+ak totp verify <code>                     # Verify a TOTP code
+ak totp status                            # Check whether TOTP is enabled
+```
+
+**Set up two-factor authentication:**
+
+```bash
+# Generate the secret (displays a QR code for your authenticator app)
+ak totp setup
+
+# Verify that your authenticator app generates valid codes
+ak totp verify 123456
+
+# Enable TOTP enforcement on your account
+ak totp enable
+```
+
+**Check TOTP status:**
+
+```bash
+ak totp status
+```
+
+## `ak migrate`
+
+Bulk-migrate artifacts from one instance or repository to another. Supports dry-run mode for previewing what would be copied.
+
+```
+ak migrate --from-instance <name> --from-repo <repo> --to-repo <repo> [--dry-run]
+```
+
+**Preview a migration:**
+
+```bash
+ak migrate \
+  --from-instance legacy-nexus \
+  --from-repo maven-releases \
+  --to-repo maven-releases \
+  --dry-run
+```
+
+**Run the migration:**
+
+```bash
+ak migrate \
+  --from-instance legacy-nexus \
+  --from-repo maven-releases \
+  --to-repo maven-releases
+```
+
+The `--dry-run` flag lists all artifacts that would be copied, including sizes and version counts, without transferring any data. This is useful for estimating migration time and storage requirements.
