@@ -1,0 +1,172 @@
+---
+title: "Federation Commands"
+description: "Peer replication, SSO configuration, sync policies, and webhook management"
+---
+
+These commands manage cross-instance federation, identity provider integration, replication policies, and event-driven webhooks.
+
+## `ak peer`
+
+Connect and manage peer instances for cross-instance artifact replication. Peers are remote Artifact Keeper instances that synchronize selected repositories.
+
+```
+ak peer list                              # List configured peer instances
+ak peer show <peer-id>                    # Show details and sync status for a peer
+ak peer create <name> --url <url>         # Register a new peer instance
+ak peer delete <peer-id>                  # Remove a peer instance
+ak peer status <peer-id>                  # Check connectivity and health of a peer
+ak peer sync <peer-id>                    # Trigger immediate sync with a peer
+```
+
+**Register a peer and check connectivity:**
+
+```bash
+# Add a peer instance
+ak peer create us-west --url https://us-west.artifacts.example.com
+
+# Verify the peer is reachable
+ak peer status us-west
+
+# List all peers with their sync status
+ak peer list
+```
+
+**Trigger a manual sync:**
+
+```bash
+ak peer sync us-west
+```
+
+**View detailed peer info:**
+
+```bash
+ak peer show us-west --format json
+```
+
+## `ak sso`
+
+Configure single sign-on with OIDC, LDAP, or SAML identity providers. The `test` subcommand validates configuration without applying it.
+
+```
+ak sso status                             # Show current SSO configuration status
+
+ak sso oidc show                          # Show OIDC provider configuration
+ak sso oidc configure                     # Configure OIDC provider settings
+
+ak sso ldap show                          # Show LDAP provider configuration
+ak sso ldap configure                     # Configure LDAP provider settings
+
+ak sso saml show                          # Show SAML provider configuration
+ak sso saml configure                     # Configure SAML provider settings
+
+ak sso test                               # Test SSO configuration (dry run)
+```
+
+**Check the current SSO setup:**
+
+```bash
+ak sso status
+```
+
+**Configure an OIDC provider:**
+
+```bash
+ak sso oidc configure \
+  --issuer https://auth.example.com \
+  --client-id ak-registry \
+  --client-secret "$OIDC_SECRET" \
+  --redirect-uri https://artifacts.example.com/auth/callback
+```
+
+**Test the configuration before applying:**
+
+```bash
+ak sso test
+```
+
+**View LDAP settings:**
+
+```bash
+ak sso ldap show --format yaml
+```
+
+## `ak sync-policy`
+
+Define which repositories sync between peer instances and under what conditions. Sync policies control the direction, frequency, and scope of replication.
+
+```
+ak sync-policy list                       # List all sync policies
+ak sync-policy show <policy-id>           # Show details for a sync policy
+ak sync-policy create <name>              # Create a new sync policy
+ak sync-policy update <policy-id>         # Update an existing sync policy
+ak sync-policy delete <policy-id>         # Delete a sync policy
+```
+
+**Create a sync policy for Docker images:**
+
+```bash
+ak sync-policy create docker-sync \
+  --peer us-west \
+  --repo my-docker-repo \
+  --direction bidirectional \
+  --schedule "*/30 * * * *"
+```
+
+**List active sync policies:**
+
+```bash
+ak sync-policy list
+```
+
+**Update the sync schedule:**
+
+```bash
+ak sync-policy update sp_01J7K9 --schedule "0 */2 * * *"
+```
+
+**View policy details:**
+
+```bash
+ak sync-policy show sp_01J7K9 --format json
+```
+
+## `ak webhook`
+
+Configure webhook notifications that fire on repository events (pushes, deletes, scans, promotions). The `test` subcommand sends a test payload, and `history` shows recent deliveries.
+
+```
+ak webhook list                           # List all webhooks
+ak webhook show <webhook-id>              # Show details for a webhook
+ak webhook create <name>                  # Create a new webhook
+ak webhook update <webhook-id>            # Update an existing webhook
+ak webhook delete <webhook-id>            # Delete a webhook
+ak webhook test <webhook-id>              # Send a test event to the webhook endpoint
+ak webhook history <webhook-id>           # Show delivery history for a webhook
+```
+
+**Create a webhook for push events:**
+
+```bash
+ak webhook create deploy-notify \
+  --url https://ci.example.com/webhooks/ak \
+  --events push,promotion \
+  --secret "$WEBHOOK_SECRET"
+```
+
+**Test that the endpoint responds correctly:**
+
+```bash
+ak webhook test wh_01J7K9
+```
+
+**Check recent delivery history:**
+
+```bash
+ak webhook history wh_01J7K9
+```
+
+**List all configured webhooks:**
+
+```bash
+ak webhook list --format table
+```
