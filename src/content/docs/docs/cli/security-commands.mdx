@@ -1,0 +1,283 @@
+---
+title: "Security Commands"
+description: "Vulnerability scanning, artifact signing, SBOM management, license compliance, and Dependency-Track integration"
+---
+
+These commands cover the full security lifecycle, from vulnerability scanning and artifact signing through SBOM generation, license compliance, and Dependency-Track integration.
+
+## `ak scan`
+
+Run vulnerability scans against artifacts and repositories, view security dashboards and scores, triage findings, and manage scan policies.
+
+```
+ak scan run <repo> [artifact-path]           # Trigger a vulnerability scan
+ak scan list <repo>                          # List scan results for a repository
+ak scan show <scan-id>                       # Show detailed results for a specific scan
+
+ak scan dashboard [repo]                     # View security dashboard (all repos or one)
+ak scan scores <repo>                        # Show vulnerability scores for a repository
+
+ak scan finding ack <finding-id>             # Acknowledge a finding (suppress from reports)
+ak scan finding revoke <finding-id>          # Revoke a previous acknowledgement
+
+ak scan policy list                          # List scan policies
+ak scan policy show <policy-id>              # Show details for a scan policy
+ak scan policy create <name>                 # Create a new scan policy
+ak scan policy update <policy-id>            # Update an existing scan policy
+ak scan policy delete <policy-id>            # Delete a scan policy
+
+ak scan security show <repo>                 # Show security configuration for a repository
+ak scan security update <repo>               # Update security configuration for a repository
+```
+
+The `scan run` command exits with a non-zero code when vulnerabilities are found that exceed the configured severity threshold. This makes it suitable for CI/CD gates.
+
+**Trigger a scan and view results:**
+
+```bash
+# Scan a specific artifact
+ak scan run my-docker-repo org/api-server:1.4.0
+
+# List recent scans
+ak scan list my-docker-repo
+
+# View the full findings for a scan
+ak scan show sc_01J7K9X2M3
+```
+
+**View the security dashboard and scores:**
+
+```bash
+# Security dashboard across all repositories
+ak scan dashboard
+
+# Vulnerability scores for a single repo
+ak scan scores my-docker-repo
+```
+
+**Triage a false positive:**
+
+```bash
+# Acknowledge a finding with a justification
+ak scan finding ack fnd_09A3BX --reason "Not exploitable in our configuration"
+
+# Later, revoke the acknowledgement if circumstances change
+ak scan finding revoke fnd_09A3BX
+```
+
+**Create a scan policy that blocks critical vulnerabilities:**
+
+```bash
+ak scan policy create block-critical \
+  --severity-threshold critical \
+  --fail-on-fix-available true \
+  --description "Block artifacts with critical CVEs that have fixes available"
+
+# Assign the policy to a repository
+ak scan security update my-docker-repo --policy block-critical
+```
+
+## `ak sign`
+
+Manage signing keys and configure repository-level artifact signing.
+
+```
+ak sign key list                             # List all signing keys
+ak sign key show <key-id>                    # Show details for a signing key
+ak sign key create <name>                    # Create a new signing key
+ak sign key delete <key-id>                  # Delete a signing key
+ak sign key revoke <key-id>                  # Revoke a signing key (marks as untrusted)
+ak sign key rotate <key-id>                  # Rotate a signing key (creates new, retires old)
+ak sign key export <key-id>                  # Export the public key
+
+ak sign config show <repo>                   # Show signing configuration for a repository
+ak sign config update <repo>                 # Update signing configuration for a repository
+ak sign config export-key <repo>             # Export the public key configured for a repository
+```
+
+**Create a signing key and configure a repository:**
+
+```bash
+# Generate a new Ed25519 signing key
+ak sign key create release-signing --algorithm ed25519
+
+# Enable mandatory signing on a repository
+ak sign config update my-docker-repo \
+  --key release-signing \
+  --require-signatures true
+
+# Verify the configuration
+ak sign config show my-docker-repo
+```
+
+**Export a public key for distribution:**
+
+```bash
+# Export by key ID (PEM format)
+ak sign key export key_0A1B2C > release-signing.pub
+
+# Export the key currently assigned to a repository
+ak sign config export-key my-docker-repo > repo-signing.pub
+```
+
+**Rotate a signing key:**
+
+```bash
+# Rotate creates a new key, marks the old one as retired,
+# and updates any repositories that reference it
+ak sign key rotate key_0A1B2C
+```
+
+## `ak sbom`
+
+Generate, inspect, and export Software Bill of Materials for artifacts. Includes CVE tracking commands for triaging vulnerabilities discovered through SBOM analysis.
+
+```
+ak sbom generate <repo> <artifact-path>      # Generate an SBOM for an artifact
+ak sbom show <sbom-id>                       # Show SBOM metadata and summary
+ak sbom list <repo>                          # List SBOMs for a repository
+ak sbom get <sbom-id>                        # Download the full SBOM document
+ak sbom delete <sbom-id>                     # Delete an SBOM
+ak sbom components <sbom-id>                 # List components in an SBOM
+ak sbom export <sbom-id>                     # Export SBOM in a specific format
+
+ak sbom cve history <repo> [artifact-path]   # Show CVE history for an artifact or repo
+ak sbom cve trends <repo>                    # Show CVE trends over time
+ak sbom cve update-status <cve-id>           # Update the triage status of a CVE
+```
+
+Key flags for `generate` and `export`:
+
+| Flag | Description |
+|------|-------------|
+| `--format <format>` | SBOM format: `cyclonedx` (default) or `spdx` |
+| `--output <path>` | Write output to a file instead of stdout |
+
+**Generate an SBOM and inspect its components:**
+
+```bash
+# Generate a CycloneDX SBOM
+ak sbom generate my-npm-repo @acme/web-app/2.1.0
+
+# List the components
+ak sbom components sbom_04X8R1
+
+# Export as SPDX for a compliance audit
+ak sbom export sbom_04X8R1 --format spdx --output web-app-2.1.0.spdx.json
+```
+
+**Track and triage CVEs:**
+
+```bash
+# View CVE history for an artifact
+ak sbom cve history my-npm-repo @acme/web-app/2.1.0
+
+# See vulnerability trends across the whole repository
+ak sbom cve trends my-npm-repo
+
+# Mark a CVE as a false positive
+ak sbom cve update-status CVE-2025-12345 \
+  --status false-positive \
+  --justification "Component is not reachable in our usage"
+```
+
+## `ak license`
+
+Define license compliance policies and check artifacts against them. The `check` command is designed for CI/CD pipelines: it prints violations to stdout and exits with a non-zero code when any are found.
+
+```
+ak license policy list                       # List license policies
+ak license policy show <policy-id>           # Show details for a license policy
+ak license policy create <name>              # Create a new license policy
+ak license policy delete <policy-id>         # Delete a license policy
+
+ak license check <repo> [artifact-path]      # Check an artifact or repo against license policies
+```
+
+Key flags for `policy create`:
+
+| Flag | Description |
+|------|-------------|
+| `--deny <licenses>` | Comma-separated list of SPDX license IDs to block |
+| `--allow <licenses>` | Comma-separated list of SPDX license IDs to allow (deny-by-default mode) |
+| `--scope <scope>` | Apply to a specific repository or globally: `global`, `repo:<key>` |
+
+**Create a policy that blocks copyleft licenses:**
+
+```bash
+ak license policy create no-copyleft \
+  --deny "GPL-2.0-only,GPL-3.0-only,AGPL-3.0-only,LGPL-2.1-only,LGPL-3.0-only" \
+  --scope global \
+  --description "Block copyleft licenses in all repositories"
+```
+
+**Run a license check in CI:**
+
+```bash
+# Check a specific artifact against all applicable policies
+ak license check my-npm-repo @acme/web-app/2.1.0
+
+# Check an entire repository
+ak license check my-npm-repo
+```
+
+In a CI pipeline, use the exit code to gate deployments:
+
+```bash
+# GitHub Actions example
+- name: License compliance check
+  run: ak license check my-npm-repo @acme/web-app/${{ env.VERSION }}
+  # Step fails if any license violations are detected
+```
+
+## `ak dt`
+
+Query and interact with an integrated Dependency-Track instance. This command group is also available under its full name, `ak dependency-track`.
+
+```
+ak dt status                                 # Check Dependency-Track connection status
+
+ak dt project list                           # List all projects
+ak dt project show <project-id>              # Show project details
+ak dt project components <project-id>        # List components in a project
+ak dt project findings <project-id>          # List vulnerability findings for a project
+ak dt project violations <project-id>        # List policy violations for a project
+ak dt project metrics <project-id>           # Show current security metrics
+ak dt project metrics-history <project-id>   # Show metrics over time
+
+ak dt metrics                                # Show global Dependency-Track metrics
+ak dt policies                               # List Dependency-Track policies
+ak dt analyze <project-id>                   # Trigger a re-analysis of a project
+```
+
+**Check connectivity and view global metrics:**
+
+```bash
+# Verify the Dependency-Track instance is reachable
+ak dt status
+
+# View aggregated security metrics across all projects
+ak dt metrics
+```
+
+**Inspect a specific project:**
+
+```bash
+# List projects to find the one you need
+ak dt project list
+
+# View findings for a project
+ak dt project findings proj_7F2A --severity critical
+
+# Check policy violations
+ak dt project violations proj_7F2A
+
+# View metrics over the past 30 days
+ak dt project metrics-history proj_7F2A --days 30
+```
+
+**Trigger a fresh analysis after updating dependencies:**
+
+```bash
+ak dt analyze proj_7F2A
+```
