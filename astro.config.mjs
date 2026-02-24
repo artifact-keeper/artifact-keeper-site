@@ -29,7 +29,19 @@ export default defineConfig({
             { label: 'Quickstart', slug: 'docs/getting-started/quickstart' },
             { label: 'Installation', slug: 'docs/getting-started/installation' },
             { label: 'Configuration', slug: 'docs/getting-started/configuration' },
-            { label: 'CLI Quick Start', slug: 'docs/guides/cli-quickstart' },
+          ],
+        },
+        {
+          label: 'CLI (ak)',
+          items: [
+            { label: 'Quick Start', slug: 'docs/cli/quickstart' },
+            { label: 'Installation', slug: 'docs/cli/installation' },
+            { label: 'Core Commands', slug: 'docs/cli/core-commands' },
+            { label: 'Security Commands', slug: 'docs/cli/security-commands' },
+            { label: 'Governance Commands', slug: 'docs/cli/governance-commands' },
+            { label: 'Federation Commands', slug: 'docs/cli/federation-commands' },
+            { label: 'Admin Commands', slug: 'docs/cli/admin-commands' },
+            { label: 'TUI Dashboard', slug: 'docs/cli/tui' },
           ],
         },
         {
@@ -111,8 +123,7 @@ export default defineConfig({
           label: 'Reference',
           items: [
             { label: 'REST API', slug: 'docs/reference/api' },
-            { label: 'CLI Reference (ak)', slug: 'docs/reference/ak-cli' },
-            { label: 'Client Configuration', slug: 'docs/reference/cli' },
+            { label: 'Package Manager Configuration', slug: 'docs/reference/cli' },
             { label: 'Environment Variables', slug: 'docs/reference/environment' },
             { label: 'CI/CD Integration', slug: 'docs/guides/ci-cd' },
             { label: 'UI Gallery', slug: 'docs/ui-gallery' },
