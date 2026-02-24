@@ -1,0 +1,175 @@
+---
+title: "Installation"
+description: "Install the ak CLI on any platform"
+---
+
+import { Tabs, TabItem } from '@astrojs/starlight/components';
+
+## Install Methods
+
+<Tabs>
+<TabItem label="curl (Linux/macOS)">
+
+The install script detects your OS and architecture, downloads the correct binary, and places it in `/usr/local/bin`:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/artifact-keeper/artifact-keeper-cli/main/install.sh | sh
+```
+
+To install to a custom location:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/artifact-keeper/artifact-keeper-cli/main/install.sh | sh -s -- --install-dir ~/.local/bin
+```
+
+</TabItem>
+<TabItem label="Homebrew">
+
+```bash
+brew install artifact-keeper/tap/ak
+```
+
+Updates are handled through `brew upgrade ak`.
+
+</TabItem>
+<TabItem label="Cargo">
+
+```bash
+cargo install artifact-keeper-cli
+```
+
+Requires Rust 1.86 or later. This builds from source, so it may take a few minutes.
+
+</TabItem>
+<TabItem label="Snap">
+
+```bash
+snap install ak --classic
+```
+
+The `--classic` flag is needed because the CLI accesses files outside the snap sandbox (config files, keychains, and package manager configs).
+
+</TabItem>
+<TabItem label="Docker">
+
+Run the CLI as a container without installing anything locally:
+
+```bash
+docker run --rm ghcr.io/artifact-keeper/ak:latest --help
+```
+
+To use it interactively with your config and credentials mounted:
+
+```bash
+docker run --rm -it \
+  -v ~/.config/artifact-keeper:/root/.config/artifact-keeper \
+  ghcr.io/artifact-keeper/ak:latest repo list
+```
+
+</TabItem>
+<TabItem label="GitHub Releases">
+
+Download pre-built binaries from the [GitHub Releases page](https://github.com/artifact-keeper/artifact-keeper-cli/releases/latest).
+
+| Binary | Platform |
+|--------|----------|
+| `ak-linux-amd64` | Linux x86_64 |
+| `ak-linux-arm64` | Linux ARM64 |
+| `ak-darwin-amd64` | macOS Intel |
+| `ak-darwin-arm64` | macOS Apple Silicon |
+| `ak-windows-amd64.exe` | Windows x86_64 |
+
+After downloading, make the binary executable and move it to a directory on your `PATH`:
+
+```bash
+chmod +x ak-linux-amd64
+sudo mv ak-linux-amd64 /usr/local/bin/ak
+```
+
+</TabItem>
+</Tabs>
+
+## Verify Installation
+
+After installing, confirm the CLI is available:
+
+```bash
+ak --version
+```
+
+Expected output:
+
+```
+ak 1.0.0
+```
+
+## Shell Completions
+
+Generate completion scripts for your shell to enable tab completion for all commands, flags, and arguments.
+
+```bash
+# Bash
+ak completion bash > ~/.bash_completion.d/ak
+
+# Zsh
+ak completion zsh > ~/.zfunc/_ak
+
+# Fish
+ak completion fish > ~/.config/fish/completions/ak.fish
+
+# PowerShell
+ak completion powershell > ak.ps1
+```
+
+Restart your shell or source the completion file for changes to take effect.
+
+## Man Pages
+
+Generate and install man pages for offline reference:
+
+```bash
+ak man-pages ./man
+sudo cp man/*.1 /usr/local/share/man/man1/
+```
+
+Then use `man ak`, `man ak-repo`, `man ak-artifact`, and so on.
+
+## Global Options
+
+These flags apply to every `ak` command.
+
+| Flag | Env Var | Description |
+|------|---------|-------------|
+| `--format <table\|json\|yaml\|quiet>` | `AK_FORMAT` | Output format. Auto-detects: table for TTY, json for pipes. |
+| `-q, --quiet` | | Shorthand for `--format quiet` |
+| `--instance <name>` | `AK_INSTANCE` | Target instance (overrides the default) |
+| `--no-input` | `AK_NO_INPUT` | Disable interactive prompts |
+| `--color <auto\|always\|never>` | `AK_COLOR` | Color output mode |
+
+## Environment Variables
+
+Set these in your shell profile or CI environment to customize default behavior.
+
+| Variable | Description |
+|----------|-------------|
+| `AK_FORMAT` | Default output format |
+| `AK_INSTANCE` | Override default instance |
+| `AK_TOKEN` | API token (alternative to keychain) |
+| `AK_NO_INPUT` | Disable interactive prompts |
+| `AK_COLOR` | Color mode (`auto`/`always`/`never`) |
+| `AK_CONFIG_DIR` | Override config directory (default: `~/.config/artifact-keeper/`) |
+| `NO_COLOR` | Standard no-color flag (see [no-color.org](https://no-color.org)) |
+
+## Configuration
+
+The CLI stores its configuration in `~/.config/artifact-keeper/config.toml`. You can edit this file directly or manage it through `ak instance` commands.
+
+```toml
+default_instance = "prod"
+
+[instances.prod]
+url = "https://registry.company.com"
+api_version = "v1"
+```
+
+Credentials are stored in your OS keychain rather than in the config file. The CLI uses macOS Keychain on macOS, Secret Service (via D-Bus) on Linux, and Windows Credential Manager on Windows. If none of these are available, you can pass a token through the `AK_TOKEN` environment variable instead.
