@@ -1,0 +1,261 @@
+---
+title: "Governance Commands"
+description: "Groups, permissions, approvals, promotions, quality gates, lifecycle policies, and labels"
+---
+
+These commands manage access control, artifact promotion workflows, and repository organization.
+
+## `ak group`
+
+Manage user groups for role-based access control. Groups let you assign permissions to teams rather than individual users.
+
+```
+ak group list                              # List all groups
+ak group show <group-name>                 # Show group details and membership
+ak group create <group-name>               # Create a new group
+ak group delete <group-name>               # Delete a group
+ak group add-member <group-name> <user>    # Add a user to a group
+ak group remove-member <group-name> <user> # Remove a user from a group
+```
+
+**Create a team group and add members:**
+
+```bash
+ak group create platform-team
+ak group add-member platform-team alice
+ak group add-member platform-team bob
+```
+
+**List members of a group:**
+
+```bash
+ak group show platform-team
+```
+
+**Remove a user from a group:**
+
+```bash
+ak group remove-member platform-team bob
+```
+
+## `ak permission`
+
+Manage fine-grained permissions for repositories and other resources. Permissions bind a principal (user or group) to a target with a specific access level.
+
+```
+ak permission list                         # List all permissions
+ak permission create                       # Grant a permission
+ak permission delete <permission-id>       # Revoke a permission
+```
+
+Key flags for `list`:
+
+| Flag | Description |
+|------|-------------|
+| `--target-type <type>` | Filter by target type: `repository`, `group`, `system` |
+| `--principal-type <type>` | Filter by principal type: `user`, `group` |
+
+**Grant a group write access to a repository:**
+
+```bash
+ak permission create \
+  --principal-type group \
+  --principal platform-team \
+  --target-type repository \
+  --target my-npm-repo \
+  --access write
+```
+
+**List all permissions for a specific repository:**
+
+```bash
+ak permission list --target-type repository
+```
+
+**Revoke a permission by ID:**
+
+```bash
+ak permission delete perm_3f8a1b2c
+```
+
+## `ak approval`
+
+View and act on approval requests. Some promotion or deployment workflows require one or more approvals before artifacts can move between repositories. Approvals integrate with quality gates and promotion rules.
+
+```
+ak approval list                           # List approval requests
+ak approval show <approval-id>             # Show approval details
+ak approval approve <approval-id>          # Approve a request
+ak approval reject <approval-id>           # Reject a request
+```
+
+Both `approve` and `reject` accept an optional `--notes` flag for adding context.
+
+**List pending approvals:**
+
+```bash
+ak approval list
+```
+
+**Approve a request with a note:**
+
+```bash
+ak approval approve apr_9c7d2e4f --notes "Scans passed, QA sign-off complete"
+```
+
+**Reject a request with an explanation:**
+
+```bash
+ak approval reject apr_1a3b5c7d --notes "Failing integration tests in CI, see run #4521"
+```
+
+## `ak promotion`
+
+Move artifacts between repositories through controlled promotion workflows. Promotions provide an auditable chain of custody as artifacts move from development through staging to production.
+
+```
+ak promotion promote <repo> <artifact-path>   # Promote an artifact to a target repo
+ak promotion rule list                         # List promotion rules
+ak promotion rule create                       # Create an auto-promotion rule
+ak promotion rule delete <rule-id>             # Delete a promotion rule
+ak promotion history                           # View promotion history
+```
+
+**Promote an artifact from staging to production:**
+
+```bash
+ak promotion promote staging-repo org/my-app/1.2.0/my-app-1.2.0.jar \
+  --to-repo prod-repo
+```
+
+**Create an auto-promotion rule:**
+
+```bash
+ak promotion rule create \
+  --source-repo staging-repo \
+  --target-repo prod-repo \
+  --require-approval \
+  --require-quality-gate release-gate
+```
+
+This rule automatically initiates a promotion request when an artifact lands in `staging-repo`, requiring both an approval and a passing quality gate before the artifact reaches `prod-repo`.
+
+**View promotion history:**
+
+```bash
+ak promotion history --repo prod-repo
+```
+
+## `ak quality-gate`
+
+Define and enforce quality criteria that artifacts must meet before they can be promoted, deployed, or downloaded. The `check` subcommand exits with a non-zero status code when an artifact fails the gate, making it straightforward to integrate into CI pipelines.
+
+Alias: `ak qg`
+
+```
+ak quality-gate list                       # List all quality gates
+ak quality-gate show <gate-name>           # Show gate details and rules
+ak quality-gate create <gate-name>         # Create a new quality gate
+ak quality-gate update <gate-name>         # Update an existing gate
+ak quality-gate delete <gate-name>         # Delete a quality gate
+ak quality-gate check <gate-name> <repo> <artifact-path>  # Check artifact against a gate
+```
+
+The `check` command returns exit code 0 on pass and exit code 1 on failure. In CI environments, a failing gate will stop the pipeline.
+
+**Create a gate requiring zero critical CVEs:**
+
+```bash
+ak quality-gate create release-gate \
+  --rule "max_critical_cves=0" \
+  --rule "max_high_cves=5" \
+  --rule "require_sbom=true"
+```
+
+**Run a quality gate check in CI:**
+
+```bash
+# This will fail the pipeline if the artifact has critical CVEs or is missing an SBOM
+ak qg check release-gate prod-repo org/my-app/1.2.0/my-app-1.2.0.jar
+
+# Use in a conditional
+if ak qg check release-gate prod-repo org/my-app/1.2.0/my-app-1.2.0.jar; then
+  echo "Quality gate passed, proceeding with deployment"
+else
+  echo "Quality gate failed, blocking release"
+  exit 1
+fi
+```
+
+**View the rules configured on a gate:**
+
+```bash
+ak quality-gate show release-gate
+```
+
+## `ak lifecycle`
+
+Create and manage lifecycle policies that automate cleanup and retention of artifacts. Policies define criteria (age, download count, version patterns) and actions (delete, archive, move). The `preview` subcommand supports a dry-run mode so you can verify what a policy would affect before executing it.
+
+```
+ak lifecycle list                          # List all lifecycle policies
+ak lifecycle show <policy-name>            # Show policy details
+ak lifecycle create <policy-name>          # Create a new lifecycle policy
+ak lifecycle delete <policy-name>          # Delete a lifecycle policy
+ak lifecycle preview <policy-name>         # Dry-run: show what would be affected
+ak lifecycle execute <policy-name>         # Execute the policy immediately
+```
+
+**Create a cleanup policy for old snapshots:**
+
+```bash
+ak lifecycle create snapshot-cleanup \
+  --repo staging-repo \
+  --match "*.SNAPSHOT*" \
+  --older-than 30d \
+  --action delete
+```
+
+**Preview the results before executing (dry-run):**
+
+```bash
+ak lifecycle preview snapshot-cleanup
+```
+
+This lists all artifacts that match the policy criteria without deleting anything, so you can verify the scope is correct.
+
+**Execute the policy:**
+
+```bash
+ak lifecycle execute snapshot-cleanup
+```
+
+## `ak label`
+
+Apply key-value labels to repositories for organization, filtering, and automation. Labels are useful for tagging environments, teams, cost centers, or any other metadata that helps categorize repositories.
+
+```
+ak label repo list <repo-key>             # List all labels on a repository
+ak label repo add <repo-key> <key=value>  # Add a label to a repository
+ak label repo remove <repo-key> <key>     # Remove a label by key
+```
+
+**Tag a repository with environment and team labels:**
+
+```bash
+ak label repo add prod-repo env=production
+ak label repo add prod-repo team=platform
+ak label repo add prod-repo cost-center=engineering
+```
+
+**List all labels on a repository:**
+
+```bash
+ak label repo list prod-repo
+```
+
+**Remove a label:**
+
+```bash
+ak label repo remove prod-repo cost-center
+```
