@@ -1,0 +1,278 @@
+---
+title: "Core Commands"
+description: "Essential commands for managing instances, authentication, repositories, and artifacts"
+---
+
+The `ak` CLI organizes its functionality into command groups. This page covers the core commands you will use day-to-day for managing registry instances, authenticating, working with repositories, and pushing or pulling artifacts.
+
+## `ak instance`
+
+Manage registry server connections. Each instance is a named reference to an Artifact Keeper server URL, stored in your local config file.
+
+```
+ak instance add <name> <url>       # Save a new instance
+ak instance remove <name>          # Remove a saved instance
+ak instance list                   # Show all configured instances
+ak instance use <name>             # Set the default instance
+ak instance info [name]            # Show details for an instance (default if omitted)
+```
+
+**Add production and staging servers, then switch between them:**
+
+```bash
+ak instance add prod https://registry.company.com
+ak instance add staging https://staging.company.com
+
+# Set staging as the default
+ak instance use staging
+
+# Verify
+ak instance list
+```
+
+**Override the default instance for a single command:**
+
+```bash
+# List repos on prod without changing the default
+ak repo list --instance prod
+```
+
+**Check connectivity and server version:**
+
+```bash
+ak instance info prod
+```
+
+## `ak auth`
+
+Authenticate with a registry instance. Credentials are stored in your OS keychain (macOS Keychain, Secret Service on Linux, Windows Credential Manager). For environments without a keychain, use the `AK_TOKEN` environment variable.
+
+```
+ak auth login                      # Browser-based login (opens default browser)
+ak auth login --token              # Paste a token at the prompt (headless/CI)
+ak auth logout                     # Clear stored credentials for the current instance
+ak auth whoami                     # Show the authenticated user and permissions
+ak auth switch <username>          # Switch between multiple accounts on the same instance
+ak auth token create <name>        # Create a new API token
+ak auth token list                 # List your API tokens
+ak auth token revoke <name>        # Revoke an API token
+```
+
+**Interactive login (opens a browser):**
+
+```bash
+ak auth login
+# Browser opens → authenticate → token is saved to keychain
+ak auth whoami
+```
+
+**Headless login for CI/CD:**
+
+```bash
+# Provide a pre-generated token at the prompt
+ak auth login --token
+
+# Or skip the prompt entirely with an environment variable
+export AK_TOKEN=your-api-token
+ak repo list
+```
+
+**Create and manage API tokens:**
+
+```bash
+# Create a scoped token for CI pipelines
+ak auth token create ci-deploy
+
+# List all tokens
+ak auth token list
+
+# Revoke a token that is no longer needed
+ak auth token revoke ci-deploy
+```
+
+## `ak repo`
+
+List, inspect, create, and delete repositories on the active instance.
+
+```
+ak repo list                       # List all repositories
+ak repo show <repo-key>            # Show details for a specific repository
+ak repo create <repo-key>          # Create a new repository
+ak repo delete <repo-key>          # Delete a repository (requires confirmation)
+```
+
+Key flags for `list` and `create`:
+
+| Flag | Description |
+|------|-------------|
+| `--pkg-format <format>` | Filter or set package format: `npm`, `maven`, `pypi`, `docker`, `cargo`, `nuget`, `go`, `helm`, etc. |
+| `--repo-type <type>` | Filter or set repository type: `local`, `remote`, `virtual` |
+
+**List repositories filtered by format:**
+
+```bash
+ak repo list --pkg-format npm
+ak repo list --pkg-format docker --repo-type local
+```
+
+**Create a local npm repository:**
+
+```bash
+ak repo create my-npm-repo --pkg-format npm --repo-type local
+```
+
+**Inspect repository details:**
+
+```bash
+ak repo show my-npm-repo
+```
+
+## `ak artifact`
+
+Push, pull, search, inspect, and manage individual artifacts within repositories.
+
+```
+ak artifact push <repo> <path>                # Upload a file (or glob pattern)
+ak artifact pull <repo> <artifact-path>        # Download an artifact
+ak artifact list <repo> [path]                 # List artifacts in a repository
+ak artifact info <repo> <artifact-path>        # Show metadata, checksums, and properties
+ak artifact delete <repo> <artifact-path>      # Delete an artifact
+ak artifact search <query>                     # Search across all repositories
+ak artifact copy <repo> <artifact-path>        # Copy an artifact between repos or instances
+```
+
+Key flags:
+
+| Flag | Description |
+|------|-------------|
+| `-o, --output <path>` | Output path for `pull` (default: current directory) |
+| `--from-instance <name>` | Source instance for cross-instance `copy` |
+| `--to-instance <name>` | Destination instance for cross-instance `copy` |
+| `--to-repo <repo>` | Destination repository for `copy` |
+
+**Upload files with a glob pattern:**
+
+```bash
+ak artifact push my-pypi-repo './dist/*.whl'
+```
+
+**Search for artifacts across repositories:**
+
+```bash
+ak artifact search "log4j" --pkg-format maven
+ak artifact search "react" --pkg-format npm
+```
+
+**Copy an artifact from staging to production (cross-instance):**
+
+```bash
+ak artifact copy staging-repo org/my-app/1.2.0/my-app-1.2.0.jar \
+  --from-instance staging \
+  --to-instance prod \
+  --to-repo release-repo
+```
+
+## `ak config`
+
+Read and modify CLI configuration values. Settings are stored in `~/.config/artifact-keeper/config.toml`.
+
+```
+ak config list                     # Show all configuration values
+ak config get <key>                # Get a specific value
+ak config set <key> <value>        # Set a configuration value
+ak config path                     # Print the config file path
+```
+
+**Set a default package format so you don't have to specify it every time:**
+
+```bash
+ak config set default_format npm
+```
+
+**View the config file location:**
+
+```bash
+ak config path
+# ~/.config/artifact-keeper/config.toml
+```
+
+**List all current settings:**
+
+```bash
+ak config list
+```
+
+## `ak doctor`
+
+Run diagnostics to verify your CLI setup. This checks instance connectivity, authentication status, and whether common package managers are detected on your system.
+
+```
+ak doctor
+```
+
+Sample output:
+
+```
+Checking instance 'prod' (https://registry.company.com)... ok
+  Server version: 1.5.0
+  Authentication: valid (user: alice, expires: 2026-03-15)
+Checking package managers...
+  npm 10.2.0:    found
+  pip 24.0:      found
+  cargo 1.86.0:  found
+  docker 27.0.1: found
+  maven:         not found
+All checks passed.
+```
+
+## `ak setup`
+
+Configure local package managers to use your Artifact Keeper instance as their registry. This writes the appropriate config files (`.npmrc`, `pip.conf`, `.cargo/config.toml`, etc.) so that `npm install`, `pip install`, `cargo build`, and other tools pull from your registry automatically.
+
+```
+ak setup auto                      # Auto-detect all package managers and configure them
+ak setup npm [--repo <repo>]       # Configure npm / pnpm / yarn
+ak setup pip [--repo <repo>]       # Configure pip / pipenv / poetry
+ak setup cargo [--repo <repo>]     # Configure Cargo
+ak setup docker [--repo <repo>]    # Configure Docker (docker login)
+ak setup maven [--repo <repo>]     # Configure Maven (settings.xml)
+ak setup gradle [--repo <repo>]    # Configure Gradle (init script)
+ak setup go [--repo <repo>]        # Configure Go modules (GOPROXY)
+ak setup helm [--repo <repo>]      # Configure Helm
+ak setup nuget [--repo <repo>]     # Configure NuGet
+ak setup cocoapods [--repo <repo>] # Configure CocoaPods
+ak setup swift [--repo <repo>]     # Configure Swift Package Manager
+```
+
+**Auto-detect and configure everything:**
+
+```bash
+ak setup auto
+```
+
+This scans your project for `package.json`, `Cargo.toml`, `requirements.txt`, `pom.xml`, and other manifest files, then configures each detected package manager.
+
+**Configure npm to use a specific repository:**
+
+```bash
+ak setup npm --repo my-npm-repo
+```
+
+## `ak completion`
+
+Generate shell completion scripts for tab completion of commands, flags, and arguments. See the [Installation](/docs/cli/installation#shell-completions) page for setup instructions for each shell.
+
+```
+ak completion bash
+ak completion zsh
+ak completion fish
+ak completion powershell
+```
+
+## `ak man-pages`
+
+Generate man pages for offline reference. See the [Installation](/docs/cli/installation#man-pages) page for instructions on installing the generated pages into your system.
+
+```
+ak man-pages <output-dir>
+```
