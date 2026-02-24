@@ -1,0 +1,77 @@
+---
+title: "TUI Dashboard"
+description: "Interactive terminal UI for browsing instances, repositories, artifacts, and security findings"
+---
+
+The `ak tui` command launches a full-screen interactive dashboard built with [ratatui](https://ratatui.rs). It provides a multi-panel interface for browsing instances, repositories, and artifacts without leaving the terminal.
+
+## Launch
+
+```bash
+ak tui
+```
+
+The TUI connects to all configured instances and displays their status. Instances that respond to health checks show as "online (N repos)" in green.
+
+## Layout
+
+The dashboard uses a multi-panel layout with four switchable views:
+
+| Panel | Key | Content |
+|-------|-----|---------|
+| Repositories | `1` | Repository list for the selected instance |
+| Artifacts | `2` | Artifact list for the selected repository |
+| Details | `3` | Metadata, versions, and properties for the selected artifact |
+| Security | `4` | Security dashboard, recent scans, and findings |
+
+Switch between panels using the number keys (`1` through `4`) or `Tab`.
+
+## Keyboard Shortcuts
+
+| Key | Action |
+|-----|--------|
+| `h` `j` `k` `l` or arrow keys | Navigate within the current panel |
+| `Tab` | Switch to the next panel |
+| `1` `2` `3` `4` | Jump directly to a specific panel |
+| `/` | Search within the current panel |
+| `s` | Open global search (cross-repository) |
+| `i` | Show details for the selected item |
+| `?` | Show the help overlay |
+| `q` | Quit the TUI |
+
+## Global Search
+
+Press `s` to open the global search overlay. This uses the Meilisearch-powered `advanced_search` endpoint to search across all repositories on the selected instance.
+
+Search results display:
+- Artifact name
+- Repository
+- Package format
+- Version
+- Size
+
+A faceted sidebar shows the distribution of results by format, repository, and content type. Press `Enter` on a result to navigate directly to that artifact in the three-panel view.
+
+## Security Panel
+
+Press `4` to switch to the security panel. This view provides:
+
+- A security dashboard summarizing vulnerability counts by severity
+- A list of recent scans with timestamps and result summaries
+- Drill-down into individual findings for any scan
+
+Select a scan and press `Enter` to view its detailed findings, including CVE identifiers, affected packages, and severity ratings.
+
+## Instance Status
+
+The instance list shows the health of each configured instance. The TUI probes each instance by fetching its repository list. A healthy instance shows:
+
+```
+my-instance  online (12 repos)
+```
+
+If an instance is unreachable, it shows as offline with the connection error.
+
+## Credential Caching
+
+The TUI caches credentials in memory for each instance after the first successful authentication. This prevents repeated keychain access prompts (particularly on macOS, where Keychain Access would otherwise prompt on every API call). Credentials remain cached for the duration of the TUI session and are discarded on exit.
