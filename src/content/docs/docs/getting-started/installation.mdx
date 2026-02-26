@@ -15,14 +15,16 @@ The easiest way to run Artifact Keeper with all dependencies.
 
 The included `docker-compose.yml` provides a complete setup:
 
-| Service | Image | Description |
-|---------|-------|-------------|
-| **Backend** | `ghcr.io/artifact-keeper/artifact-keeper-backend` | Rust API server (45+ format handlers) |
-| **Web UI** | `ghcr.io/artifact-keeper/artifact-keeper-web` | Next.js frontend |
-| **Caddy** | `caddy:2-alpine` | Reverse proxy with automatic TLS |
-| **PostgreSQL** | `postgres:16-alpine` | Metadata database |
-| **Meilisearch** | `getmeili/meilisearch:v1.12` | Full-text search |
-| **Trivy** | `aquasec/trivy:latest` | Vulnerability scanning |
+| Service | ghcr.io (default) | Docker Hub | Description |
+|---------|-------------------|------------|-------------|
+| **Backend** | `ghcr.io/artifact-keeper/artifact-keeper-backend` | `artifactkeeper/backend` | Rust API server (45+ format handlers) |
+| **Web UI** | `ghcr.io/artifact-keeper/artifact-keeper-web` | `artifactkeeper/web` | Next.js frontend |
+| **Caddy** | `caddy:2-alpine` | | Reverse proxy with automatic TLS |
+| **PostgreSQL** | `postgres:16-alpine` | | Metadata database |
+| **Meilisearch** | `getmeili/meilisearch:v1.12` | | Full-text search |
+| **Trivy** | `aquasec/trivy:latest` | | Vulnerability scanning |
+
+> If your organization blocks ghcr.io, use the Docker Hub images instead. Same tags, same content.
 
 ```bash
 git clone https://github.com/artifact-keeper/artifact-keeper.git

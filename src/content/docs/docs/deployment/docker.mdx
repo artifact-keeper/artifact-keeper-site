@@ -58,6 +58,26 @@ Caddy routes:
 - `/api/*` and `/health` → Backend (port 8080)
 - Everything else → Web UI (port 3000)
 
+### Alternative Registry: Docker Hub
+
+All images are also published to Docker Hub under the `artifactkeeper` organization. If your environment blocks `ghcr.io`, replace the image references:
+
+| Service | ghcr.io (default) | Docker Hub |
+|---------|-------------------|------------|
+| Backend | `ghcr.io/artifact-keeper/artifact-keeper-backend` | `artifactkeeper/backend` |
+| Web UI | `ghcr.io/artifact-keeper/artifact-keeper-web` | `artifactkeeper/web` |
+| OpenSCAP | `ghcr.io/artifact-keeper/artifact-keeper-openscap` | `artifactkeeper/openscap` |
+
+Tags are identical on both registries. To switch, update the image names in your `docker-compose.yml`:
+
+```yaml
+services:
+  backend:
+    image: artifactkeeper/backend:latest    # was ghcr.io/artifact-keeper/artifact-keeper-backend:latest
+  web:
+    image: artifactkeeper/web:latest        # was ghcr.io/artifact-keeper/artifact-keeper-web:latest
+```
+
 ## Production Configuration
 
 ### Environment Variables

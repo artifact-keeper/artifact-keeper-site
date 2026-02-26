@@ -150,6 +150,17 @@ For production, we recommend:
 5. **Enable network policies** — Set `networkPolicy.enabled: true`
 6. **Use external secrets** — Use `externalDatabase.existingSecret` for database credentials
 
+## Using Docker Hub Instead of ghcr.io
+
+To pull images from Docker Hub instead of the default ghcr.io:
+
+```bash
+helm install artifact-keeper ./helm \
+  --set global.imageRegistry=docker.io/artifactkeeper \
+  --set backend.image.repository=artifactkeeper/backend \
+  --set web.image.repository=artifactkeeper/web
+```
+
 ## Upgrading
 
 ```bash

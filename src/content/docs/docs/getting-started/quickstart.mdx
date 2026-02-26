@@ -41,6 +41,10 @@ This starts the full stack:
 - **Meilisearch** — Full-text search
 - **Trivy** — Vulnerability scanning
 
+:::note[Docker Hub alternative]
+If your organization blocks `ghcr.io`, all Artifact Keeper images are also available on Docker Hub under `artifactkeeper/`. Replace `ghcr.io/artifact-keeper/artifact-keeper-backend` with `artifactkeeper/backend` (and similarly for web, openscap). See the [Docker Compose deployment guide](/docs/deployment/docker#alternative-registry-docker-hub) for details.
+:::
+
 2. **Access the UI**:
 
 Open [http://localhost:30080](http://localhost:30080) in your browser.
