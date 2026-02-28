@@ -150,13 +150,18 @@ When `STORAGE_BACKEND=gcs`. Read by the **backend** process.
 
 When `STORAGE_BACKEND=azure`. Read by the **backend** process.
 
+Two authentication modes are supported. If `AZURE_STORAGE_ACCESS_KEY` is set, the backend uses **Shared Key** authentication (HMAC-signed requests). If omitted, it falls back to **Azure RBAC** using OAuth2 bearer tokens from a service principal or managed identity. The identity must have the `Storage Blob Data Contributor` role on the storage account.
+
 | Variable | Required | Default | Description |
 |----------|----------|---------|-------------|
 | `AZURE_STORAGE_ACCOUNT` | Yes | - | Azure storage account name |
 | `AZURE_STORAGE_CONTAINER` | Yes | - | Blob container name |
-| `AZURE_STORAGE_ACCESS_KEY` | Yes | - | Storage account access key |
-| `AZURE_STORAGE_ENDPOINT` | No | - | Custom endpoint URL (for Azure Stack or emulators) |
-| `AZURE_REDIRECT_DOWNLOADS` | No | `false` | Redirect downloads to SAS URLs instead of proxying |
+| `AZURE_STORAGE_ACCESS_KEY` | No | - | Storage account access key. When set, uses Shared Key auth. When omitted, uses Azure RBAC. |
+| `AZURE_TENANT_ID` | RBAC (SP) | - | Azure AD tenant ID (for service principal auth) |
+| `AZURE_CLIENT_ID` | RBAC (SP) | - | Application (client) ID. Also used for user-assigned managed identity. |
+| `AZURE_CLIENT_SECRET` | RBAC (SP) | - | Service principal client secret |
+| `AZURE_STORAGE_ENDPOINT` | No | - | Custom endpoint URL (for Azure Government, China, or emulators) |
+| `AZURE_REDIRECT_DOWNLOADS` | No | `false` | Redirect downloads to SAS URLs instead of proxying. Requires Shared Key auth. |
 | `AZURE_SAS_EXPIRY` | No | `3600` | SAS URL expiry in seconds |
 
 ## Backup

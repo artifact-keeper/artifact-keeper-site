@@ -305,9 +305,11 @@ All downloads will stream through the backend with `X-Artifact-Storage: proxy`.
 
 ### Azure Blob Storage
 
-Use Azure Blob Storage for Azure-native deployments.
+Use Azure Blob Storage for Azure-native deployments. Two authentication modes are supported: **Shared Key** (access key) and **Azure RBAC** (service principal or managed identity).
 
-#### Configuration
+#### Shared Key Authentication
+
+The simplest setup. Uses the storage account access key to sign requests. Supports SAS URL redirect downloads.
 
 ```bash
 STORAGE_BACKEND=azure
@@ -316,18 +318,55 @@ AZURE_STORAGE_CONTAINER=artifacts
 AZURE_STORAGE_ACCESS_KEY=base64-encoded-account-key
 ```
 
+#### Azure RBAC Authentication
+
+The recommended approach for production Azure workloads. Uses OAuth2 bearer tokens instead of access keys. The identity must have the **Storage Blob Data Contributor** role assigned on the storage account.
+
+**Service Principal** (for non-Azure environments or CI/CD):
+
+```bash
+STORAGE_BACKEND=azure
+AZURE_STORAGE_ACCOUNT=myaccount
+AZURE_STORAGE_CONTAINER=artifacts
+AZURE_TENANT_ID=your-tenant-id
+AZURE_CLIENT_ID=your-client-id
+AZURE_CLIENT_SECRET=your-client-secret
+```
+
+**Managed Identity** (for workloads on Azure VMs, AKS, App Service):
+
+```bash
+STORAGE_BACKEND=azure
+AZURE_STORAGE_ACCOUNT=myaccount
+AZURE_STORAGE_CONTAINER=artifacts
+# No credentials needed. Tokens are acquired from the Azure Instance Metadata Service (IMDS).
+# For user-assigned managed identity, set AZURE_CLIENT_ID:
+# AZURE_CLIENT_ID=your-managed-identity-client-id
+```
+
+The auth mode is selected automatically: if `AZURE_STORAGE_ACCESS_KEY` is set, Shared Key is used. Otherwise, the backend tries service principal credentials, then falls back to managed identity.
+
+#### Assigning the Storage Blob Data Contributor Role
+
+```bash
+az role assignment create \
+  --assignee <client-id-or-principal-id> \
+  --role "Storage Blob Data Contributor" \
+  --scope /subscriptions/<sub>/resourceGroups/<rg>/providers/Microsoft.Storage/storageAccounts/<account>
+```
+
 #### Optional Settings
 
 ```bash
 AZURE_STORAGE_ENDPOINT=https://custom.endpoint.com   # Azure Government/China clouds
-AZURE_REDIRECT_DOWNLOADS=true                        # Enable SAS URL redirects
+AZURE_REDIRECT_DOWNLOADS=true                        # Enable SAS URL redirects (Shared Key only)
 AZURE_SAS_EXPIRY=3600                               # SAS token lifetime in seconds (default: 1 hour)
 STORAGE_PATH_FORMAT=native                           # native, artifactory, or migration
 ```
 
 #### Direct Downloads with SAS URLs
 
-When `AZURE_REDIRECT_DOWNLOADS=true`, artifact downloads redirect to a Shared Access Signature (SAS) URL:
+When `AZURE_REDIRECT_DOWNLOADS=true` and Shared Key auth is configured, artifact downloads redirect to a Shared Access Signature (SAS) URL:
 
 ```http
 HTTP/1.1 302 Found
@@ -336,6 +375,8 @@ X-Artifact-Storage: redirect-azure
 ```
 
 SAS tokens are read-only and expire after `AZURE_SAS_EXPIRY` seconds.
+
+SAS URL generation requires Shared Key authentication. When using Azure RBAC, redirect downloads are automatically disabled and artifacts are proxied through the backend instead.
 
 ### Google Cloud Storage (GCS)
 
