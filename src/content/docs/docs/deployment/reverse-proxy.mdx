@@ -74,9 +74,50 @@ volumes:
 
 The `caddy_data` volume stores TLS certificates. Keep it persistent across restarts to avoid hitting Let's Encrypt rate limits.
 
+### Custom TLS Certificates
+
+If you have your own certificates (from an internal CA, self-signed, or purchased), you can configure Caddy to use them instead of Let's Encrypt. This is common for homelab setups, air-gapped networks, or environments with a private root CA.
+
+**1. Update the Caddyfile** to add a `tls` directive pointing to your cert and key:
+
+```
+{$SITE_ADDRESS:localhost} {
+    tls /etc/caddy/certs/registry.crt /etc/caddy/certs/registry.key
+    bind 0.0.0.0
+    reverse_proxy /api/* backend:8080
+    reverse_proxy /health backend:8080
+    reverse_proxy /livez backend:8080
+    reverse_proxy /readyz backend:8080
+    reverse_proxy /metrics backend:8080
+    reverse_proxy web:3000
+}
+```
+
+**2. Mount the certificate directory** into the Caddy container:
+
+```yaml
+services:
+  caddy:
+    image: caddy:2-alpine
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      SITE_ADDRESS: registry.example.com
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - ./certs:/etc/caddy/certs:ro
+      - caddy_data:/data
+      - caddy_config:/config
+```
+
+Place your `.crt` and `.key` files in a `certs/` directory next to your `docker-compose.yml`. The `:ro` flag mounts them read-only.
+
+If your certificate was signed by an internal CA, the `.crt` file should contain the full chain (your certificate followed by the CA certificate). Clients connecting to the registry will need to trust the root CA.
+
 ### Using IP addresses
 
-Caddy cannot obtain Let's Encrypt certificates for bare IP addresses. If you must use an IP, either provide your own certificate files or set `ENVIRONMENT=development` on the backend to disable the `Secure` cookie flag:
+Caddy cannot obtain Let's Encrypt certificates for bare IP addresses. If you must use an IP, either provide your own certificate files (see above) or set `ENVIRONMENT=development` on the backend to disable the `Secure` cookie flag:
 
 ```yaml
 services:
