@@ -1,0 +1,59 @@
+name: Documentation Request
+description: Request a new guide, tutorial, or documentation page
+labels: ["enhancement", "documentation", "needs-triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for helping us improve the docs.
+
+        If you're requesting support for a new package format (not just its documentation), please file that in the [backend repo](https://github.com/artifact-keeper/artifact-keeper/issues/new) instead.
+
+  - type: dropdown
+    id: request-type
+    attributes:
+      label: Request Type
+      options:
+        - New guide or tutorial
+        - New package format guide
+        - API reference
+        - Deployment guide
+        - Troubleshooting guide
+        - Architecture documentation
+        - Other
+    validations:
+      required: true
+
+  - type: textarea
+    id: description
+    attributes:
+      label: Description
+      placeholder: "What documentation would you like to see?"
+    validations:
+      required: true
+
+  - type: textarea
+    id: use-case
+    attributes:
+      label: Use Case
+      placeholder: "Who would benefit from this documentation and why?"
+    validations:
+      required: true
+
+  - type: textarea
+    id: references
+    attributes:
+      label: References
+      placeholder: "Links to related docs, blog posts, or examples that could help us write this"
+    validations:
+      required: false
+
+  - type: checkboxes
+    id: checklist
+    attributes:
+      label: Pre-submission Checklist
+      options:
+        - label: I have searched existing issues to make sure this is not a duplicate
+          required: true
+        - label: I have checked the existing docs to confirm this doesn't already exist
+          required: true

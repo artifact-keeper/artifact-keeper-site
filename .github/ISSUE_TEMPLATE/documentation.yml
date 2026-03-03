@@ -1,0 +1,65 @@
+name: Documentation Issue
+description: Report an issue with the documentation or suggest improvements
+labels: ["documentation", "needs-triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thank you for taking the time to report a documentation issue.
+
+        This repository covers the documentation at [artifactkeeper.com](https://artifactkeeper.com). For backend or API bugs, please file an issue in [artifact-keeper](https://github.com/artifact-keeper/artifact-keeper/issues/new). For web UI bugs, file in [artifact-keeper-web](https://github.com/artifact-keeper/artifact-keeper-web/issues/new). If you're unsure where the issue belongs, file it here and we'll move it if needed.
+
+  - type: dropdown
+    id: documentation-type
+    attributes:
+      label: Documentation Type
+      options:
+        - Missing documentation
+        - Incorrect or outdated information
+        - Unclear or confusing content
+        - Typo or formatting issue
+        - Missing examples
+        - Missing guide for a package format
+        - API reference issue
+        - Broken link
+        - Other
+    validations:
+      required: true
+
+  - type: input
+    id: page-url
+    attributes:
+      label: Page URL or Path
+      placeholder: "e.g., https://artifactkeeper.com/docs/guides/docker or src/content/docs/guides/docker.mdx"
+    validations:
+      required: true
+
+  - type: textarea
+    id: description
+    attributes:
+      label: Description
+    validations:
+      required: true
+
+  - type: textarea
+    id: suggested-improvement
+    attributes:
+      label: Suggested Improvement
+      placeholder: "How could this documentation be improved? If you have specific wording, include it here."
+    validations:
+      required: false
+
+  - type: textarea
+    id: additional-context
+    attributes:
+      label: Additional Context
+    validations:
+      required: false
+
+  - type: checkboxes
+    id: checklist
+    attributes:
+      label: Pre-submission Checklist
+      options:
+        - label: I have searched existing issues to make sure this is not a duplicate
+          required: true
