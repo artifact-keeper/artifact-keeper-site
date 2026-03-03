@@ -136,14 +136,16 @@ When `STORAGE_BACKEND=s3`. Read by the **backend** process.
 
 When `STORAGE_BACKEND=gcs`. Read by the **backend** process.
 
+Two authentication modes are supported. If `GCS_PRIVATE_KEY` or `GCS_PRIVATE_KEY_PATH` is set, the backend uses **Service Account Key** authentication (self-signed JWTs exchanged for bearer tokens). If neither is set, it falls back to **Application Default Credentials** via the GCE metadata server (for GKE Workload Identity, GCE instances, Cloud Run). In ADC mode, only `GCS_BUCKET` is required.
+
 | Variable | Required | Default | Description |
 |----------|----------|---------|-------------|
 | `GCS_BUCKET` | Yes | - | GCS bucket name |
-| `GCS_PROJECT_ID` | Yes | - | GCP project ID |
-| `GCS_SERVICE_ACCOUNT_EMAIL` | Yes | - | Service account email for signing URLs |
-| `GCS_PRIVATE_KEY_PATH` | No | - | Path to service account PEM private key file |
-| `GCS_PRIVATE_KEY` | No | - | Inline private key (alternative to path) |
-| `GCS_REDIRECT_DOWNLOADS` | No | `false` | Redirect downloads to signed GCS URLs instead of proxying |
+| `GCS_PROJECT_ID` | With key | - | GCP project ID (required when using Service Account Key) |
+| `GCS_SERVICE_ACCOUNT_EMAIL` | With key | - | Service account email (required when using Service Account Key) |
+| `GCS_PRIVATE_KEY_PATH` | No | - | Path to service account PEM private key file. When set, enables Service Account Key mode. |
+| `GCS_PRIVATE_KEY` | No | - | Inline private key (alternative to path). When set, enables Service Account Key mode. |
+| `GCS_REDIRECT_DOWNLOADS` | No | `false` | Redirect downloads to signed GCS URLs instead of proxying (Service Account Key only) |
 | `GCS_SIGNED_URL_EXPIRY` | No | `3600` | Signed URL expiry in seconds (max 7 days) |
 
 ## Azure Blob Storage

@@ -380,9 +380,11 @@ SAS URL generation requires Shared Key authentication. When using Azure RBAC, re
 
 ### Google Cloud Storage (GCS)
 
-Use GCS for Google Cloud deployments.
+Use GCS for Google Cloud deployments. Two authentication modes are supported: **Service Account Key** (RSA private key) and **Application Default Credentials** (Workload Identity / metadata server).
 
-#### Configuration
+#### Service Account Key Authentication
+
+Uses an RSA private key to mint self-signed JWTs, which are exchanged for OAuth2 bearer tokens at Google's token endpoint. All API calls are authenticated with bearer tokens. This mode also supports V4 signed URL redirect downloads.
 
 ```bash
 STORAGE_BACKEND=gcs
@@ -401,10 +403,36 @@ GCS_PRIVATE_KEY_PATH=/path/to/service-account-key.pem
 GCS_PRIVATE_KEY="-----BEGIN PRIVATE KEY-----\nMIIEv..."
 ```
 
+#### Application Default Credentials (ADC) / Workload Identity
+
+For workloads running on GCE, GKE, or Cloud Run, you can authenticate without a private key. The backend acquires OAuth2 tokens from the [GCE metadata server](https://cloud.google.com/compute/docs/metadata/overview) automatically. Only `GCS_BUCKET` is required.
+
+```bash
+STORAGE_BACKEND=gcs
+GCS_BUCKET=my-bucket
+# No credentials needed. Tokens are acquired from the metadata server.
+```
+
+On GKE, configure [Workload Identity](https://cloud.google.com/kubernetes-engine/docs/how-to/workload-identity) so pods get a Google service account identity without managing keys.
+
+The auth mode is selected automatically: if `GCS_PRIVATE_KEY` or `GCS_PRIVATE_KEY_PATH` is set, service account key mode is used. Otherwise, the backend falls back to ADC via the metadata server.
+
+#### Assigning IAM Permissions
+
+The service account (whether key-based or Workload Identity) needs the **Storage Object Admin** role on the bucket:
+
+```bash
+gcloud storage buckets add-iam-policy-binding gs://my-bucket \
+  --member="serviceAccount:sa@my-project.iam.gserviceaccount.com" \
+  --role="roles/storage.objectAdmin"
+```
+
+For read-only access (e.g., an edge node that only downloads), use `roles/storage.objectViewer` instead.
+
 #### Optional Settings
 
 ```bash
-GCS_REDIRECT_DOWNLOADS=true        # Enable signed URL redirects
+GCS_REDIRECT_DOWNLOADS=true        # Enable signed URL redirects (Service Account Key only)
 GCS_SIGNED_URL_EXPIRY=3600         # Signed URL lifetime in seconds (default: 1 hour, max: 7 days)
 STORAGE_PATH_FORMAT=native         # native, artifactory, or migration
 ```
@@ -420,6 +448,8 @@ X-Artifact-Storage: redirect-gcs
 ```
 
 GCS enforces a maximum signed URL lifetime of 7 days (604800 seconds).
+
+V4 signed URL generation requires Service Account Key authentication. When using ADC/Workload Identity, redirect downloads are automatically disabled and artifacts are proxied through the backend instead.
 
 ### Artifactory Migration Mode
 
