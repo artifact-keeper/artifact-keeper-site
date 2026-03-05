@@ -306,6 +306,36 @@ Error: Insufficient storage space
 ```
 Solution: Increase storage capacity or migrate in smaller batches.
 
+**Internal Server Error when migrating from HTTP Artifactory**:
+```
+Error: 500 Internal Server Error
+```
+If your Artifactory instance uses plain HTTP (no TLS), the backend rejects the connection by default. Set `ALLOW_HTTP_INTEGRATIONS=1` in the backend environment to allow HTTP connections:
+```yaml
+# docker-compose.yml
+services:
+  backend:
+    environment:
+      ALLOW_HTTP_INTEGRATIONS: "true"
+```
+See [Environment Variables](/docs/reference/environment#network-security) for details.
+
+**Certificate error when migrating from HTTPS Artifactory with internal CA**:
+```
+Error: error sending request ... certificate verify failed
+```
+If your Artifactory uses HTTPS with a certificate signed by an internal or private CA, mount the CA certificate into the container and set `CUSTOM_CA_CERT_PATH`:
+```yaml
+# docker-compose.yml
+services:
+  backend:
+    environment:
+      CUSTOM_CA_CERT_PATH: /etc/ssl/certs/internal-ca.pem
+    volumes:
+      - ./internal-ca.pem:/etc/ssl/certs/internal-ca.pem:ro
+```
+The PEM file can contain multiple certificates for CA bundles. See [Environment Variables](/docs/reference/environment#network-security) for details.
+
 **Timeout**:
 ```
 Error: Transfer timeout after 300 seconds

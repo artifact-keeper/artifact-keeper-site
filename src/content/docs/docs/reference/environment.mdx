@@ -304,6 +304,13 @@ Search is powered by [Meilisearch](https://www.meilisearch.com/). When `MEILISEA
 | `POSTGRES_WAL_ARCHIVE_PATH` | No | `/var/lib/postgres/wal_archive` | WAL archive path |
 | `POSTGRES_WAL_RETENTION_DAYS` | No | `7` | WAL retention in days |
 
+## Network Security
+
+| Variable | Required | Default | Description |
+|----------|----------|---------|-------------|
+| `ALLOW_HTTP_INTEGRATIONS` | No | `false` | Allow HTTP (non-TLS) connections for remote repository proxying, Artifactory migration, and Dependency-Track integration. Required when upstream services use plain HTTP, which is common in air-gapped or development environments. When `false`, all outbound connections to external services enforce HTTPS. |
+| `CUSTOM_CA_CERT_PATH` | No | - | Path to a PEM file containing one or more custom CA certificates. Used for HTTPS connections to internal services (Artifactory, Nexus, remote repositories) that use certificates signed by a private CA. Mount the cert file into the container and set this path (e.g., `/etc/ssl/certs/custom-ca.pem`). The file can contain multiple certificates for CA bundles. |
+
 ## Development/Testing
 
 | Variable | Required | Default | Description |
