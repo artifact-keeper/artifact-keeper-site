@@ -3,7 +3,7 @@ title: "Storage Backends"
 description: "Filesystem, S3, Azure Blob, and Google Cloud Storage backends for artifact data"
 ---
 
-Artifact Keeper supports multiple storage backends to accommodate different deployment scenarios and scale requirements.
+Artifact Keeper supports multiple storage backends to accommodate different deployment scenarios and scale requirements. You can configure a default backend for the entire instance, or assign different backends to individual repositories.
 
 ## Storage Backend Types
 
@@ -519,6 +519,66 @@ mc alias set local http://localhost:9000 minioadmin minioadmin
 mc mb local/artifacts
 mc policy set download local/artifacts  # Optional: public read
 ```
+
+## Per-Repository Storage Backends
+
+By default, all repositories use the instance-level `STORAGE_BACKEND` setting. You can override this on a per-repository basis, allowing different repos to use different backends. For example, a temporary cache repo on local filesystem while production artifacts go to S3.
+
+### Selecting a Backend at Repo Creation
+
+Pass the `storage_backend` field when creating a repository:
+
+```bash
+curl -X POST https://registry.example.com/api/v1/repositories \
+  -H "Authorization: Bearer $ADMIN_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "key": "build-cache",
+    "name": "Build Cache",
+    "format": "generic",
+    "repo_type": "local",
+    "storage_backend": "filesystem"
+  }'
+```
+
+Valid values: `filesystem`, `s3`, `azure`, `gcs`. If omitted, the instance default is used.
+
+:::note[]
+Selecting a non-default storage backend requires admin privileges. Non-admin users always get the instance default.
+:::
+
+### Requirements
+
+- The instance must have credentials configured for the requested backend. If you set `STORAGE_BACKEND=filesystem` as the primary but want some repos on S3, the S3 environment variables (`S3_BUCKET`, `S3_REGION`, etc.) must also be set.
+- All repos sharing a backend type share the same credentials and bucket/container. There is no per-repo credential or bucket configuration.
+- The backend cannot be changed after the repository is created. To switch backends, create a new repository and re-publish your artifacts.
+
+### Checking Available Backends
+
+Admins can query which backends are configured on the instance:
+
+```bash
+curl https://registry.example.com/api/v1/admin/storage-backends \
+  -H "Authorization: Bearer $ADMIN_TOKEN"
+```
+
+Response:
+
+```json
+["filesystem", "s3"]
+```
+
+### How It Works
+
+At startup, Artifact Keeper initializes all backends whose credentials are present in the environment and registers them in an internal `StorageRegistry`. When a handler needs to read or write an artifact, it looks up the repository's `storage_backend` field and routes to the correct backend.
+
+For filesystem backends, each repository gets its own directory under `STORAGE_PATH`. For cloud backends (S3, Azure, GCS), all repositories share the same bucket with content-addressed keys (SHA-256 hashes). Identical artifacts uploaded to different repos are stored once (deduplication).
+
+### Operational Notes
+
+- **Credential rotation**: Static credentials (access keys, storage account keys) require a process restart. Token-based auth (Azure RBAC, GCS Workload Identity) refreshes automatically.
+- **Backup**: With mixed backends, a complete backup must cover all active storage locations. Use the `/admin/storage-backends` endpoint to inventory which backends are in use.
+- **Garbage collection**: The GC service handles mixed backends correctly, resolving the correct storage backend for each orphaned artifact independently.
 
 ## Storage Layout
 
