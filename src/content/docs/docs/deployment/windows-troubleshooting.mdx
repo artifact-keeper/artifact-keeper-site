@@ -1,0 +1,213 @@
+---
+title: "Windows Troubleshooting"
+description: "Common issues and solutions for Artifact Keeper on Windows Server"
+---
+
+This page covers the most common issues when running Artifact Keeper on Windows, along with diagnostics and fixes.
+
+## Service Fails to Start
+
+**Symptoms:** The `ArtifactKeeper` service stops immediately after starting, or `Start-Service` returns an error.
+
+**Diagnostics:**
+
+```powershell
+# Check the Windows Event Viewer for service errors
+Get-EventLog -LogName Application -Source ArtifactKeeper -Newest 20
+
+# Verify the service configuration
+Get-Service ArtifactKeeper | Format-List *
+
+# Try running the binary directly to see error output
+& "C:\Program Files\ArtifactKeeper\artifact-keeper.exe"
+```
+
+**Common causes:**
+
+- **Missing or invalid `.env` file.** Confirm `AK_ENV_FILE` points to the correct path:
+  ```powershell
+  [System.Environment]::GetEnvironmentVariable("AK_ENV_FILE", "Machine")
+  ```
+
+- **Invalid `DATABASE_URL`.** Test the connection manually:
+  ```powershell
+  & "C:\Program Files\PostgreSQL\16\bin\psql.exe" `
+    "postgresql://registry:changeme@localhost:5432/artifact_registry" `
+    -c "SELECT 1;"
+  ```
+
+- **Port already in use.** See [Port Conflicts](#port-conflicts) below.
+
+- **Antivirus quarantined the binary.** See [Antivirus Blocks the Binary](#antivirus-blocks-the-binary) below.
+
+## Port Conflicts
+
+**Symptoms:** The service starts but immediately exits. Event Viewer shows "address already in use" or a bind error on port 8080.
+
+**Diagnostics:**
+
+```powershell
+# Find what process is using port 8080
+Get-NetTCPConnection -LocalPort 8080 | Select-Object OwningProcess, State
+
+# Identify the process by PID
+Get-Process -Id <pid> | Select-Object Name, Path
+```
+
+**Fix:** Either stop the conflicting process, or change the Artifact Keeper bind port. In your `.env` file:
+
+```ini
+BIND_ADDRESS=0.0.0.0:8081
+```
+
+Then update your firewall rule to match the new port and restart the service.
+
+## Permission Denied on Storage Path
+
+**Symptoms:** The service starts but returns 500 errors when uploading artifacts. Logs show "permission denied" or "access denied" for the storage directory.
+
+**Diagnostics:**
+
+```powershell
+# Check current permissions on the data directory
+icacls "C:\ProgramData\ArtifactKeeper"
+```
+
+**Fix:** Grant the service account full control over the data directory:
+
+```powershell
+icacls "C:\ProgramData\ArtifactKeeper" /grant "NT SERVICE\ArtifactKeeper:(OI)(CI)F"
+```
+
+If you configured the service to run as a specific user account (not LocalSystem), replace `NT SERVICE\ArtifactKeeper` with that account name.
+
+Restart the service after changing permissions:
+
+```powershell
+Restart-Service ArtifactKeeper
+```
+
+## PostgreSQL Connection Failures
+
+**Symptoms:** Service fails to start or returns database errors. Logs show "connection refused" or authentication failures.
+
+**Diagnostics:**
+
+```powershell
+# Verify PostgreSQL is running
+Get-Service postgresql*
+
+# Test TCP connectivity
+Test-NetConnection -ComputerName localhost -Port 5432
+```
+
+**Common causes and fixes:**
+
+1. **`localhost` resolves to IPv6.** PostgreSQL may only listen on IPv4 by default. Use `127.0.0.1` instead of `localhost` in your `DATABASE_URL`:
+
+   ```ini
+   DATABASE_URL=postgresql://registry:changeme@127.0.0.1:5432/artifact_registry
+   ```
+
+2. **`pg_hba.conf` rejects the connection.** Open `C:\Program Files\PostgreSQL\16\data\pg_hba.conf` and verify that a line allows the `registry` user to connect via TCP:
+
+   ```
+   # TYPE  DATABASE        USER      ADDRESS       METHOD
+   host    artifact_registry  registry  127.0.0.1/32  scram-sha-256
+   ```
+
+   Restart PostgreSQL after editing `pg_hba.conf`:
+
+   ```powershell
+   Restart-Service postgresql-x64-16
+   ```
+
+3. **PostgreSQL is configured for named pipes only.** Verify `listen_addresses` in `postgresql.conf` includes `localhost` or `*`:
+
+   ```
+   listen_addresses = 'localhost'
+   ```
+
+## Antivirus Blocks the Binary
+
+**Symptoms:** The binary disappears after download, or the service fails to start with "file not found" errors despite the file existing moments earlier.
+
+**Diagnostics:** Check your antivirus quarantine log. Windows Defender quarantine history:
+
+```powershell
+Get-MpThreatDetection | Where-Object { $_.Resources -like "*ArtifactKeeper*" }
+```
+
+**Fix:** Add exclusions for the Artifact Keeper binary and data directory:
+
+```powershell
+# Windows Defender exclusions
+Add-MpPreference -ExclusionPath "C:\Program Files\ArtifactKeeper"
+Add-MpPreference -ExclusionPath "C:\ProgramData\ArtifactKeeper"
+```
+
+For third-party antivirus software, consult your vendor's documentation on adding path and process exclusions. Exclude both the installation directory and the storage directory.
+
+## Logs Not Appearing
+
+**Symptoms:** You expect log output but find nothing in the log directory or Event Viewer.
+
+**Diagnostics:**
+
+```powershell
+# Check the RUST_LOG setting in your .env
+Select-String -Path "C:\ProgramData\ArtifactKeeper\config\.env" -Pattern "RUST_LOG"
+
+# Check Event Viewer application logs
+Get-EventLog -LogName Application -Source ArtifactKeeper -Newest 10
+```
+
+**Fix:**
+
+1. Verify `RUST_LOG` is set in your `.env` file. A missing value means no log output:
+
+   ```ini
+   RUST_LOG=info
+   ```
+
+2. Confirm the log directory is writable by the service account:
+
+   ```powershell
+   icacls "C:\ProgramData\ArtifactKeeper\logs"
+   ```
+
+3. When running manually (not as a service), logs go to stdout. When running as a service, logs are written to the Windows Event Log and to the log directory. If neither has output, the binary may not be starting at all. Run it directly from a terminal to see error output.
+
+## Upgrade Fails
+
+**Symptoms:** After replacing the binary, the service fails to start. Event Viewer shows database migration errors.
+
+**Diagnostics:**
+
+```powershell
+# Check Event Viewer for migration errors
+Get-EventLog -LogName Application -Source ArtifactKeeper -Newest 20
+
+# Try running the binary directly to see the full error
+& "C:\Program Files\ArtifactKeeper\artifact-keeper.exe"
+```
+
+**Fix:**
+
+1. **Restore the database** from your pre-upgrade backup:
+
+   ```powershell
+   & "C:\Program Files\PostgreSQL\16\bin\psql.exe" `
+     -U registry -d artifact_registry -f backup.sql
+   ```
+
+2. **Restore the previous binary.** Copy the old `artifact-keeper.exe` back and restart the service.
+
+3. **Check the release notes** for the version you are upgrading to. Some releases require intermediate upgrades (for example, upgrading from v1.0 to v1.3 may require upgrading to v1.2 first).
+
+4. If migration errors persist after restoring, check that the database user has `CREATE` and `ALTER` privileges on the database. Migrations need schema modification rights:
+
+   ```powershell
+   & "C:\Program Files\PostgreSQL\16\bin\psql.exe" -U postgres -c `
+     "GRANT ALL PRIVILEGES ON DATABASE artifact_registry TO registry;"
+   ```

@@ -156,6 +156,12 @@ sudo systemctl start artifact-keeper
 sudo systemctl status artifact-keeper
 ```
 
+### Windows Service
+
+Artifact Keeper runs as a native Windows Service on Windows Server 2019, 2022, and 2025. An MSI installer handles service registration, directory creation, and configuration. A standalone binary is also available for manual setup.
+
+See the full [Windows Server deployment guide](/docs/deployment/windows) for installation steps, service configuration, and production hardening.
+
 ### Reverse Proxy
 
 The Docker Compose setup includes Caddy as a reverse proxy with automatic TLS. For production with a real domain:

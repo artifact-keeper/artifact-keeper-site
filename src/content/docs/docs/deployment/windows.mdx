@@ -1,0 +1,267 @@
+---
+title: "Windows Server"
+description: "Deploy Artifact Keeper as a Windows Service with PostgreSQL on Windows Server"
+---
+
+Deploy Artifact Keeper on Windows Server 2019, 2022, or 2025 as a native Windows Service. This guide covers MSI-based installation, manual setup, PostgreSQL configuration, and production hardening.
+
+## System Requirements
+
+| Component | Minimum | Recommended |
+|-----------|---------|-------------|
+| **OS** | Windows Server 2019 or Windows 10 (evaluation only) | Windows Server 2022 or 2025 |
+| **RAM** | 4 GB | 8 GB |
+| **CPU** | 2 cores | 4+ cores |
+| **Disk** | 100 GB for artifact storage | SSD with dedicated volume |
+| **Database** | PostgreSQL 16+ (required) | |
+| **Search** | Meilisearch (optional) | Recommended for full-text search |
+
+## Install PostgreSQL
+
+Download PostgreSQL 16 from [enterprisedb.com](https://www.enterprisedb.com/downloads/postgres-postgresql-downloads) and run the installer. Select the defaults, and note the superuser password you set during installation.
+
+For automated deployments, use a silent install:
+
+```powershell
+.\postgresql-16-windows-x64.exe --mode unattended `
+  --superpassword "YourSuperPassword" `
+  --serverport 5432 `
+  --prefix "C:\Program Files\PostgreSQL\16"
+```
+
+Create the database and user:
+
+```powershell
+& "C:\Program Files\PostgreSQL\16\bin\psql.exe" -U postgres -c @"
+CREATE DATABASE artifact_registry;
+CREATE USER registry WITH PASSWORD 'changeme';
+GRANT ALL PRIVILEGES ON DATABASE artifact_registry TO registry;
+ALTER DATABASE artifact_registry OWNER TO registry;
+"@
+```
+
+Verify that PostgreSQL is running:
+
+```powershell
+Get-Service postgresql*
+```
+
+## Install with MSI
+
+The MSI installer is the recommended path for most deployments.
+
+### 1. Download
+
+Download `ArtifactKeeper-x64.msi` from the [GitHub Releases](https://github.com/artifact-keeper/artifact-keeper/releases) page.
+
+### 2. Run the Installer
+
+The installer performs the following steps:
+
+- Installs the binary to `C:\Program Files\ArtifactKeeper\`
+- Registers the `ArtifactKeeper` Windows Service
+- Creates data directories under `C:\ProgramData\ArtifactKeeper\`
+- Prompts for database connection settings and bind address
+
+### 3. Silent Install
+
+For enterprise deployment or automation, use `msiexec` with properties:
+
+```powershell
+msiexec /i ArtifactKeeper-1.2.0-x64.msi /qn `
+  DB_HOST=localhost DB_PORT=5432 `
+  DB_NAME=artifact_registry DB_USER=registry `
+  DB_PASSWORD=changeme BIND_ADDRESS=0.0.0.0:8080
+```
+
+Skip ahead to [First-Boot Setup](#first-boot-setup) after installation completes.
+
+## Manual Installation
+
+If you prefer not to use the MSI, you can set up Artifact Keeper manually.
+
+### 1. Download the Binary
+
+Download the standalone `artifact-keeper.exe` from [GitHub Releases](https://github.com/artifact-keeper/artifact-keeper/releases).
+
+### 2. Create Directories
+
+```powershell
+New-Item -ItemType Directory -Force -Path "C:\Program Files\ArtifactKeeper"
+New-Item -ItemType Directory -Force -Path "C:\ProgramData\ArtifactKeeper\artifacts"
+New-Item -ItemType Directory -Force -Path "C:\ProgramData\ArtifactKeeper\plugins"
+New-Item -ItemType Directory -Force -Path "C:\ProgramData\ArtifactKeeper\logs"
+New-Item -ItemType Directory -Force -Path "C:\ProgramData\ArtifactKeeper\config"
+```
+
+Copy `artifact-keeper.exe` into `C:\Program Files\ArtifactKeeper\`.
+
+### 3. Create Configuration
+
+Create `C:\ProgramData\ArtifactKeeper\config\.env` with the following:
+
+```ini
+DATABASE_URL=postgresql://registry:changeme@localhost:5432/artifact_registry
+JWT_SECRET=generate-a-strong-random-secret-at-least-32-bytes
+STORAGE_PATH=C:\ProgramData\ArtifactKeeper\artifacts
+BIND_ADDRESS=0.0.0.0:8080
+RUST_LOG=info
+```
+
+Generate a strong JWT secret in PowerShell:
+
+```powershell
+[Convert]::ToBase64String((1..64 | ForEach-Object { Get-Random -Maximum 256 }) -as [byte[]])
+```
+
+### 4. Register the Windows Service
+
+```powershell
+New-Service -Name "ArtifactKeeper" `
+  -BinaryPathName '"C:\Program Files\ArtifactKeeper\artifact-keeper.exe" --service' `
+  -DisplayName "Artifact Keeper" `
+  -Description "Artifact Keeper registry server" `
+  -StartupType Automatic
+
+# Set the environment file path so the service finds its config
+[System.Environment]::SetEnvironmentVariable(
+  "AK_ENV_FILE",
+  "C:\ProgramData\ArtifactKeeper\config\.env",
+  "Machine"
+)
+
+# Configure automatic restart on failure (3 attempts, 10-second delay each)
+sc.exe failure ArtifactKeeper reset= 86400 actions= restart/10000/restart/10000/restart/10000
+```
+
+Alternatively, the binary can register itself as a service:
+
+```powershell
+& "C:\Program Files\ArtifactKeeper\artifact-keeper.exe" --install
+```
+
+## First-Boot Setup
+
+Start the service:
+
+```powershell
+Start-Service ArtifactKeeper
+```
+
+On first start, the server generates a random admin password and writes it to the storage directory:
+
+```powershell
+Get-Content "C:\ProgramData\ArtifactKeeper\artifacts\admin.password"
+```
+
+The API is locked until you change the admin password. Open `http://localhost:8080` in a browser, log in with username `admin` and the generated password, then set a new password.
+
+Verify the service is healthy:
+
+```powershell
+Invoke-RestMethod -Uri http://localhost:8080/health
+```
+
+See the [Quickstart Guide](/docs/getting-started/quickstart) for full first-boot walkthrough steps.
+
+## Firewall Configuration
+
+Open the API port for inbound connections:
+
+```powershell
+New-NetFirewallRule -DisplayName "Artifact Keeper API" `
+  -Direction Inbound -Protocol TCP -LocalPort 8080 -Action Allow
+```
+
+If you run Meilisearch on a separate host, also open port 7700. For gRPC clients, open port 9090.
+
+## Optional: Meilisearch
+
+Meilisearch provides fast full-text search for artifacts and metadata. Without it, search falls back to PostgreSQL full-text search, which works but is slower on large registries.
+
+1. Download the Windows binary from [meilisearch.com](https://www.meilisearch.com/docs/learn/getting_started/installation#local-installation).
+
+2. Run it as a service using [NSSM](https://nssm.cc/):
+
+   ```powershell
+   nssm install Meilisearch "C:\Program Files\Meilisearch\meilisearch.exe"
+   nssm set Meilisearch AppParameters "--db-path C:\ProgramData\Meilisearch\data.ms"
+   nssm start Meilisearch
+   ```
+
+3. Add the following to your Artifact Keeper `.env` file:
+
+   ```ini
+   MEILISEARCH_URL=http://localhost:7700
+   ```
+
+4. Restart the Artifact Keeper service:
+
+   ```powershell
+   Restart-Service ArtifactKeeper
+   ```
+
+## Upgrading
+
+### MSI Upgrade
+
+Download the new MSI and run the installer. Configuration and data directories are preserved. The service restarts automatically after the upgrade.
+
+### Manual Upgrade
+
+1. Back up the database:
+
+   ```powershell
+   & "C:\Program Files\PostgreSQL\16\bin\pg_dump.exe" `
+     -U registry artifact_registry > backup.sql
+   ```
+
+2. Stop the service, replace the binary, and start the service:
+
+   ```powershell
+   Stop-Service ArtifactKeeper
+   Copy-Item .\artifact-keeper.exe "C:\Program Files\ArtifactKeeper\artifact-keeper.exe" -Force
+   Start-Service ArtifactKeeper
+   ```
+
+Database migrations run automatically on startup. Check the Event Viewer for any migration errors after upgrading.
+
+## Uninstalling
+
+### MSI Uninstall
+
+Remove Artifact Keeper through **Add/Remove Programs** (Settings > Apps), or run:
+
+```powershell
+& "C:\Program Files\ArtifactKeeper\artifact-keeper.exe" --uninstall
+```
+
+### Manual Uninstall
+
+```powershell
+Stop-Service ArtifactKeeper
+sc.exe delete ArtifactKeeper
+Remove-Item "C:\Program Files\ArtifactKeeper" -Recurse -Force
+```
+
+In both cases, the data directory at `C:\ProgramData\ArtifactKeeper\` is preserved. Remove it manually if you no longer need the stored artifacts. The PostgreSQL database is also left intact; drop it manually if desired.
+
+## Production Checklist
+
+- [ ] Set a strong `JWT_SECRET` (64+ characters)
+- [ ] Admin password changed from the generated default
+- [ ] TLS configured via reverse proxy (IIS, Caddy, or another proxy)
+- [ ] Firewall rules restrict access to required ports only
+- [ ] Storage path on a volume with sufficient space and regular backups
+- [ ] Database backups scheduled (Task Scheduler + `pg_dump`)
+- [ ] Service recovery options configured (automatic restart on failure)
+- [ ] Antivirus exclusions added for the binary and storage path
+- [ ] `RUST_LOG` set to `info` or `warn` for production (not `debug`)
+- [ ] Monitoring configured (poll `/health` endpoint)
+
+## Next Steps
+
+- [Configuration Reference](/docs/getting-started/configuration) for all environment variables
+- [Reverse Proxy & TLS](/docs/deployment/reverse-proxy) for setting up HTTPS
+- [Windows Troubleshooting](/docs/deployment/windows-troubleshooting) for common issues and fixes
+- [Quickstart Guide](/docs/getting-started/quickstart) for creating your first repository
