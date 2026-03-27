@@ -9,8 +9,7 @@ Configure Artifact Keeper using environment variables. This page provides a comp
 
 | Variable | Required | Default | Description |
 |----------|----------|---------|-------------|
-| `PORT` | No | `8080` | HTTP server port |
-| `HOST` | No | `0.0.0.0` | HTTP server bind address |
+| `BIND_ADDRESS` | No | `0.0.0.0:8080` | HTTP server bind address (host:port) |
 | `RUST_LOG` | No | `info` | Log level (trace, debug, info, warn, error) |
 | `LOG_FORMAT` | No | `json` | Log format (json, pretty, compact) |
 | `ENVIRONMENT` | No | `production` | Runtime environment. Set to `development` to disable the `Secure` flag on auth cookies, allowing cookie-based auth over plain HTTP. See [Reverse Proxy & TLS](/docs/deployment/reverse-proxy). |
@@ -38,8 +37,9 @@ Configure Artifact Keeper using environment variables. This page provides a comp
 | `SKIP_ADMIN_PROVISIONING` | No | `false` | Skip built-in admin user creation on first boot. Use for SSO-only deployments where admin roles are assigned via OIDC/LDAP/SAML group mapping. |
 | `SSO_ENCRYPTION_KEY` | No | - | Encryption key for storing OIDC/LDAP/SAML client secrets in the database |
 | `REQUIRE_HTTPS` | No | `false` | Require HTTPS for all connections |
-| `RATE_LIMIT_LOGIN` | No | `5` | Maximum login attempts |
-| `RATE_LIMIT_WINDOW` | No | `300` | Rate limit window in seconds (5 minutes) |
+| `RATE_LIMIT_AUTH_PER_MIN` | No | `120` | Maximum auth requests per window |
+| `RATE_LIMIT_API_PER_MIN` | No | `5000` | Maximum API requests per window |
+| `RATE_LIMIT_WINDOW_SECS` | No | `60` | Rate limit window in seconds |
 
 ## LDAP Integration
 
@@ -395,7 +395,7 @@ JWT_ACCESS_TOKEN_EXPIRY=300  # 5 minutes
 
 # Security
 REQUIRE_HTTPS=true
-RATE_LIMIT_LOGIN=3
+RATE_LIMIT_AUTH_PER_MIN=3
 TRIVY_ENABLED=true
 SCAN_ON_UPLOAD=true
 BLOCK_VULNERABLE_UPLOADS=true

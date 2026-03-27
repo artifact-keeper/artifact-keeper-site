@@ -138,26 +138,26 @@ Or use the Web UI: navigate to **Repositories** and click **Create Repository**.
 <distributionManagement>
   <repository>
     <id>artifact-keeper</id>
-    <url>http://localhost:30080/api/v1/maven/my-maven-repo</url>
+    <url>http://localhost:30080/maven/my-maven-repo</url>
   </repository>
 </distributionManagement>
 ```
 
 **npm** (using `.npmrc`):
 ```
-registry=http://localhost:30080/api/v1/npm/my-npm-repo/
-//localhost:30080/api/v1/npm/my-npm-repo/:_authToken=YOUR_TOKEN
+registry=http://localhost:30080/npm/my-npm-repo/
+//localhost:30080/npm/my-npm-repo/:_authToken=YOUR_TOKEN
 ```
 
 **Docker**:
 ```bash
-docker tag myimage:latest localhost:30080/api/v1/docker/my-docker-repo/myimage:latest
-docker push localhost:30080/api/v1/docker/my-docker-repo/myimage:latest
+docker tag myimage:latest localhost:30080/my-docker-repo/myimage:latest
+docker push localhost:30080/my-docker-repo/myimage:latest
 ```
 
 **PyPI** (using twine):
 ```bash
-twine upload --repository-url http://localhost:30080/api/v1/pypi/my-pypi-repo/ \
+twine upload --repository-url http://localhost:30080/pypi/my-pypi-repo/ \
   -u admin -p admin dist/*
 ```
 
