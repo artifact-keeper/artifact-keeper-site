@@ -259,7 +259,82 @@ curl -I http://localhost:8080/v2/myapp/manifests/latest
 
 ## Remote & Virtual Repositories
 
-Remote proxy and virtual repository support for Docker/OCI images is planned but not yet available. For other package formats, Artifact Keeper supports pull-through caching and virtual aggregation — see the [Remote & Virtual Repositories](/docs/advanced/remote-virtual) guide for details.
+Docker/OCI remote repositories support pull-through caching from upstream registries including Docker Hub, GitHub Container Registry (ghcr.io), and private registries.
+
+### Docker Hub Remote
+
+Create a remote repository pointing to Docker Hub:
+
+```bash
+curl -X POST http://localhost:8080/api/v1/repositories \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "key": "dockerhub-remote",
+    "name": "Docker Hub Remote",
+    "format": "docker",
+    "repo_type": "remote",
+    "upstream_url": "https://registry-1.docker.io"
+  }'
+```
+
+Then pull images through Artifact Keeper:
+
+```bash
+docker login localhost:8080
+docker pull localhost:8080/dockerhub-remote/alpine:3.20
+docker pull localhost:8080/dockerhub-remote/nginx:latest
+docker pull localhost:8080/dockerhub-remote/myorg/myimage:v1.0
+```
+
+Official Docker Hub images (like `alpine`, `nginx`, `ubuntu`) are automatically resolved under the `library/` namespace. Namespaced images work as-is.
+
+### Other Registries
+
+Point the upstream URL to any OCI-compliant registry:
+
+```bash
+# GitHub Container Registry
+curl -X POST http://localhost:8080/api/v1/repositories \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "key": "ghcr-remote",
+    "name": "GHCR Remote",
+    "format": "docker",
+    "repo_type": "remote",
+    "upstream_url": "https://ghcr.io"
+  }'
+```
+
+### Virtual Repositories
+
+Create a virtual repository to aggregate multiple Docker sources:
+
+```bash
+curl -X POST http://localhost:8080/api/v1/repositories \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "key": "docker-virtual",
+    "name": "Docker Virtual",
+    "format": "docker",
+    "repo_type": "virtual"
+  }'
+
+# Add members
+curl -X POST http://localhost:8080/api/v1/repositories/docker-virtual/members \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"member_key": "docker-local", "priority": 1}'
+
+curl -X POST http://localhost:8080/api/v1/repositories/docker-virtual/members \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"member_key": "dockerhub-remote", "priority": 2}'
+```
+
+For general information on remote and virtual repositories, see the [Remote & Virtual Repositories](/docs/advanced/remote-virtual) guide.
 
 ## See Also
 
