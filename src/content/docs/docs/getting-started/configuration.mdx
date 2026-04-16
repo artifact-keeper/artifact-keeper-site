@@ -86,6 +86,48 @@ services:
     command: server --listen 0.0.0.0:8080
 ```
 
+## Account Lockout
+
+Lock local accounts after consecutive failed login attempts. SSO users are not affected since they authenticate through their identity provider.
+
+| Variable | Required | Default | Description |
+|----------|----------|---------|-------------|
+| `ACCOUNT_LOCKOUT_THRESHOLD` | No | `5` | Number of consecutive failed login attempts before an account is locked. Set to 0 to disable lockout. |
+| `ACCOUNT_LOCKOUT_DURATION_MINUTES` | No | `30` | How long (in minutes) a locked account stays locked |
+
+After a successful login, the failed attempt counter resets to zero.
+
+## Password Policy
+
+Enforce password complexity and lifecycle rules for local users. These settings have no effect on SSO users.
+
+| Variable | Required | Default | Description |
+|----------|----------|---------|-------------|
+| `PASSWORD_MIN_LENGTH` | No | `8` | Minimum password length |
+| `PASSWORD_MAX_LENGTH` | No | `128` | Maximum password length |
+| `PASSWORD_REQUIRE_UPPERCASE` | No | `false` | Require at least one uppercase letter |
+| `PASSWORD_REQUIRE_LOWERCASE` | No | `false` | Require at least one lowercase letter |
+| `PASSWORD_REQUIRE_DIGIT` | No | `false` | Require at least one digit |
+| `PASSWORD_REQUIRE_SPECIAL` | No | `false` | Require at least one special character |
+| `PASSWORD_MIN_STRENGTH` | No | `0` | Minimum zxcvbn strength score (0 = disabled, 1-4 = increasingly strict) |
+| `PASSWORD_HISTORY_COUNT` | No | `0` | Reject passwords that match any of the last N passwords (max 24). 0 disables history checking. |
+| `PASSWORD_EXPIRY_DAYS` | No | `0` | Require password changes after this many days (max 3650). 0 disables expiration. |
+
+For more detail on enforcement behavior and the `force-password-change` admin API, see the [Authentication Security](/docs/security/authentication) page.
+
+## SMTP Email Delivery
+
+Configure outbound email for password expiration notifications and system alerts. Email is disabled when `SMTP_HOST` is not set.
+
+| Variable | Required | Default | Description |
+|----------|----------|---------|-------------|
+| `SMTP_HOST` | No | - | SMTP server hostname |
+| `SMTP_PORT` | No | `587` | SMTP server port |
+| `SMTP_USERNAME` | No | - | SMTP username |
+| `SMTP_PASSWORD` | No | - | SMTP password |
+| `SMTP_FROM_ADDRESS` | No | `noreply@artifact-keeper.local` | Default sender address |
+| `SMTP_TLS_MODE` | No | `starttls` | TLS mode: `starttls`, `tls`, or `none` |
+
 ## Search Integration
 
 | Variable | Required | Default | Description |
@@ -199,9 +241,15 @@ Check logs after starting to ensure configuration is correct.
 5. **Rotate secrets regularly**: Update `JWT_SECRET` and API keys periodically
 6. **Limit token expiration**: Keep `JWT_ACCESS_TOKEN_EXPIRY_MINUTES` short (15-30 minutes)
 7. **Enable scanning**: Configure `TRIVY_URL` to scan all artifacts for vulnerabilities
+8. **Enable account lockout**: Set `ACCOUNT_LOCKOUT_THRESHOLD` to limit brute-force attempts
+9. **Enforce password policies**: Use `PASSWORD_REQUIRE_*` and `PASSWORD_MIN_STRENGTH` for compliance
+10. **Enable password expiration**: Set `PASSWORD_EXPIRY_DAYS` for regulated environments
 
 ## Next Steps
 
-- [Quickstart Guide](/getting-started/quickstart) - Create your first repository
-- [Package Formats](/package-formats) - See all supported formats
-- [Installation Guide](/getting-started/installation) - Deployment options
+- [Quickstart Guide](/docs/getting-started/quickstart) - Create your first repository
+- [Quickstart Installer](/docs/getting-started/quickstart-installer) - One-command setup with Docker
+- [Package Formats](/docs/package-formats) - See all supported formats
+- [Installation Guide](/docs/getting-started/installation) - Deployment options
+- [Authentication Security](/docs/security/authentication) - Account lockout, password policies, and expiration
+- [Environment Variables](/docs/reference/environment) - Complete variable reference

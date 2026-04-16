@@ -1,0 +1,159 @@
+---
+title: "Quickstart Installer"
+description: "One-command setup for Artifact Keeper using the automated installer script"
+---
+
+The quickstart installer detects your container runtime, generates secure credentials, downloads the compose file, and starts the full stack with a single command.
+
+## Usage
+
+```bash
+curl -fsSL https://get.artifactkeeper.com | bash
+```
+
+This is equivalent to running the installer script directly from the repository:
+
+```bash
+bash scripts/install.sh
+```
+
+## What the Installer Does
+
+1. **Detects your container runtime**: Docker with Compose V2, Docker with docker-compose, Podman with podman-compose, or Podman with Compose. The installer will exit with an error if no supported runtime is found.
+
+2. **Checks port availability**: Verifies that ports 80 and 443 (or your configured ports) are not already in use.
+
+3. **Generates secure credentials**: Creates random values for `JWT_SECRET`, the Meilisearch master key, the PostgreSQL password, and (if not provided) the admin password. Credentials are generated using `openssl rand` when available, falling back to `/dev/urandom`.
+
+4. **Creates a project directory**: Defaults to `./artifact-keeper` in the current directory. The installer will not overwrite an existing installation.
+
+5. **Downloads configuration files**: Pulls the `docker-compose.yml`, Caddyfile, database init script, and supporting files from the main branch of the repository.
+
+6. **Writes a `.env` file**: Stores all generated credentials and settings. This file is the single source of configuration for the stack.
+
+7. **Pulls images and starts services**: Runs `docker compose pull` followed by `docker compose up -d`.
+
+8. **Waits for readiness**: Polls the health endpoint for up to 2 minutes. Once the backend responds, opens the web UI in your browser (on systems that support it).
+
+## Services Started
+
+The installer brings up the full stack:
+
+| Service | Description |
+|---------|-------------|
+| **Backend** | Rust API server with 45+ format handlers |
+| **Web UI** | Next.js frontend |
+| **Caddy** | Reverse proxy (HTTP + HTTPS with automatic TLS) |
+| **PostgreSQL 16** | Metadata storage |
+| **Meilisearch** | Full-text search |
+| **Trivy** | Vulnerability scanning |
+| **OpenSCAP** | Compliance scanning |
+| **Dependency-Track** | SBOM analysis and vulnerability management |
+
+In minimal mode (`AK_MINIMAL=1`), the scanners (Trivy, OpenSCAP, Dependency-Track) are skipped to reduce resource usage.
+
+## Configuration Options
+
+All options are set as environment variables before running the installer.
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `INSTALL_DIR` | `./artifact-keeper` | Directory where the project files are created |
+| `AK_VERSION` | `latest` | Version to install (omit the `v` prefix) |
+| `AK_HTTP_PORT` | `80` | HTTP port |
+| `AK_HTTPS_PORT` | `443` | HTTPS port |
+| `AK_ADMIN_PASSWORD` | auto-generated | Admin password. When omitted, a random 24-character password is generated and saved to `.env`. |
+| `AK_SKIP_START` | `0` | Set to `1` to generate files without starting the stack |
+| `AK_MINIMAL` | `0` | Set to `1` to skip scanners (lower resource usage) |
+
+### Examples
+
+Install with custom ports:
+
+```bash
+AK_HTTP_PORT=8080 AK_HTTPS_PORT=8443 curl -fsSL https://get.artifactkeeper.com | bash
+```
+
+Install a specific version:
+
+```bash
+AK_VERSION=1.1.0 curl -fsSL https://get.artifactkeeper.com | bash
+```
+
+Install in minimal mode (no scanners):
+
+```bash
+AK_MINIMAL=1 curl -fsSL https://get.artifactkeeper.com | bash
+```
+
+Generate files without starting:
+
+```bash
+AK_SKIP_START=1 curl -fsSL https://get.artifactkeeper.com | bash
+cd artifact-keeper
+# Review .env and docker-compose.yml, then:
+docker compose up -d
+```
+
+Set a specific admin password:
+
+```bash
+AK_ADMIN_PASSWORD=my-secure-password curl -fsSL https://get.artifactkeeper.com | bash
+```
+
+## Requirements
+
+- **Container runtime**: Docker 20.10+ with Compose V2, or Podman 4+ with podman-compose
+- **RAM**: 2 GB minimum, 4 GB recommended with scanners enabled
+- **Ports**: 80 and 443 available (configurable via `AK_HTTP_PORT` and `AK_HTTPS_PORT`)
+
+## After Installation
+
+Once the installer completes, it prints the connection details:
+
+```
+==> Artifact Keeper is running!
+
+  Web UI:    http://localhost:80
+  API:       http://localhost:80/api/v1
+  Swagger:   http://localhost:80/swagger-ui
+
+  Username:  admin
+  Password:  <generated-password>
+```
+
+### Managing the Stack
+
+```bash
+cd artifact-keeper         # or your custom INSTALL_DIR
+docker compose ps          # check status
+docker compose logs -f     # follow logs
+docker compose down        # stop all services
+docker compose up -d       # start all services
+```
+
+### Upgrading
+
+To upgrade to a newer version, update `ARTIFACT_KEEPER_VERSION` in the `.env` file and pull new images:
+
+```bash
+cd artifact-keeper
+# Edit .env: set ARTIFACT_KEEPER_VERSION=1.2.0
+docker compose pull
+docker compose up -d
+```
+
+### Uninstalling
+
+```bash
+cd artifact-keeper
+docker compose down -v     # stop and remove volumes
+cd ..
+rm -rf artifact-keeper     # remove all files
+```
+
+## Next Steps
+
+- [Quickstart Guide](/docs/getting-started/quickstart) - Create repositories and push your first artifact
+- [Configuration Reference](/docs/getting-started/configuration) - All available environment variables
+- [Docker Deployment](/docs/deployment/docker) - Production Docker Compose setup

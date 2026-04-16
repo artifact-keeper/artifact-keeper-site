@@ -22,38 +22,80 @@ Configure Artifact Keeper using environment variables. This page provides a comp
 | Variable | Required | Default | Description |
 |----------|----------|---------|-------------|
 | `DATABASE_URL` | Yes | - | PostgreSQL connection string (postgres://user:pass@host:port/db) |
-| `DB_POOL_SIZE` | No | `20` | Maximum database connection pool size |
-| `DB_TIMEOUT_SECONDS` | No | `30` | Database connection timeout |
+| `DATABASE_MAX_CONNECTIONS` | No | `20` | Maximum open connections in the pool. Increase for higher concurrency, decrease for databases with restricted connection budgets (shared RDS, PgBouncer). |
+| `DATABASE_MIN_CONNECTIONS` | No | `5` | Minimum idle connections kept warm. Set to 0 to allow the pool to scale down completely. |
+| `DATABASE_ACQUIRE_TIMEOUT_SECS` | No | `30` | Timeout in seconds for acquiring a connection from the pool before returning an error |
+| `DATABASE_IDLE_TIMEOUT_SECS` | No | `600` | Close connections idle longer than this many seconds (10 minutes) |
+| `DATABASE_MAX_LIFETIME_SECS` | No | `1800` | Recycle connections older than this, even if healthy (30 minutes). Useful behind TCP load balancers with an idle disconnect. |
 | `DB_SSL_MODE` | No | `prefer` | PostgreSQL SSL mode (disable, allow, prefer, require) |
+| `SKIP_MIGRATIONS` | No | `false` | Skip automatic database migrations on startup. Use when migrations are applied out-of-band (e.g., via a CI job or init container). |
 
 ## Authentication
 
 | Variable | Required | Default | Description |
 |----------|----------|---------|-------------|
 | `JWT_SECRET` | Yes | - | Secret key for signing JWT tokens (generate with `openssl rand -base64 64`) |
-| `JWT_ACCESS_TOKEN_EXPIRY` | No | `900` | Access token expiration in seconds (15 minutes) |
-| `JWT_REFRESH_TOKEN_EXPIRY` | No | `604800` | Refresh token expiration in seconds (7 days) |
-| `ADMIN_USERNAME` | No | `admin` | Default admin username (first-time setup) |
-| `ADMIN_PASSWORD` | No | auto-generated | Admin password for first-time setup. If not set, a random 20-character password is generated and written to `{STORAGE_PATH}/admin.password` (default: `/data/storage/admin.password`). The API is locked until the admin changes this password. Set this env var to skip the setup lock entirely. |
+| `JWT_EXPIRATION_SECS` | No | `86400` | Legacy JWT token expiration in seconds (24 hours). Prefer the settings below. |
+| `JWT_ACCESS_TOKEN_EXPIRY_MINUTES` | No | `30` | Access token expiration in minutes |
+| `JWT_REFRESH_TOKEN_EXPIRY_DAYS` | No | `7` | Refresh token expiration in days |
+| `ADMIN_PASSWORD` | No | auto-generated | Admin password for first-time setup. If not set, a random password is generated and written to `{STORAGE_PATH}/admin.password` (default: `/data/storage/admin.password`). The API is locked until the admin changes this password. Set this env var to skip the setup lock entirely. |
 | `SKIP_ADMIN_PROVISIONING` | No | `false` | Skip built-in admin user creation on first boot. Use for SSO-only deployments where admin roles are assigned via OIDC/LDAP/SAML group mapping. |
 | `SSO_ENCRYPTION_KEY` | No | - | Encryption key for storing OIDC/LDAP/SAML client secrets in the database |
 | `REQUIRE_HTTPS` | No | `false` | Require HTTPS for all connections |
-| `RATE_LIMIT_LOGIN` | No | `5` | Maximum login attempts |
-| `RATE_LIMIT_WINDOW` | No | `300` | Rate limit window in seconds (5 minutes) |
+| `ALLOW_LOCAL_ADMIN_LOGIN` | No | `false` | When SSO is enabled, local login is disabled by default. Set to `true` to allow the built-in admin account to log in with local credentials even when SSO providers are configured. Intended as a break-glass recovery mechanism. |
+
+## Account Lockout
+
+| Variable | Required | Default | Description |
+|----------|----------|---------|-------------|
+| `ACCOUNT_LOCKOUT_THRESHOLD` | No | `5` | Number of consecutive failed login attempts before a local account is locked. Set to 0 to disable account lockout. |
+| `ACCOUNT_LOCKOUT_DURATION_MINUTES` | No | `30` | Duration in minutes that a locked account remains locked before the user can try again |
+
+## Password Policy
+
+These settings apply to local users only. SSO users authenticate through their identity provider and are not subject to local password policy.
+
+| Variable | Required | Default | Description |
+|----------|----------|---------|-------------|
+| `PASSWORD_MIN_LENGTH` | No | `8` | Minimum password length |
+| `PASSWORD_MAX_LENGTH` | No | `128` | Maximum password length |
+| `PASSWORD_REQUIRE_UPPERCASE` | No | `false` | Require at least one uppercase letter |
+| `PASSWORD_REQUIRE_LOWERCASE` | No | `false` | Require at least one lowercase letter |
+| `PASSWORD_REQUIRE_DIGIT` | No | `false` | Require at least one digit |
+| `PASSWORD_REQUIRE_SPECIAL` | No | `false` | Require at least one special character |
+| `PASSWORD_MIN_STRENGTH` | No | `0` | Minimum zxcvbn strength score. 0 disables the check. Values 1 through 4 are increasingly strict. |
+| `PASSWORD_HISTORY_COUNT` | No | `0` | Number of previous passwords to remember. New passwords are rejected if they match any of the last N hashes. Set to 0 to disable (max 24). |
+| `PASSWORD_EXPIRY_DAYS` | No | `0` | Number of days after which a local user's password expires and must be changed. Set to 0 to disable (max 3650). |
+
+## Quarantine
+
+| Variable | Required | Default | Description |
+|----------|----------|---------|-------------|
+| `QUARANTINE_ENABLED` | No | `false` | Hold newly uploaded artifacts in quarantine until security scanning completes or the hold period expires. Downloads return 409 while an artifact is quarantined. |
+| `QUARANTINE_DURATION_MINUTES` | No | `60` | Default quarantine hold period in minutes. Per-repository overrides are available via the `repository_config` table keys `quarantine_enabled` and `quarantine_duration_minutes`. |
 
 ## LDAP Integration
 
 | Variable | Required | Default | Description |
 |----------|----------|---------|-------------|
-| `LDAP_URL` | No | - | LDAP server URL (e.g., ldap://ldap.example.com:389) |
-| `LDAP_BASE_DN` | No | - | LDAP base DN (e.g., dc=example,dc=com) |
-| `LDAP_BIND_DN` | No | - | LDAP bind DN for authentication |
+| `LDAP_URL` | No | - | LDAP server URL (e.g., `ldap://ldap.example.com:389`) |
+| `LDAP_BASE_DN` | No | - | LDAP base DN (e.g., `dc=example,dc=com`) |
+| `LDAP_BIND_DN` | No | - | LDAP bind DN for search-then-bind (recommended for Active Directory) |
 | `LDAP_BIND_PASSWORD` | No | - | LDAP bind password |
-| `LDAP_USER_FILTER` | No | `(uid={username})` | LDAP user search filter |
+| `LDAP_USER_FILTER` | No | `(uid={username})` | LDAP user search filter. Use `{username}` or `{0}` as the placeholder. For Active Directory: `(sAMAccountName={0})`. |
+| `LDAP_USERNAME_ATTR` | No | `uid` | LDAP attribute for username. For AD: `sAMAccountName`. |
+| `LDAP_EMAIL_ATTR` | No | `mail` | LDAP attribute for email |
+| `LDAP_DISPLAY_NAME_ATTR` | No | `cn` | LDAP attribute for display name. For AD: `displayName`. |
+| `LDAP_GROUPS_ATTR` | No | `memberOf` | LDAP attribute for group membership |
 | `LDAP_SYNC_INTERVAL` | No | `3600` | LDAP sync interval in seconds (1 hour) |
 | `LDAP_GROUP_FILTER` | No | - | LDAP group search filter |
 | `LDAP_GROUP_BASE_DN` | No | - | LDAP group base DN |
 | `LDAP_GROUP_ATTRIBUTE` | No | `cn` | LDAP group name attribute |
+| `LDAP_GROUP_ROLE_MAP` | No | - | Map LDAP group DNs to application roles (semicolon-separated). Example: `cn=developers,ou=groups,dc=example,dc=com:developer;cn=ops,ou=groups,dc=example,dc=com:operator` |
+| `LDAP_ADMIN_GROUP_DN` | No | - | DN of the LDAP group that grants admin access |
+| `LDAP_USE_STARTTLS` | No | `false` | Enable STARTTLS (upgrade plain LDAP connection to TLS) |
+| `LDAP_CA_CERT_PATH` | No | - | Path to a PEM file with custom CA certificates for LDAPS connections. Falls back to `CUSTOM_CA_CERT_PATH` if not set. |
+| `LDAP_INSECURE_TLS` | No | `false` | Skip TLS certificate verification for LDAP (development only) |
 
 ## OIDC/SSO Integration
 
@@ -122,6 +164,8 @@ When `STORAGE_BACKEND=s3`. Read by the **backend** process.
 | `S3_MULTIPART_CHUNK_SIZE` | No | `10485760` | Multipart chunk size in bytes (10 MB) |
 | `S3_MAX_CONNECTIONS` | No | `50` | Maximum S3 connections |
 | `S3_USE_TRANSFER_ACCELERATION` | No | `false` | Enable S3 transfer acceleration (AWS only) |
+| `S3_CA_CERT_PATH` | No | - | PEM file with custom CA certificate(s) for the S3 endpoint |
+| `S3_INSECURE_TLS` | No | `false` | Disable TLS verification for S3 (development/testing only) |
 
 ### CloudFront CDN (optional, for S3 backends)
 
@@ -255,6 +299,23 @@ Read by the **backend** process.
 | `SCAN_ON_UPLOAD` | No | `false` | Automatically scan artifacts on upload |
 | `BLOCK_VULNERABLE_UPLOADS` | No | `false` | Block uploads with critical vulnerabilities |
 | `VULNERABILITY_SEVERITY_THRESHOLD` | No | `HIGH` | Severity threshold (CRITICAL, HIGH, MEDIUM, LOW) |
+| `OPENSCAP_URL` | No | - | OpenSCAP wrapper URL for compliance scanning |
+| `OPENSCAP_PROFILE` | No | `xccdf_org.ssgproject.content_profile_standard` | OpenSCAP SCAP profile to evaluate |
+| `SCAN_WORKSPACE_PATH` | No | `/scan-workspace` | Temporary workspace directory for scanning artifacts |
+| `GITHUB_TOKEN` | No | - | GitHub token for downloading advisory databases during scanning |
+
+## Dependency-Track Integration
+
+| Variable | Required | Default | Description |
+|----------|----------|---------|-------------|
+| `DEPENDENCY_TRACK_URL` | No | - | Dependency-Track API URL for vulnerability management |
+| `DEPENDENCY_TRACK_API_KEY` | No | - | Dependency-Track API key |
+| `DEPENDENCY_TRACK_ENABLED` | No | `true` | Enable Dependency-Track integration (when URL is set) |
+| `DTRACK_HTTP_PROXY_ADDRESS` | No | - | Proxy hostname for Dependency-Track NVD mirroring |
+| `DTRACK_HTTP_PROXY_PORT` | No | - | Proxy port for Dependency-Track |
+| `DTRACK_HTTP_PROXY_USERNAME` | No | - | Proxy username (supports BASIC, DIGEST, NTLM) |
+| `DTRACK_HTTP_PROXY_PASSWORD` | No | - | Proxy password |
+| `DTRACK_NO_PROXY` | No | - | Comma-separated list of hosts to bypass proxy |
 
 ## Monitoring & Observability
 
@@ -262,22 +323,83 @@ Read by the **backend** process.
 |----------|----------|---------|-------------|
 | `METRICS_ENABLED` | No | `true` | Enable Prometheus metrics |
 | `METRICS_PATH` | No | `/metrics` | Metrics endpoint path |
+| `METRICS_PORT` | No | - | Port for an unauthenticated Prometheus metrics-only listener. When set, a second TCP listener serves only `GET /metrics` with no authentication. Intended for internal Prometheus scraping where the scraper cannot present credentials. Ensure this port is not reachable from untrusted networks. |
 | `OTEL_EXPORTER_OTLP_ENDPOINT` | No | - | OTLP gRPC endpoint for distributed tracing (e.g., `http://jaeger:4317`). When unset, tracing exports are disabled and logging is stdout-only. |
 | `OTEL_SERVICE_NAME` | No | `artifact-keeper` | Service name reported in traces |
 | `AUDIT_LOG_ENABLED` | No | `true` | Enable audit logging |
 | `AUDIT_LOG_PATH` | No | `/var/log/artifact-keeper/audit.log` | Audit log file path |
+
+## Rate Limiting
+
+The built-in rate limiter is per-instance (in-memory). For multi-instance deployments behind a load balancer, configure rate limiting at the ingress level (NGINX `limit_req`, Envoy, or a cloud WAF) instead.
+
+| Variable | Required | Default | Description |
+|----------|----------|---------|-------------|
+| `RATE_LIMIT_AUTH_PER_MIN` | No | `120` | Maximum auth requests per window |
+| `RATE_LIMIT_API_PER_MIN` | No | `5000` | Maximum API requests per window |
+| `RATE_LIMIT_WINDOW_SECS` | No | `60` | Window duration in seconds |
+| `RATE_LIMIT_EXEMPT_USERNAMES` | No | - | Comma-separated list of usernames exempt from rate limiting. Useful for CI/CD pipelines, automation bots, and build systems. |
+| `RATE_LIMIT_EXEMPT_SERVICE_ACCOUNTS` | No | `false` | Exempt all service accounts from rate limiting |
 
 ## Performance Tuning
 
 | Variable | Required | Default | Description |
 |----------|----------|---------|-------------|
 | `WORKER_THREADS` | No | `4` | Number of worker threads |
-| `MAX_UPLOAD_SIZE_MB` | No | `10240` | Maximum upload size (10 GB) |
+| `MAX_UPLOAD_SIZE` | No | `10737418240` | Maximum upload size in bytes (10 GB). Set to 0 to disable the limit. |
 | `MAX_CONCURRENT_UPLOADS` | No | `10` | Maximum concurrent uploads |
 | `CHUNK_SIZE_MB` | No | `10` | Upload chunk size (MB) |
 | `CACHE_ENABLED` | No | `true` | Enable metadata caching |
 | `CACHE_TTL_SECONDS` | No | `3600` | Cache TTL (1 hour) |
 | `CACHE_SIZE_MB` | No | `1024` | Cache size (1 GB) |
+
+## Scheduled Tasks
+
+| Variable | Required | Default | Description |
+|----------|----------|---------|-------------|
+| `GC_SCHEDULE` | No | `0 0 * * * *` | Cron schedule for storage garbage collection (6-field: sec min hour day month weekday). Default: hourly. |
+| `LIFECYCLE_CHECK_INTERVAL_SECS` | No | `60` | How often (in seconds) the lifecycle scheduler checks for due policies |
+
+## Presigned Download Redirects
+
+When enabled, artifact downloads from storage backends that support presigned URLs (S3, GCS, Azure) return a 302 redirect instead of proxying the bytes through the backend. This reduces bandwidth and CPU usage on the backend server. The per-backend redirect setting must also be enabled (`S3_REDIRECT_DOWNLOADS`, `GCS_REDIRECT_DOWNLOADS`, or `AZURE_REDIRECT_DOWNLOADS`).
+
+| Variable | Required | Default | Description |
+|----------|----------|---------|-------------|
+| `PRESIGNED_DOWNLOADS_ENABLED` | No | `false` | Enable presigned download redirects globally |
+| `PRESIGNED_DOWNLOAD_EXPIRY_SECS` | No | `300` | Presigned URL expiry in seconds (5 minutes) |
+
+## SMTP Email Delivery
+
+Email delivery is disabled when `SMTP_HOST` is not set. Used for password expiration notifications and other system alerts.
+
+| Variable | Required | Default | Description |
+|----------|----------|---------|-------------|
+| `SMTP_HOST` | No | - | SMTP server hostname. Email delivery is disabled when unset. |
+| `SMTP_PORT` | No | `587` | SMTP server port |
+| `SMTP_USERNAME` | No | - | SMTP username for authentication |
+| `SMTP_PASSWORD` | No | - | SMTP password for authentication |
+| `SMTP_FROM_ADDRESS` | No | `noreply@artifact-keeper.local` | Default sender address |
+| `SMTP_TLS_MODE` | No | `starttls` | TLS mode: `starttls` (default), `tls`, or `none` |
+
+## Corporate Proxy
+
+The backend uses reqwest, which honours `HTTP_PROXY`, `HTTPS_PROXY`, and `ALL_PROXY` natively. The compose files forward these variables into the backend container automatically.
+
+| Variable | Required | Default | Description |
+|----------|----------|---------|-------------|
+| `HTTP_PROXY` | No | - | HTTP proxy URL |
+| `HTTPS_PROXY` | No | - | HTTPS proxy URL |
+| `ALL_PROXY` | No | - | SOCKS proxy URL (e.g., `socks5://proxy.example.com:1080`) |
+| `NO_PROXY` | No | - | Comma-separated list of hosts to bypass proxy |
+
+The compose files also set `no_proxy` for internal service names (postgres, meilisearch, trivy, openscap, dependency-track-apiserver) so container-to-container traffic is never routed through the proxy.
+
+## gRPC
+
+| Variable | Required | Default | Description |
+|----------|----------|---------|-------------|
+| `GRPC_PORT` | No | `9090` | Port for the gRPC server |
 
 ## Search (Meilisearch)
 
@@ -391,15 +513,31 @@ OIDC_REDIRECT_URI=https://registry.example.com/api/v1/auth/oidc/callback
 # Database & JWT
 DATABASE_URL=postgres://registry:password@localhost:5432/artifact_registry
 JWT_SECRET=generate-secure-secret-here
-JWT_ACCESS_TOKEN_EXPIRY=300  # 5 minutes
+JWT_ACCESS_TOKEN_EXPIRY_MINUTES=15
 
 # Security
 REQUIRE_HTTPS=true
-RATE_LIMIT_LOGIN=3
+
+# Account lockout
+ACCOUNT_LOCKOUT_THRESHOLD=3
+ACCOUNT_LOCKOUT_DURATION_MINUTES=60
+
+# Password policy
+PASSWORD_MIN_LENGTH=12
+PASSWORD_REQUIRE_UPPERCASE=true
+PASSWORD_REQUIRE_LOWERCASE=true
+PASSWORD_REQUIRE_DIGIT=true
+PASSWORD_REQUIRE_SPECIAL=true
+PASSWORD_MIN_STRENGTH=3
+PASSWORD_HISTORY_COUNT=12
+PASSWORD_EXPIRY_DAYS=90
+
+# Scanning
 TRIVY_ENABLED=true
 SCAN_ON_UPLOAD=true
 BLOCK_VULNERABLE_UPLOADS=true
 VULNERABILITY_SEVERITY_THRESHOLD=HIGH
+QUARANTINE_ENABLED=true
 
 # Backups
 BACKUP_ENABLED=true

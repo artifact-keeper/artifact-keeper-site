@@ -27,6 +27,7 @@ export default defineConfig({
             { label: 'Welcome', slug: 'docs' },
             { label: 'Architecture', slug: 'docs/getting-started/architecture' },
             { label: 'Quickstart', slug: 'docs/getting-started/quickstart' },
+            { label: 'Quickstart Installer', slug: 'docs/getting-started/quickstart-installer' },
             { label: 'Installation', slug: 'docs/getting-started/installation' },
             { label: 'Configuration', slug: 'docs/getting-started/configuration' },
           ],
@@ -70,6 +71,7 @@ export default defineConfig({
         {
           label: 'Security',
           items: [
+            { label: 'Authentication Security', slug: 'docs/security/authentication' },
             { label: 'Vulnerability Scanning', slug: 'docs/security/scanning' },
             { label: 'OpenSCAP Compliance', slug: 'docs/security/openscap' },
             { label: 'SBOM & Dependency-Track', slug: 'docs/security/sbom' },
