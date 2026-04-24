@@ -3,6 +3,10 @@ title: "Health Checks"
 description: "Health check endpoints for Kubernetes probes, Docker healthchecks, and monitoring dashboards"
 ---
 
+:::caution[Upgrading from 1.1.x?]
+This page describes 1.2.x and later. The search backend changed from Meilisearch to OpenSearch. See the [migration guide](/docs/deployment/migration-meili-to-opensearch/) for env var changes, port changes, and rollout steps.
+:::
+
 Artifact Keeper exposes multiple health check endpoints, each designed for a specific use case. Lightweight probes keep Kubernetes from restarting pods unnecessarily, while the full health dashboard gives operators visibility into every dependent service.
 
 ## Endpoints Reference

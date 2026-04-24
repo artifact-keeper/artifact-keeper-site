@@ -3,6 +3,10 @@ title: Architecture
 description: "How Artifact Keeper is built: system design, technology choices, and the reasoning behind them."
 ---
 
+:::caution[Upgrading from 1.1.x?]
+This page describes 1.2.x and later. The search backend changed from Meilisearch to OpenSearch. See the [migration guide](/docs/deployment/migration-meili-to-opensearch/) for env var changes, port changes, and rollout steps.
+:::
+
 Artifact Keeper is designed as a modular, layered system. This page walks through every major component so you can evaluate whether the architecture fits your needs and contribute with full context.
 
 ## System Overview

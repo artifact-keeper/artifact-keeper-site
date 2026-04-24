@@ -1,0 +1,63 @@
+---
+title: What's new in 1.2.0
+description: Headline changes, breaking changes, and migration steps for v1.2.0
+---
+
+v1.2.0 is the second minor release of Artifact Keeper. The headline change is the search backend swap from Meilisearch to OpenSearch, which is a breaking change for existing operators. This page summarises everything you need to know to upgrade.
+
+For the full commit-level changelog, see [the GitHub release notes](https://github.com/artifact-keeper/artifact-keeper/releases/tag/v1.2.0).
+
+## Headline changes
+
+- **Search backend swap to OpenSearch** ([#462](https://github.com/artifact-keeper/artifact-keeper/issues/462)). The search backend moved from Meilisearch to OpenSearch. The motivation is operational: OpenSearch supports multi-node clustering and high availability without an Enterprise license, which Meilisearch does not. Existing search functionality (full-text search across artifacts, repos, and metadata) is preserved. See the [migration guide](/docs/deployment/migration-meili-to-opensearch/) for the upgrade procedure.
+- **Public runtime config endpoint** ([#496](https://github.com/artifact-keeper/artifact-keeper/issues/496)). A new unauthenticated `GET /api/v1/system/config` endpoint exposes feature flags, version, and public runtime configuration. The web UI uses it to render features dynamically without baking config into the JavaScript bundle. See the [REST API reference](/docs/reference/api/).
+- **Unauthenticated metrics endpoint** ([#570](https://github.com/artifact-keeper/artifact-keeper/issues/570)). Prometheus scraping no longer requires a bearer token. The endpoint can still be locked down at the network or reverse-proxy layer. See [Prometheus Metrics](/docs/monitoring/metrics/).
+- **Expanded presigned URL coverage** ([#604](https://github.com/artifact-keeper/artifact-keeper/issues/604)). More format handlers now redirect downloads to S3 presigned URLs when `S3_REDIRECT_DOWNLOADS=true`, reducing backend bandwidth and CPU. See [Storage Backends](/docs/advanced/storage/).
+- **Quality gate quarantine period** ([#472](https://github.com/artifact-keeper/artifact-keeper/issues/472)). Newly published artifacts can be held in quarantine for a configurable window before they become consumable, giving scanners time to complete and signing workflows time to run. See [Quality Gates](/docs/security/quality-gates/).
+- **Maven remote artifact grouping** ([#641](https://github.com/artifact-keeper/artifact-keeper/issues/641)). The UI groups Maven remote artifacts by component name and version instead of listing every classifier and checksum file separately.
+- **Hex virtual repo merging** ([#346](https://github.com/artifact-keeper/artifact-keeper/issues/346)). Hex `list_names` and `list_versions` endpoints now correctly merge results across virtual repo members.
+- **Trivy and Grype Go CVE patches** ([#403](https://github.com/artifact-keeper/artifact-keeper/issues/403)). The bundled Trivy and Grype binaries were rebuilt against a patched Go toolchain to clear upstream Go CVEs.
+
+## Breaking changes
+
+- **Search env vars renamed**: `MEILISEARCH_URL` and `MEILISEARCH_API_KEY` are removed. Replace with:
+  - `OPENSEARCH_URL` (e.g., `https://opensearch.internal:9200`)
+  - `OPENSEARCH_USERNAME` (default: `admin`)
+  - `OPENSEARCH_PASSWORD`
+  - `OPENSEARCH_ALLOW_INVALID_CERTS` (default `false`, set `true` only for self-signed dev certs)
+- **Search port changed**: `7700` (Meilisearch) is no longer used. OpenSearch listens on `9200`. Update firewall rules, network policies, and service definitions.
+- **Health response field renamed**: The `/health` and `/healthz` JSON payload now reports the search backend under `opensearch` instead of `meilisearch`. If you have monitoring that parses this field by name, update it.
+- **Helm values renamed**: The chart removes the `meilisearch.*` block and adds an `opensearch.*` block. See the migration guide.
+- **Docker Compose service renamed**: The `meilisearch` service in the bundled compose file is replaced by `opensearch`. Pre-existing volumes named `meilisearch_data` are no longer mounted; OpenSearch uses `opensearch_data`. The search index is rebuilt from PostgreSQL on first start, so no artifact data is lost.
+
+## Bug fixes worth calling out
+
+- **Maven virtual repo SNAPSHOT artifacts** ([#839](https://github.com/artifact-keeper/artifact-keeper/issues/839)). Virtual Maven repos now correctly resolve `-SNAPSHOT` artifacts from member repos. Previously, requests for snapshots through a virtual repo returned 404 even when the artifact existed in a member.
+- **Debian APT route panic on startup** ([#832](https://github.com/artifact-keeper/artifact-keeper/issues/832)). The backend no longer panics on startup when the APT format dists route is registered. The route pattern was rewritten to use a non-conflicting parameter capture.
+- **Nexus migration: yum and maven2 formats** ([#857](https://github.com/artifact-keeper/artifact-keeper/issues/857)). The Nexus migration engine now recognises Nexus's native `yum` and `maven2` format names and maps them to the corresponding Artifact Keeper handlers.
+- **Nexus migration: checksum mismatch handling** ([#856](https://github.com/artifact-keeper/artifact-keeper/issues/856)). The migration engine handles Nexus's dual-checksum (sha1 and sha256) verification correctly and no longer aborts on benign mismatches.
+- **wasmtime aarch64 sandbox-escape CVE** ([#691](https://github.com/artifact-keeper/artifact-keeper/issues/691), RUSTSEC-2026-0096). wasmtime was bumped to 36.0.7, which closes a sandbox-escape vulnerability affecting WASM plugin hosts on aarch64.
+
+## Upgrade path
+
+1. **Read the [migration guide](/docs/deployment/migration-meili-to-opensearch/)** end to end before starting. The search backend swap requires an OpenSearch instance to be running before you start the new backend.
+2. **Pull the new images**:
+   ```bash
+   docker pull ghcr.io/artifact-keeper/artifact-keeper-backend:1.2.0
+   docker pull ghcr.io/artifact-keeper/artifact-keeper-web:1.2.0
+   ```
+3. **Helm**: bump the chart to the v1.2.0-compatible version. Remove the `meilisearch:` block from your values file and replace it with the `opensearch:` block. Apply with `helm upgrade`.
+4. **Docker Compose**: pull the v1.2.0 compose file from the release tarball, copy in your `.env`, and run `docker compose up -d`. The compose file replaces the `meilisearch` service with `opensearch`.
+5. **AWS AMI**: re-run the latest first-boot script, or rebuild the AMI from the v1.2.0 Packer template.
+6. **Self-hosted scripts**: re-run `scripts/install.sh` from the v1.2.0 release tarball. The installer detects an existing Meilisearch service, stops it, and provisions OpenSearch in its place.
+7. **Verify**: hit `/health` and confirm the `opensearch` field reports `healthy`. Run a search query in the web UI to confirm indexes were rebuilt.
+
+The web UI, CLI, and native clients (iOS, Android) work unchanged against a 1.2.0 backend. SDKs published to npm, Maven, PyPI, crates.io, and SPM are tagged `1.2.0`.
+
+## Support window
+
+- **1.2.x**: active. Bug fixes, security patches, and feature work all land here.
+- **1.1.x**: maintenance only. Security backports until v1.3.0 ships.
+- **&lt;= 1.0.x**: end of life. Upgrade required.
+
+See [Support Policy](/docs/getting-started/support-policy/) for the full version-support matrix.
