@@ -9,7 +9,7 @@ import { Tabs, TabItem } from '@astrojs/starlight/components';
 The Helm chart, Terraform modules, ArgoCD configs, and monitoring stack are provided as **getting started templates**. They should be reviewed and modified to match your specific infrastructure requirements, security policies, and operational needs before use in production.
 :::
 
-Deploy Artifact Keeper on Kubernetes using the official Helm chart. The chart includes all services: backend API, web frontend, PostgreSQL, Meilisearch, Trivy, and DependencyTrack.
+Deploy Artifact Keeper on Kubernetes using the official Helm chart. The chart includes all services: backend API, web frontend, PostgreSQL, OpenSearch, Trivy, and DependencyTrack.
 
 ## Prerequisites
 
@@ -69,7 +69,7 @@ graph TD
         WEB["Web Frontend\n(Deployment)"]
         EDGE["Edge Replication\n(Deployment)"]
         PG["PostgreSQL\n(StatefulSet)"]
-        MS["Meilisearch\n(Deployment)"]
+        MS["OpenSearch\n(StatefulSet)"]
         TV["Trivy\n(Deployment)"]
         DT["DependencyTrack\n(Deployment)"]
         HPA["HPA"]
@@ -122,6 +122,21 @@ graph TD
 | `dependencyTrack.enabled` | Enable DependencyTrack | `true` |
 | `dependencyTrack.bootstrap.enabled` | Auto-configure DependencyTrack | `true` |
 
+### Search (OpenSearch)
+
+Search is handled by a top-level `opensearch:` values block. The chart ships an in-cluster single-node OpenSearch StatefulSet by default. For external OpenSearch clusters (managed service, existing shared cluster), disable the in-cluster deployment and point the backend at the external endpoint via `backend.env`.
+
+| Parameter | Description | Default |
+|-----------|-------------|---------|
+| `opensearch.enabled` | Deploy in-cluster OpenSearch | `true` |
+| `opensearch.image.repository` | OpenSearch image | `opensearchproject/opensearch` |
+| `opensearch.image.tag` | Image tag | `2.19.1` |
+| `opensearch.persistence.size` | Storage size | `20Gi` |
+| `opensearch.auth.username` | Admin username | `admin` |
+| `opensearch.auth.existingSecret` | Use existing K8s secret for the admin password | `""` |
+
+The chart change that introduces this top-level block is landing in a companion PR to `artifact-keeper-iac`. Until that chart version is released, stick with the previous values schema.
+
 ### Ingress
 
 | Parameter | Description | Default |
@@ -149,6 +164,10 @@ For production, we recommend:
 4. **Enable monitoring** — Set `serviceMonitor.enabled: true` with kube-prometheus-stack
 5. **Enable network policies** — Set `networkPolicy.enabled: true`
 6. **Use external secrets** — Use `externalDatabase.existingSecret` for database credentials
+
+## Upgrading from Meilisearch (1.1 to 1.2)
+
+Artifact Keeper 1.2 replaces Meilisearch with OpenSearch as the search backend. If you are upgrading an existing Helm release from 1.1.x, follow the [Meilisearch to OpenSearch migration guide](/docs/deployment/migration-meili-to-opensearch) before running `helm upgrade`. The backend will re-index from PostgreSQL on first boot, so no search data needs to be migrated.
 
 ## Using Docker Hub Instead of ghcr.io
 

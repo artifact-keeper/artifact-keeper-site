@@ -119,6 +119,7 @@ export default defineConfig({
             { label: 'Windows Troubleshooting', slug: 'docs/deployment/windows-troubleshooting' },
             { label: 'Reverse Proxy & TLS', slug: 'docs/deployment/reverse-proxy' },
             { label: 'AWS', slug: 'docs/deployment/aws' },
+            { label: 'Migrate 1.1 to 1.2 (OpenSearch)', slug: 'docs/deployment/migration-meili-to-opensearch' },
           ],
         },
         {

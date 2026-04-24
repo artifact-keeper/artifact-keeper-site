@@ -55,7 +55,7 @@ The default `docker-compose.yml` runs these services:
 | **Web UI** | `ghcr.io/artifact-keeper/artifact-keeper-web` | 3000 (internal) | Next.js frontend |
 | **Caddy** | `caddy:2-alpine` | **30080** (HTTP), **30443** (HTTPS) | Reverse proxy |
 | **PostgreSQL** | `postgres:16-alpine` | 30432 | Metadata database |
-| **Meilisearch** | `getmeili/meilisearch:v1.12` | 7700 | Full-text search |
+| **OpenSearch** | `opensearchproject/opensearch:2.19.1` | 9200 | Full-text search |
 | **Trivy** | `aquasec/trivy:latest` | 8090 | Vulnerability scanning |
 
 Caddy routes:
@@ -184,7 +184,7 @@ All data is stored in Docker named volumes:
 | `postgres_data` | Database (users, repositories, metadata) |
 | `artifact_storage` | Uploaded artifacts |
 | `backup_storage` | Automated backups |
-| `meilisearch_data` | Search indexes |
+| `opensearch_data` | Search indexes |
 | `trivy_cache` | Vulnerability database cache |
 | `caddy_data` | TLS certificates |
 
@@ -221,8 +221,8 @@ curl -s http://localhost:30080/health | jq
 # Database
 docker compose exec postgres pg_isready -U registry
 
-# Meilisearch
-curl -s http://localhost:7700/health | jq
+# OpenSearch
+curl -s -u admin:admin -k https://localhost:9200/_cluster/health | jq
 ```
 
 ## Troubleshooting
@@ -256,55 +256,63 @@ docker system df -v      # Check Docker disk usage
 docker system prune -a   # Clean unused images/containers
 ```
 
-### Meilisearch CrashLoopBackOff / Database Errors
+### OpenSearch CrashLoopBackOff or Start Failures
 
-Meilisearch stores its data in a `data.ms` directory. When upgrading Meilisearch to a new major version, the database format may be incompatible with the previous version. Symptoms include:
+OpenSearch stores its data in `/usr/share/opensearch/data`. When upgrading OpenSearch across major versions, an existing index directory written by an older release may be incompatible. Symptoms include:
 
-- Container starts, shows the banner, then immediately exits
-- CrashLoopBackOff in Kubernetes with hundreds of restarts
-- Log errors mentioning database version mismatch or corruption
+- Container starts, logs a bootstrap check failure, then exits
+- CrashLoopBackOff in Kubernetes with repeated restarts
+- Log errors mentioning `vm.max_map_count`, cluster state corruption, or incompatible index metadata
 
-**Fix — Docker Compose:**
+The most common first-run failure on Linux hosts is `vm.max_map_count` being too low. Raise it on the host:
 
 ```bash
-# 1. Export your search data first (if you have important custom indexes)
-# Meilisearch indexes are rebuilt from the backend on startup, so this is usually safe to skip.
+sudo sysctl -w vm.max_map_count=262144
+```
 
-# 2. Stop Meilisearch and delete the volume
-docker compose down meilisearch
-docker volume rm artifact-keeper_meilisearch_data
+Add `vm.max_map_count=262144` to `/etc/sysctl.conf` to make it permanent.
 
-# 3. Restart — Meilisearch creates a fresh database, backend re-indexes automatically
+**Fix for data corruption, Docker Compose:**
+
+```bash
+# 1. Search indexes are derived from PostgreSQL, so deleting them is safe.
+#    The backend re-indexes automatically on startup.
+
+# 2. Stop OpenSearch and delete the volume
+docker compose down opensearch
+docker volume rm artifact-keeper_opensearch_data
+
+# 3. Restart. OpenSearch creates a fresh cluster, backend re-indexes automatically
 docker compose up -d
 ```
 
-**Fix — Kubernetes:**
+**Fix for data corruption, Kubernetes:**
 
 ```bash
-# 1. Delete the Meilisearch PVC (adjust namespace and name)
-kubectl delete pvc meilisearch-data -n <namespace>
+# 1. Delete the OpenSearch PVC (adjust namespace and name)
+kubectl delete pvc opensearch-data -n <namespace>
 
 # 2. Delete the pod to trigger recreation with a fresh volume
-kubectl delete pod -n <namespace> -l app.kubernetes.io/component=meilisearch
+kubectl delete pod -n <namespace> -l app.kubernetes.io/component=opensearch
 
-# 3. The backend re-indexes all artifacts into Meilisearch on reconnection
+# 3. The backend re-indexes all artifacts into OpenSearch on reconnection
 ```
 
-**Note:** Meilisearch search indexes are derived from PostgreSQL data. Deleting and recreating the Meilisearch volume is safe — the backend rebuilds the search index automatically. No artifact data is lost.
+**Note:** OpenSearch search indexes are derived from PostgreSQL data. Deleting and recreating the OpenSearch volume is safe. The backend rebuilds the search index automatically. No artifact data is lost.
 
-### Meilisearch High Memory Usage
+### OpenSearch High Memory Usage
 
-Meilisearch spawns one worker per CPU core by default. On large machines this can exceed memory limits. Set `MEILI_MAX_INDEXING_THREADS` to limit worker count:
+OpenSearch defaults to a 1 GB JVM heap. On small hosts this can be too much; on large hosts it may be too little to avoid frequent GC. Tune the heap via `OPENSEARCH_JAVA_OPTS`:
 
 ```yaml
 # docker-compose.yml
 services:
-  meilisearch:
+  opensearch:
     environment:
-      MEILI_MAX_INDEXING_THREADS: 4
+      OPENSEARCH_JAVA_OPTS: "-Xms2g -Xmx2g"
 ```
 
-For Kubernetes, add to the Meilisearch container environment in your Helm values or deployment spec.
+Set `-Xms` and `-Xmx` to the same value, and do not exceed 50% of host RAM. For Kubernetes, set the same env var in your Helm values or StatefulSet spec.
 
 ## Production Checklist
 

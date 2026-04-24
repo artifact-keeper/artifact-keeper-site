@@ -18,7 +18,7 @@ Deploy Artifact Keeper on Windows Server 2019, 2022, or 2025 as a native Windows
 | **CPU** | 2 cores | 4+ cores |
 | **Disk** | 100 GB for artifact storage | SSD with dedicated volume |
 | **Database** | PostgreSQL 16+ (required) | |
-| **Search** | Meilisearch (optional) | Recommended for full-text search |
+| **Search** | OpenSearch (optional) | Recommended for full-text search |
 
 ## Install PostgreSQL
 
@@ -177,27 +177,32 @@ New-NetFirewallRule -DisplayName "Artifact Keeper API" `
   -Direction Inbound -Protocol TCP -LocalPort 8080 -Action Allow
 ```
 
-If you run Meilisearch on a separate host, also open port 7700. For gRPC clients, open port 9090.
+If you run OpenSearch on a separate host, also open port 9200. For gRPC clients, open port 9090.
 
-## Optional: Meilisearch
+## Optional: OpenSearch
 
-Meilisearch provides fast full-text search for artifacts and metadata. Without it, search falls back to PostgreSQL full-text search, which works but is slower on large registries.
+OpenSearch provides fast full-text search for artifacts and metadata. Without it, search falls back to PostgreSQL full-text search, which works but is slower on large registries.
 
-1. Download the Windows binary from [meilisearch.com](https://www.meilisearch.com/docs/learn/getting_started/installation#local-installation).
+1. Download OpenSearch for Windows from [opensearch.org/downloads](https://opensearch.org/downloads.html). Version 2.19.x is recommended.
 
-2. Run it as a service using [NSSM](https://nssm.cc/):
+2. Extract the archive and run the installer, or use the zip distribution and start it as a Windows Service using [NSSM](https://nssm.cc/):
 
    ```powershell
-   nssm install Meilisearch "C:\Program Files\Meilisearch\meilisearch.exe"
-   nssm set Meilisearch AppParameters "--db-path C:\ProgramData\Meilisearch\data.ms"
-   nssm start Meilisearch
+   nssm install OpenSearch "C:\Program Files\OpenSearch\bin\opensearch.bat"
+   nssm set OpenSearch AppDirectory "C:\Program Files\OpenSearch"
+   nssm start OpenSearch
    ```
 
-3. Add the following to your Artifact Keeper `.env` file:
+3. Set the admin password on first start using the `opensearch-reset-password` tool, then add the following to your Artifact Keeper `.env` file:
 
    ```ini
-   MEILISEARCH_URL=http://localhost:7700
+   OPENSEARCH_URL=https://localhost:9200
+   OPENSEARCH_USERNAME=admin
+   OPENSEARCH_PASSWORD=your-admin-password
+   OPENSEARCH_ALLOW_INVALID_CERTS=true
    ```
+
+   Remove `OPENSEARCH_ALLOW_INVALID_CERTS=true` once you install a trusted TLS certificate for the OpenSearch node.
 
 4. Restart the Artifact Keeper service:
 

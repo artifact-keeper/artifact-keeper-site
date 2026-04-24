@@ -1,0 +1,149 @@
+---
+title: "Migrating from Meilisearch to OpenSearch (1.1 to 1.2)"
+description: "Operator guide for switching the search backend from Meilisearch to OpenSearch when upgrading to Artifact Keeper 1.2"
+---
+
+Artifact Keeper 1.2 replaces Meilisearch with OpenSearch as the search backend. The change is driven by OpenSearch's richer query DSL, broader ecosystem, and existing operational familiarity for teams running Elasticsearch-style clusters.
+
+No search data needs to be migrated. The backend rebuilds its indexes from PostgreSQL on first boot, so upgrading is purely a matter of swapping the service and updating environment variables.
+
+## What changed
+
+| | 1.1.x | 1.2.x |
+|---|---|---|
+| Image | `getmeili/meilisearch:v1.12` | `opensearchproject/opensearch:2.19.1` |
+| Port | `7700` | `9200` |
+| Health check | `/health` | `/_cluster/health` |
+| Env vars | `MEILISEARCH_URL`, `MEILISEARCH_API_KEY` | `OPENSEARCH_URL`, `OPENSEARCH_USERNAME`, `OPENSEARCH_PASSWORD`, `OPENSEARCH_ALLOW_INVALID_CERTS` |
+| Auth | Single master API key | Username and password (security plugin) |
+| Health field | `meilisearch` | `opensearch` |
+
+The old `MEILISEARCH_URL` and `MEILISEARCH_API_KEY` variables are no longer read. Leaving them set has no effect; remove them during the upgrade to avoid confusion.
+
+## Migration steps
+
+### 1. Stop the Meilisearch service
+
+Stop Meilisearch before bringing up OpenSearch, so the two do not contend for ports or volumes during the switch.
+
+**Docker Compose:**
+
+```bash
+docker compose stop meilisearch
+```
+
+**Kubernetes (Helm):**
+
+```bash
+kubectl scale deployment/<release>-meilisearch --replicas=0 -n <namespace>
+```
+
+You can delete the Meilisearch volume or PVC now or later. Search indexes are derived from PostgreSQL, so nothing in Meilisearch is authoritative.
+
+### 2. Deploy OpenSearch
+
+Choose the deployment path that matches your environment:
+
+- **Docker Compose:** The updated `docker-compose.yml` in the 1.2 release ships OpenSearch 2.19.1. See the [Docker Compose deployment guide](/docs/deployment/docker) for the full service list and volume layout.
+- **Kubernetes (Helm):** The 1.2 chart introduces a top-level `opensearch:` values block. See the [Helm chart deployment guide](/docs/deployment/helm) for the available parameters.
+- **AWS EC2:** The Packer AMI and Docker Compose snippet have been updated. See the [AWS deployment guide](/docs/deployment/aws).
+- **Windows Server:** The optional OpenSearch setup is documented in the [Windows Server guide](/docs/deployment/windows).
+
+On Linux hosts, raise `vm.max_map_count` to 262144 before starting OpenSearch. This is an OpenSearch bootstrap requirement:
+
+```bash
+sudo sysctl -w vm.max_map_count=262144
+```
+
+Add the same line to `/etc/sysctl.conf` to persist it across reboots.
+
+### 3. Set the new environment variables
+
+On the backend service, remove the old Meilisearch variables and add the OpenSearch variables:
+
+```bash
+# Remove
+# MEILISEARCH_URL=...
+# MEILISEARCH_API_KEY=...
+
+# Add
+OPENSEARCH_URL=https://opensearch:9200
+OPENSEARCH_USERNAME=admin
+OPENSEARCH_PASSWORD=your-opensearch-password
+# Only for self-signed dev clusters:
+# OPENSEARCH_ALLOW_INVALID_CERTS=true
+```
+
+For production, use a proper TLS certificate on the OpenSearch node and leave `OPENSEARCH_ALLOW_INVALID_CERTS` unset. For local Docker Compose development against the default OpenSearch demo certificates, set `OPENSEARCH_ALLOW_INVALID_CERTS=true`.
+
+See the [Environment Variables reference](/docs/reference/environment#search-opensearch) for the full variable table.
+
+### 4. Restart the backend
+
+Roll the backend so it picks up the new variables:
+
+**Docker Compose:**
+
+```bash
+docker compose up -d backend
+```
+
+**Kubernetes:**
+
+```bash
+kubectl rollout restart deployment/<release>-artifact-keeper-backend -n <namespace>
+```
+
+On startup, the backend detects that OpenSearch has no indexes and auto-reindexes from PostgreSQL. For small registries, this completes in seconds. For large registries (hundreds of thousands of artifacts), expect several minutes. The backend continues to serve uploads, downloads, and API requests during the rebuild; search queries return partial results until indexing completes.
+
+Watch progress in the backend logs:
+
+```bash
+docker compose logs -f backend | grep -i opensearch
+```
+
+### 5. Verify
+
+Check the health endpoint:
+
+```bash
+curl -s http://localhost:30080/health | jq '.checks.opensearch'
+```
+
+Expected output:
+
+```json
+{
+  "status": "healthy",
+  "message": null
+}
+```
+
+The previous `meilisearch` field is gone. Any monitoring, dashboards, or alerting that referenced `checks.meilisearch` needs to be updated to point at `checks.opensearch`.
+
+Run a search from the web UI or CLI to confirm indexing completed:
+
+```bash
+ak search my-package
+```
+
+## Rollback
+
+If you need to roll back to 1.1.x, revert the backend image tag and restore the Meilisearch service along with the old environment variables. No data migration is needed because the search indexes are derivable from PostgreSQL in both versions.
+
+## Troubleshooting
+
+**OpenSearch container fails to start with `vm.max_map_count` error**
+Raise the setting on the host as shown above. This is a one-time host config, not a container setting.
+
+**Backend logs show TLS errors against OpenSearch**
+Either install a trusted certificate on the OpenSearch node, or set `OPENSEARCH_ALLOW_INVALID_CERTS=true` for dev clusters using the default demo certificates.
+
+**Backend logs show 401 Unauthorized against OpenSearch**
+Verify `OPENSEARCH_USERNAME` and `OPENSEARCH_PASSWORD` match the credentials configured in OpenSearch. The default admin password rules changed in OpenSearch 2.12; if you are running 2.12 or later, ensure the password meets the complexity requirements.
+
+**`/health` still shows `meilisearch` after upgrade**
+The backend still has the old env var set or the old image is still running. Confirm the image tag is `1.2.x` or newer and that `MEILISEARCH_URL` is unset.
+
+**Search returns no results after upgrade**
+The reindex job may still be running. Check the backend logs for indexing progress messages. For very large registries, allow several minutes before reporting the reindex as stuck.
