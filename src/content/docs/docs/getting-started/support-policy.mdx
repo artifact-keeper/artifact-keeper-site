@@ -1,0 +1,34 @@
+---
+title: Support Policy
+description: Which Artifact Keeper versions are supported, what kind of fixes land where, and when versions reach end of life.
+---
+
+Artifact Keeper follows semantic versioning. We support the latest two minor versions. Security backports land on the previous minor; feature work targets the latest minor only.
+
+## Supported versions
+
+| Version | Status      | Support                                       |
+|---------|-------------|-----------------------------------------------|
+| 1.2.x   | Active      | Bug fixes, security patches, feature work     |
+| 1.1.x   | Maintenance | Security patches only, until v1.3.0 ships     |
+| &lt;= 1.0.x  | End of life | Upgrade required                              |
+
+## What this means in practice
+
+- **Active**: the line where new features land. All bug fixes and security patches go here first. This is where you should run production deployments.
+- **Maintenance**: receives security backports only. No new features, no functional bug fixes. When the next minor (v1.3.0) ships, this line moves to end of life and v1.2.x becomes the maintenance line.
+- **End of life**: no further fixes of any kind. Reported issues will be closed with a request to upgrade. Container images remain available on `ghcr.io` indefinitely so existing deployments are not broken, but no patches will be issued.
+
+Security backports for the maintenance line land on the `release/1.1.x` branch and are published as `1.1.x` patch releases (for example, `1.1.9`, `1.1.10`).
+
+## Cadence
+
+Minor versions ship roughly every 8 to 12 weeks. Patch releases ship as needed for critical bug fixes and security advisories, sometimes within hours of a CVE disclosure.
+
+## What "supported" means for SDKs
+
+Client SDKs (npm `@artifact-keeper/sdk`, Maven, PyPI, crates.io, SPM) are versioned in lock-step with the backend. SDK major.minor matches the backend major.minor it was generated against. A 1.2.x SDK is guaranteed to work against any 1.2.x backend; cross-minor compatibility (for example, 1.1.x SDK against 1.2.x backend) is not guaranteed but is usually maintained for read-only operations.
+
+## Reporting security issues
+
+Security issues should never be reported as public GitHub issues. See [SECURITY.md](https://github.com/artifact-keeper/artifact-keeper/blob/main/SECURITY.md) for the private disclosure channel.

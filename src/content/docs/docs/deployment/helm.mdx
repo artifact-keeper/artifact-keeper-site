@@ -5,6 +5,10 @@ description: "Deploy Artifact Keeper on Kubernetes using the official Helm chart
 
 import { Tabs, TabItem } from '@astrojs/starlight/components';
 
+:::caution[Upgrading from 1.1.x?]
+This page describes 1.2.x and later. The search backend changed from Meilisearch to OpenSearch. See the [migration guide](/docs/deployment/migration-meili-to-opensearch/) for env var changes, port changes, and rollout steps.
+:::
+
 :::caution[Example Configuration]
 The Helm chart, Terraform modules, ArgoCD configs, and monitoring stack are provided as **getting started templates**. They should be reviewed and modified to match your specific infrastructure requirements, security policies, and operational needs before use in production.
 :::

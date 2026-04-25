@@ -29,6 +29,7 @@ export default defineConfig({
             { label: 'Quickstart', slug: 'docs/getting-started/quickstart' },
             { label: 'Installation', slug: 'docs/getting-started/installation' },
             { label: 'Configuration', slug: 'docs/getting-started/configuration' },
+            { label: 'Support Policy', slug: 'docs/getting-started/support-policy' },
           ],
         },
         {
@@ -130,6 +131,12 @@ export default defineConfig({
             { label: 'Environment Variables', slug: 'docs/reference/environment' },
             { label: 'CI/CD Integration', slug: 'docs/guides/ci-cd' },
             { label: 'UI Gallery', slug: 'docs/ui-gallery' },
+          ],
+        },
+        {
+          label: 'Release Notes',
+          items: [
+            { label: 'v1.2.0', slug: 'docs/release-notes/v1-2-0' },
           ],
         },
       ],
