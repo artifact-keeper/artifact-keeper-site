@@ -11,7 +11,7 @@ Artifact Keeper exposes multiple health check endpoints, each designed for a spe
 |----------|---------|------------------|-----------------|
 | `/livez` | Liveness probe | None (if Axum routes the request, the process is alive) | Kubernetes `livenessProbe` |
 | `/readyz` | Readiness probe | Database connectivity, migrations, setup completion | Kubernetes `readinessProbe` and `startupProbe` |
-| `/health` | Full health dashboard | Database, Trivy, Meilisearch, OpenSCAP, Dependency-Track, storage backend, DB pool stats | Monitoring dashboards, alerting |
+| `/health` | Full health dashboard | Database, Trivy, OpenSearch, OpenSCAP, Dependency-Track, storage backend, DB pool stats | Monitoring dashboards, alerting |
 | `/healthz` | Alias for `/health` | Same as `/health` | Monitoring dashboards |
 | `/ready` | Legacy alias for `/readyz` | Same as `/readyz` | Backward compatibility |
 
@@ -65,7 +65,7 @@ Performs a comprehensive check of every dependent service and includes database 
 
 - **Database** -- connection and query execution
 - **Trivy** -- vulnerability scanner reachability
-- **Meilisearch** -- search engine reachability
+- **OpenSearch** -- search engine reachability (`/_cluster/health`)
 - **OpenSCAP** -- compliance scanner reachability
 - **Dependency-Track** -- SBOM analysis platform reachability
 - **Storage backend** -- active read/write probe (see [Storage Health Check Details](#storage-health-check-details))
@@ -74,7 +74,7 @@ Performs a comprehensive check of every dependent service and includes database 
 Returns `200 OK` when all services are healthy, or `503 Service Unavailable` when any service is degraded.
 
 :::caution
-Do not use `/health` as a Kubernetes liveness probe. If an external service like Trivy or Meilisearch goes down, the `/health` endpoint returns 503, which would cause Kubernetes to restart your backend pods -- even though the backend itself is functioning correctly. This creates cascading failures. Use `/livez` for liveness instead.
+Do not use `/health` as a Kubernetes liveness probe. If an external service like Trivy or OpenSearch goes down, the `/health` endpoint returns 503, which would cause Kubernetes to restart your backend pods, even though the backend itself is functioning correctly. This creates cascading failures. Use `/livez` for liveness instead.
 :::
 
 ## Response Examples
@@ -135,7 +135,7 @@ curl -s http://localhost:8080/health | jq .
       "status": "healthy",
       "message": null
     },
-    "meilisearch": {
+    "opensearch": {
       "status": "healthy",
       "message": null
     },
@@ -197,7 +197,7 @@ containers:
 
 **`startupProbe` uses `/readyz`** -- During startup, the server needs time to connect to PostgreSQL and run migrations. The startup probe gives it up to 150 seconds (5s period x 30 failures) before Kubernetes considers the container failed. Once the startup probe succeeds, the liveness and readiness probes take over.
 
-**`livenessProbe` uses `/livez`** -- The liveness probe answers one question: is the process still running and able to handle HTTP requests? By using `/livez`, which has zero external dependencies, you avoid cascading restarts when a downstream service (database, Trivy, Meilisearch) is temporarily unavailable. Kubernetes only restarts the pod if the backend process itself is hung or crashed.
+**`livenessProbe` uses `/livez`** -- The liveness probe answers one question: is the process still running and able to handle HTTP requests? By using `/livez`, which has zero external dependencies, you avoid cascading restarts when a downstream service (database, Trivy, OpenSearch) is temporarily unavailable. Kubernetes only restarts the pod if the backend process itself is hung or crashed.
 
 **`readinessProbe` uses `/readyz`** -- The readiness probe controls whether the pod receives traffic. If the database becomes unreachable or migrations are pending after a rolling update, `/readyz` returns 503 and Kubernetes removes the pod from the Service endpoints. Traffic shifts to healthy pods without restarting anything.
 
@@ -311,7 +311,7 @@ The storage health check performs real I/O operations. Common causes of failure:
 
 ### `/health` showing unhealthy external services
 
-External service checks (Trivy, Meilisearch, OpenSCAP, Dependency-Track) report unhealthy when the service is unreachable or not responding.
+External service checks (Trivy, OpenSearch, OpenSCAP, Dependency-Track) report unhealthy when the service is unreachable or not responding.
 
 :::tip
 External service failures do not affect `/livez` or `/readyz`. The backend continues to serve artifacts and API requests normally -- only features that depend on the specific service (vulnerability scanning, full-text search, compliance checks) are degraded.
@@ -323,9 +323,9 @@ To diagnose:
   ```bash
   curl -s http://localhost:8090/healthz
   ```
-- **Meilisearch unhealthy** -- Verify `MEILISEARCH_URL` and check if the Meilisearch process is running:
+- **OpenSearch unhealthy** -- Verify `OPENSEARCH_URL` and check if the OpenSearch process is running:
   ```bash
-  curl -s http://localhost:7700/health
+  curl -s -u admin:admin -k https://localhost:9200/_cluster/health
   ```
 - **OpenSCAP unhealthy** -- Verify the OpenSCAP service is running on port 8091
 - **Dependency-Track unhealthy** -- Verify Dependency-Track is running on port 8092

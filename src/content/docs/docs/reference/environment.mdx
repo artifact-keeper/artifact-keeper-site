@@ -279,14 +279,16 @@ Read by the **backend** process.
 | `CACHE_TTL_SECONDS` | No | `3600` | Cache TTL (1 hour) |
 | `CACHE_SIZE_MB` | No | `1024` | Cache size (1 GB) |
 
-## Search (Meilisearch)
+## Search (OpenSearch)
 
-Search is powered by [Meilisearch](https://www.meilisearch.com/). When `MEILISEARCH_URL` is set, the backend indexes artifacts for full-text search. Read by the **backend** process.
+Search is powered by [OpenSearch](https://opensearch.org/). When `OPENSEARCH_URL` is set, the backend indexes artifacts for full-text search. On first boot the backend auto-reindexes from PostgreSQL, so no data migration step is required. Read by the **backend** process.
 
 | Variable | Required | Default | Description |
 |----------|----------|---------|-------------|
-| `MEILISEARCH_URL` | No | - | Meilisearch server URL (e.g., `http://meilisearch:7700`). Search is disabled when unset. |
-| `MEILISEARCH_API_KEY` | No | - | Meilisearch master key for authentication |
+| `OPENSEARCH_URL` | No | - | OpenSearch server URL (e.g., `https://opensearch:9200`). Search is disabled when unset. |
+| `OPENSEARCH_USERNAME` | No | - | OpenSearch username (required when the security plugin is enabled, which is the default) |
+| `OPENSEARCH_PASSWORD` | No | - | OpenSearch password |
+| `OPENSEARCH_ALLOW_INVALID_CERTS` | No | `false` | Skip TLS certificate verification. Only set to `true` for self-signed dev clusters. |
 
 ## CORS
 

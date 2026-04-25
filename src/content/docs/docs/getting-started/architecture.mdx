@@ -14,7 +14,7 @@ graph LR
     Backend["Backend<br/>Rust · Axum<br/>45+ format handlers"]
     DB[(PostgreSQL 16)]
     Storage["Storage<br/>Filesystem / S3"]
-    Meili["Meilisearch<br/>Full-text search"]
+    Search["OpenSearch<br/>Full-text search"]
     Trivy["Trivy<br/>Container & FS scanning"]
     Grype["Grype<br/>Dependency scanning"]
     Peer1["Peer Instance"]
@@ -25,7 +25,7 @@ graph LR
     Frontend --> Backend
     Backend --> DB
     Backend --> Storage
-    Backend --> Meili
+    Backend --> Search
     Backend --> Trivy
     Backend --> Grype
     Backend <-->|Borg Replication| Peer1
@@ -40,10 +40,10 @@ graph LR
 | **Backend** (Rust/Axum) | API server, format handlers, business logic | Yes |
 | **PostgreSQL 16** | Metadata, users, scan results, configuration | Yes |
 | **Frontend** (React 19) | Web UI served via Nginx | Optional (API-first) |
-| **Meilisearch** | Full-text search across artifacts and repos | Optional |
+| **OpenSearch** | Full-text search across artifacts and repos | Optional |
 | **Trivy** | Vulnerability scanning for uploaded artifacts | Optional |
 
-Meilisearch, Trivy, and Grype degrade gracefully — the system works without them, just without search or scanning.
+OpenSearch, Trivy, and Grype degrade gracefully. The system works without them, just without search or scanning.
 
 ## Backend Layers
 
@@ -86,7 +86,7 @@ flowchart TD
         direction LR
         PG[(PostgreSQL)]
         FS["Storage<br/>FS / S3"]
-        MS["Meilisearch"]
+        MS["OpenSearch"]
         SC["Trivy / Grype"]
     end
 
@@ -111,7 +111,7 @@ Services contain the business logic. They are injected into handlers via Axum's 
 | `RepositoryService` | CRUD, virtual repo resolution, proxy upstream |
 | `AuthService` | JWT validation, password hashing, token refresh |
 | `ScannerService` | Orchestrates Trivy and Grype, aggregates findings |
-| `MeiliService` | Index management, search queries |
+| `OpenSearchService` | Index management, search queries |
 | `WasmPluginService` | Plugin install, enable, disable, hot reload |
 | `PeerService` | Peer registration, replication coordination |
 | `MigrationService` | Artifactory import orchestration |
@@ -258,7 +258,7 @@ flowchart LR
 | Database | **PostgreSQL 16** | JSONB for flexible metadata, mature tooling, compile-time checked queries via SQLx |
 | Frontend | **React 19 + TypeScript** | Component model, widespread ecosystem, type safety |
 | UI library | **Ant Design 6** | Enterprise-grade components (tables, forms, modals) out of the box |
-| Search | **Meilisearch** | Sub-50ms full-text search, simple to operate, typo tolerance |
+| Search | **OpenSearch** | Mature, Apache 2.0 fork of Elasticsearch, rich query DSL, production-proven at scale |
 | Security scanning | **Trivy + Grype** | Complementary coverage (filesystem + dependency), industry standard, free |
 | Plugin runtime | **Wasmtime** | Sandboxed execution, WIT contracts, broad language support |
 | Storage | **Filesystem / S3** | Simple default for single-node, S3 for cloud-native deployments |

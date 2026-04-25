@@ -21,7 +21,7 @@ The included `docker-compose.yml` provides a complete setup:
 | **Web UI** | `ghcr.io/artifact-keeper/artifact-keeper-web` | `artifactkeeper/web` | Next.js frontend |
 | **Caddy** | `caddy:2-alpine` | | Reverse proxy with automatic TLS |
 | **PostgreSQL** | `postgres:16-alpine` | | Metadata database |
-| **Meilisearch** | `getmeili/meilisearch:v1.12` | | Full-text search |
+| **OpenSearch** | `opensearchproject/opensearch:2.19.1` | | Full-text search |
 | **Trivy** | `aquasec/trivy:latest` | | Vulnerability scanning |
 
 > If your organization blocks ghcr.io, use the Docker Hub images instead. Same tags, same content.
@@ -35,7 +35,7 @@ docker compose up -d
 **Default Ports**:
 - Web UI + API: `http://localhost:30080` (HTTP) / `https://localhost:30443` (HTTPS)
 - PostgreSQL: `localhost:30432`
-- Meilisearch: `localhost:7700`
+- OpenSearch: `localhost:9200`
 
 **First-boot setup**: A random admin password is written to `/data/storage/admin.password` inside the container. The API is locked until you change it. Run `docker exec artifact-keeper-backend cat /data/storage/admin.password && echo` to retrieve it. Set `ADMIN_PASSWORD` in your `.env` to skip the setup lock.
 

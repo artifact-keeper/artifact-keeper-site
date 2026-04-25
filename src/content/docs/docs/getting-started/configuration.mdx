@@ -90,10 +90,12 @@ services:
 
 | Variable | Required | Default | Description |
 |----------|----------|---------|-------------|
-| `MEILISEARCH_URL` | No | - | MeiliSearch server URL for full-text search (e.g., `http://meilisearch:7700`) |
-| `MEILISEARCH_API_KEY` | No | - | MeiliSearch API key (optional, for protected instances) |
+| `OPENSEARCH_URL` | No | - | OpenSearch server URL for full-text search (e.g., `http://opensearch:9200`) |
+| `OPENSEARCH_USERNAME` | No | - | OpenSearch username (required for the default security plugin) |
+| `OPENSEARCH_PASSWORD` | No | - | OpenSearch password |
+| `OPENSEARCH_ALLOW_INVALID_CERTS` | No | `false` | Skip TLS certificate verification. Only set to `true` for self-signed dev clusters. |
 
-When configured, enables fast full-text search across all artifacts, repositories, and metadata.
+When configured, enables fast full-text search across all artifacts, repositories, and metadata. On first boot the backend auto-reindexes from PostgreSQL, so no data migration step is required.
 
 ## Example Configurations
 
@@ -132,8 +134,9 @@ TRIVY_URL=http://trivy.internal:8080
 SCAN_WORKSPACE_PATH=/var/lib/artifact-keeper/scan-workspace
 
 # Search
-MEILISEARCH_URL=http://meilisearch.internal:7700
-MEILISEARCH_API_KEY=your-meilisearch-master-key
+OPENSEARCH_URL=https://opensearch.internal:9200
+OPENSEARCH_USERNAME=admin
+OPENSEARCH_PASSWORD=your-opensearch-password
 ```
 
 ### Production Configuration (Self-Hosted)
@@ -175,7 +178,10 @@ services:
       - AWS_ACCESS_KEY_ID=minioadmin
       - AWS_SECRET_ACCESS_KEY=minioadmin
       - TRIVY_URL=http://trivy:8080
-      - MEILISEARCH_URL=http://meilisearch:7700
+      - OPENSEARCH_URL=http://opensearch:9200
+      - OPENSEARCH_USERNAME=admin
+      - OPENSEARCH_PASSWORD=admin
+      - OPENSEARCH_ALLOW_INVALID_CERTS=true
 ```
 
 ## Configuration Validation

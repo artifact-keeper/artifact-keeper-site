@@ -33,7 +33,7 @@ graph TD
             subgraph DATA_SERVICES["Data Services"]
                 direction LR
                 PG["🐘 PostgreSQL 16\n:5432"]
-                MS["🔍 Meilisearch\n:7700"]
+                MS["🔍 OpenSearch\n:9200"]
                 TV["🛡️ Trivy\n:8090"]
             end
 
@@ -46,7 +46,7 @@ graph TD
         subgraph EBS["💾 EBS gp3 Volume · /data/"]
             direction LR
             PG_DATA["postgres/"]
-            MS_DATA["meilisearch/"]
+            MS_DATA["opensearch/"]
             STORAGE["storage/"]
             TV_CACHE["trivy-cache/"]
         end
@@ -131,9 +131,9 @@ Output:
 
 Access URL: http://<PUBLIC_IP>
 
-Database Password:  <generated>
-Meilisearch Key:    <generated>
-JWT Secret:         <generated>
+Database Password:    <generated>
+OpenSearch Password:  <generated>
+JWT Secret:           <generated>
 
 Docker Compose Dir: /opt/artifact-keeper
 
