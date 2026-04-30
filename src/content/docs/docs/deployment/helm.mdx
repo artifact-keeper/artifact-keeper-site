@@ -5,8 +5,12 @@ description: "Deploy Artifact Keeper on Kubernetes using the official Helm chart
 
 import { Tabs, TabItem } from '@astrojs/starlight/components';
 
-:::caution[Upgrading from 1.1.x?]
-This page describes 1.2.x and later. The search backend changed from Meilisearch to OpenSearch. See the [migration guide](/docs/deployment/migration-meili-to-opensearch/) for env var changes, port changes, and rollout steps.
+:::caution[v1.1.x to v1.2.0 search backend transition]
+This page describes the v1.2.0 layout. **v1.2.0 is not yet released**; the latest stable line is v1.1.x, which uses Meilisearch. The OpenSearch service, ports, and env vars shown below apply only when you run a v1.2.0 build (currently `main` and pre-releases).
+
+If you are deploying current stable (v1.1.x), substitute the Meilisearch service from the v1.1.x chart values and ignore the OpenSearch parameters.
+
+See the [v1.2.0 CHANGELOG entry](https://github.com/artifact-keeper/artifact-keeper/blob/main/CHANGELOG.md), [issue #830](https://github.com/artifact-keeper/artifact-keeper/issues/830), and the [migration guide](/docs/deployment/migration-meili-to-opensearch/) for env var changes, port changes, and rollout steps.
 :::
 
 :::caution[Example Configuration]
