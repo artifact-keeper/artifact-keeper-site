@@ -198,13 +198,17 @@ Use the HTTP API to publish your module:
 git archive --format=zip --prefix=mymodule@v1.0.0/ v1.0.0 -o mymodule-v1.0.0.zip
 
 # Upload to Artifact Keeper
-curl -X POST \
+curl -X PUT \
   -H "Authorization: Bearer your-auth-token" \
   -F "file=@mymodule-v1.0.0.zip" \
-  -F "format=go" \
-  -F "name=github.com/yourcompany/mymodule" \
-  -F "version=v1.0.0" \
-  https://registry.example.com/api/artifacts
+  https://registry.example.com/go/{repository-name}/github.com/yourcompany/mymodule/@v/v1.0.0.zip
+
+# Upload go.mod to Artifact Keeper
+cat go.mod | curl -X PUT \
+  -H "Authorization: Bearer your-auth-token" \
+  -H "Content-Type: text/plain" \
+  --data-binary @-
+  https://registry.example.com/go/{repository-name}/github.com/yourcompany/mymodule/@v/v1.0.0.mod
 ```
 
 ### Automated Publishing Script
@@ -217,6 +221,7 @@ MODULE_NAME="github.com/yourcompany/mymodule"
 VERSION=${1:-$(git describe --tags --abbrev=0)}
 REGISTRY="https://registry.example.com"
 TOKEN="${ARTIFACT_KEEPER_TOKEN}"
+REPOSITORY="your-go-repository"
 
 echo "Publishing ${MODULE_NAME}@${VERSION} to ${REGISTRY}"
 
@@ -224,18 +229,51 @@ echo "Publishing ${MODULE_NAME}@${VERSION} to ${REGISTRY}"
 git archive --format=zip --prefix="${MODULE_NAME}@${VERSION}/" "${VERSION}" -o "/tmp/${MODULE_NAME##*/}-${VERSION}.zip"
 
 # Upload to registry
-curl -X POST \
+curl -X PUT \
   -H "Authorization: Bearer ${TOKEN}" \
   -F "file=@/tmp/${MODULE_NAME##*/}-${VERSION}.zip" \
-  -F "format=go" \
-  -F "name=${MODULE_NAME}" \
-  -F "version=${VERSION}" \
-  "${REGISTRY}/api/artifacts"
+  "${REGISTRY}/go/${REPOSITORY}"/${MODULE_NAME}/@v/${VERSION}.zip
+
+# Go Mod content also required
+cat go.mod | curl -X PUT \
+  --url "${REGISTRY}/go/${REPOSITORY}"/${MODULE_NAME}/@v/${VERSION}.mod
+  -H "Authorization: Bearer ${TOKEN}" \
+  -H "Content-Type: text/plain" \
+  --data-binary @-
 
 # Cleanup
 rm "/tmp/${MODULE_NAME##*/}-${VERSION}.zip"
 
 echo "Successfully published ${MODULE_NAME}@${VERSION}"
+```
+
+Makefile
+```
+REGISTRY = https://registry.example.com
+REPOSITORY = go-private
+MODULE_NAME = github.com/yourcompany/mymodule
+VERSION = v0.0.6
+REF = branch-or-tag
+TOKEN = your-secret
+
+packaging:
+	git archive --format=zip --prefix="$(MODULE_NAME)@$(VERSION)/" "$(REF)" -o "module.zip"
+
+publish:
+	curl --trace - -X PUT \
+		-H "Authorization: Bearer $(TOKEN)" \
+        -F "file=@module.zip" \
+        $(REGISTRY)/go/$(REPOSITORY)/$(MODULE_NAME)/@v/$(VERSION).zip
+	cat go.mod | curl -X PUT \
+        --header "Authorization: Bearer $(TOKEN)" \
+        --header "Content-Type: text/plain" \
+        --data-binary @- \
+		$(REGISTRY)/go/$(REPOSITORY)/$(MODULE_NAME)/@v/$(VERSION).mod
+
+release:
+	make packaging
+	make publish
+	rm -rf module.zip
 ```
 
 ## Private Modules Workflow
