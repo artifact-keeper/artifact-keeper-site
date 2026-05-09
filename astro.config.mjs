@@ -99,7 +99,12 @@ export default defineConfig({
             { label: 'Peer Replication', slug: 'docs/advanced/edge-nodes' },
             { label: 'WASM Plugins', slug: 'docs/advanced/plugins' },
             { label: 'Lifecycle Policies', slug: 'docs/advanced/lifecycle' },
-            { label: 'Webhooks', slug: 'docs/advanced/webhooks' },
+            { label: 'Webhooks', items: [
+              { label: 'Overview', slug: 'docs/advanced/webhooks' },
+              { label: 'Receiver: Python', slug: 'docs/advanced/webhook-receivers/python' },
+              { label: 'Receiver: Node', slug: 'docs/advanced/webhook-receivers/node' },
+              { label: 'Receiver: Go', slug: 'docs/advanced/webhook-receivers/go' },
+            ]},
             { label: 'Backup & Recovery', slug: 'docs/advanced/backup' },
           ],
         },
