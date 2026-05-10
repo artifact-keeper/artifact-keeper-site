@@ -1,24 +1,147 @@
 ---
 title: "Webhooks"
-description: "Event-driven notifications for artifact lifecycle events"
+description: "Event-driven notifications for artifact lifecycle events, with HMAC-signed deliveries, replay protection, and a documented retry schedule."
 ---
 
-Webhooks enable real-time notifications when events occur in your artifact registry, allowing integration with CI/CD pipelines, monitoring systems, and custom workflows.
+## Overview
 
-## Webhook Events
+Webhooks deliver event-driven HTTP callbacks from Artifact Keeper to a receiver you operate, so you can integrate the registry with CI/CD pipelines, alerting systems, audit logs, and custom workflows. Every delivery carries an HMAC-SHA256 signature, a timestamp for replay protection, and a unique delivery UUID for idempotent processing. The wire contract documented on this page is pinned to event schema version `2026-04-01` and is stable across the v1.2.x line.
 
-Artifact Keeper emits webhooks for these event types:
+## Wire contract
+
+Every delivery is an HTTP POST with `Content-Type: application/json` and a JSON-encoded event payload as the raw body. Artifact Keeper sets the headers below on every delivery, including the test endpoint, retry attempts, and manual redeliveries.
+
+| Header | Value |
+|---|---|
+| `Content-Type` | `application/json` |
+| `X-ArtifactKeeper-Delivery` | UUID. Idempotency key, identical across retries of the same delivery. |
+| `X-ArtifactKeeper-Event` | Event type, for example `artifact.uploaded`. |
+| `X-ArtifactKeeper-Event-Version` | Pinned schema version, currently `2026-04-01`. |
+| `X-ArtifactKeeper-Retry-Attempt` | 1-indexed attempt number. Set only on retries; absent on the first attempt. |
+| `X-ArtifactKeeper-Signature` | `t=<unix_secs>,v1=<hex_hmac_sha256>`. Multi-value during a 24h rotation overlap, for example `t=...,v1=<new>,v1=<old>`. |
+
+A typical request looks like this:
+
+```http
+POST /webhook HTTP/1.1
+Host: receiver.example.com
+Content-Type: application/json
+X-ArtifactKeeper-Delivery: 7f3a9e2d-4b1c-4a2e-9c1f-2d3e4f5a6b7c
+X-ArtifactKeeper-Event: artifact.uploaded
+X-ArtifactKeeper-Event-Version: 2026-04-01
+X-ArtifactKeeper-Signature: t=1714492800,v1=5d7e8f9a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e
+
+{"event":"artifact.uploaded","timestamp":"2026-04-30T12:00:00Z","data":{...}}
+```
+
+## Signature verification
+
+The signed input is the literal byte sequence `<unix_secs>.<raw_body>`, where `<unix_secs>` is the value of `t=` from the signature header and `<raw_body>` is the bytes of the request body before any framework parsing. The signature is the lowercase hex of `HMAC_SHA256(secret, signed_input)`.
+
+To verify a delivery, a receiver does the following, in this order:
+
+1. Read the raw bytes of the request body BEFORE invoking any JSON parser. The bytes signed and the bytes verified must match exactly.
+2. Parse the `X-ArtifactKeeper-Signature` header into one `t=` value and one or more `v1=` values.
+3. Reject the request if `|now - t| > 300` seconds (the 5 minute replay window). Reject in both directions, past and future.
+4. Recompute the HMAC over `f"{t}.".encode() + raw_body` with your stored secret.
+5. Compare the recomputed hex digest against every `v1=` token using a constant-time comparison (`hmac.compare_digest`, `crypto.timingSafeEqual`, `hmac.Equal`). Accept on any match.
+6. Use `X-ArtifactKeeper-Delivery` as an idempotency key in receiver storage so retries of the same delivery do not double-process.
+
+Working samples in three languages:
+
+- [Receiver: Python (Flask)](/docs/advanced/webhook-receivers/python/)
+- [Receiver: Node (Express)](/docs/advanced/webhook-receivers/node/)
+- [Receiver: Go (net/http)](/docs/advanced/webhook-receivers/go/)
+
+## Retry policy
+
+If a delivery returns a non-2xx response or times out (30 second per-attempt timeout), Artifact Keeper retries on this jittered exponential schedule. Each interval is randomized by plus or minus 20 percent to avoid synchronized retry storms.
+
+| Attempt | Delay after previous attempt |
+|---|---|
+| 2 | 30s |
+| 3 | 1m |
+| 4 | 2m |
+| 5 | 5m |
+| 6 | 10m |
+| 7 | 30m |
+| 8 | 1h |
+| 9 | 2h |
+| 10 | 4h |
+| 11 | 8h |
+| 12 | 16h |
+| 13 (final) | 24h |
+
+After the 12th failed retry (13 total attempts including the initial delivery), the webhook is automatically disabled. Artifact Keeper writes the failure reason to the `disabled_reason` field on the webhook record and increments the `ak_webhook_dead_letter_total{event}` Prometheus counter. No further deliveries are attempted until the webhook is re-enabled.
+
+To re-enable a disabled webhook, set `is_enabled` to `true` via the API or toggle the switch in Settings > Webhooks:
+
+```bash
+curl -X PUT https://registry.example.com/api/v1/webhooks/$WEBHOOK_ID \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"is_enabled": true}'
+```
+
+A failed delivery can also be manually re-driven through the deliveries endpoint, which re-emits the original payload with a fresh `X-ArtifactKeeper-Retry-Attempt` header and the same `X-ArtifactKeeper-Delivery` UUID:
+
+```bash
+curl -X POST https://registry.example.com/api/v1/webhooks/$WEBHOOK_ID/deliveries/$DELIVERY_ID/redeliver \
+  -H "Authorization: Bearer $TOKEN"
+```
+
+## Secret rotation
+
+Rotate a webhook's signing secret without downtime by calling the rotate endpoint:
+
+```bash
+curl -X POST https://registry.example.com/api/v1/webhooks/$WEBHOOK_ID/rotate-secret \
+  -H "Authorization: Bearer $TOKEN"
+```
+
+The response returns the new secret value exactly once. Subsequent `GET /api/v1/webhooks/{id}` responses expose only `secret_digest` (a hash), never the secret itself, so capture and store the new value on the spot.
+
+For 24 hours after rotation, every delivery carries two `v1=` tokens in the signature header: one computed with the new secret, one with the previous secret. A correctly written verifier iterates every `v1=` token and accepts the request if either matches. After 24 hours the overlap window ends and only the new secret is used.
+
+```
+X-ArtifactKeeper-Signature: t=1714492800,v1=<new-hmac>,v1=<old-hmac>
+```
+
+If you write a custom verifier (instead of using one of the language samples linked above), do NOT short-circuit on the first `v1=` token. Iterate every token.
+
+## Event schema versions
+
+Each webhook pins an event schema version at creation time. The version is set via the `event_schema_version` field on `POST /api/v1/webhooks` and `PUT /api/v1/webhooks/{id}`, and is returned on `GET` and `LIST`. The current default is `2026-04-01`.
+
+Future schema revisions will be additive (new fields, new optional events) and date-stamped, so receivers that ignore unknown fields stay compatible across versions. A webhook configured with an unsupported `event_schema_version` returns HTTP 400 on create and update.
+
+```json
+{
+  "url": "https://receiver.example.com/webhook",
+  "events": ["artifact.uploaded", "scan.completed"],
+  "event_schema_version": "2026-04-01",
+  "is_enabled": true
+}
+```
+
+## Deprecation: legacy header set
+
+v1.2.0 emits both the new `X-ArtifactKeeper-*` header set documented above and the legacy `X-Webhook-*` header set from v1.1.x, so existing receivers keep working through the upgrade. The legacy headers are removed in v1.3.0. Migrate any receiver still reading `X-Webhook-Signature`, `X-Webhook-Event`, or `X-Webhook-Delivery` to the new headers before upgrading to v1.3.0.
+
+The legacy `X-Webhook-Signature` format was `sha256=<hex>` and did not include a timestamp or replay protection. The new `X-ArtifactKeeper-Signature` includes both, so receivers will need to update their verifier (not just the header name) when migrating. The receiver samples linked above implement the new format.
+
+## Event payload
+
+The body of every delivery is a JSON object with `event`, `timestamp`, and `data` fields. The shape of `data` is determined by the event type and is pinned to the webhook's `event_schema_version`. The canonical schema version for the examples below is `2026-04-01`.
 
 ### artifact.uploaded
 
 Triggered when a new artifact is successfully uploaded.
 
-Payload example:
-
 ```json
 {
   "event": "artifact.uploaded",
-  "timestamp": "2026-02-01T12:34:56Z",
+  "timestamp": "2026-04-30T12:34:56Z",
   "data": {
     "artifact_id": "artifact-123",
     "repository_id": "repo-456",
@@ -40,12 +163,10 @@ Payload example:
 
 Triggered when an artifact is downloaded.
 
-Payload example:
-
 ```json
 {
   "event": "artifact.downloaded",
-  "timestamp": "2026-02-01T12:35:00Z",
+  "timestamp": "2026-04-30T12:35:00Z",
   "data": {
     "artifact_id": "artifact-123",
     "repository_name": "my-maven-repo",
@@ -64,12 +185,10 @@ Payload example:
 
 Triggered when an artifact is deleted.
 
-Payload example:
-
 ```json
 {
   "event": "artifact.deleted",
-  "timestamp": "2026-02-01T12:36:00Z",
+  "timestamp": "2026-04-30T12:36:00Z",
   "data": {
     "artifact_id": "artifact-123",
     "repository_name": "my-maven-repo",
@@ -87,12 +206,10 @@ Payload example:
 
 Triggered when a security scan completes.
 
-Payload example:
-
 ```json
 {
   "event": "scan.completed",
-  "timestamp": "2026-02-01T12:37:00Z",
+  "timestamp": "2026-04-30T12:37:00Z",
   "data": {
     "scan_id": "scan-456",
     "artifact_id": "artifact-123",
@@ -111,469 +228,37 @@ Payload example:
 }
 ```
 
-### repository.created
+### Other events
 
-Triggered when a new repository is created.
+The following events are emitted with a `data` object specific to each type. See `GET /api/v1/openapi.json` for the full schema.
 
-### repository.deleted
-
-Triggered when a repository is deleted.
-
-### user.created
-
-Triggered when a new user is created.
-
-### policy.violated
-
-Triggered when a security policy is violated (e.g., vulnerable artifact upload blocked).
-
-## Creating Webhooks
-
-### Via API
-
-```bash
-curl -X POST https://registry.example.com/api/v1/webhooks \
-  -H "Authorization: Bearer $ADMIN_TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "url": "https://your-service.example.com/webhook",
-    "events": ["artifact.uploaded", "scan.completed"],
-    "description": "Notify CI/CD pipeline",
-    "secret": "your-webhook-secret",
-    "active": true,
-    "filters": {
-      "repository_id": "repo-456"
-    }
-  }'
-```
-
-Response:
-
-```json
-{
-  "id": "webhook-789",
-  "url": "https://your-service.example.com/webhook",
-  "events": ["artifact.uploaded", "scan.completed"],
-  "secret": "your-webhook-secret",
-  "active": true,
-  "created_at": "2026-02-01T12:00:00Z"
-}
-```
-
-### Via Web UI
-
-1. Navigate to Settings > Webhooks
-2. Click "Create Webhook"
-3. Enter webhook URL and select events
-4. Configure filters (optional)
-5. Save webhook
-
-## Webhook Configuration
-
-### URL
-
-The endpoint that will receive POST requests with event payloads.
-
-Requirements:
-- Must be HTTPS in production
-- Must return 2xx status code within 30 seconds
-- Should be idempotent (may receive duplicate events)
-
-### Events
-
-Select which events trigger this webhook:
-
-```json
-{
-  "events": [
-    "artifact.uploaded",
-    "artifact.downloaded",
-    "artifact.deleted",
-    "scan.completed",
-    "repository.created",
-    "policy.violated"
-  ]
-}
-```
-
-Use `"events": ["*"]` to subscribe to all events.
-
-### Secret
-
-Optional shared secret for verifying webhook authenticity:
-
-```json
-{
-  "secret": "your-webhook-secret"
-}
-```
-
-Artifact Keeper includes an HMAC-SHA256 signature in the `X-Webhook-Signature` header:
-
-```text
-X-Webhook-Signature: sha256=5d7e8f9a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e
-```
-
-Verify in your webhook handler:
-
-```python
-import hmac
-import hashlib
-
-def verify_signature(payload, signature, secret):
-    expected = 'sha256=' + hmac.new(
-        secret.encode(),
-        payload.encode(),
-        hashlib.sha256
-    ).hexdigest()
-    return hmac.compare_digest(expected, signature)
-```
-
-### Filters
-
-Limit webhooks to specific conditions:
-
-```json
-{
-  "filters": {
-    "repository_id": "repo-456",
-    "format": "docker",
-    "severity": ["critical", "high"]
-  }
-}
-```
-
-Available filters:
-- `repository_id`: Specific repository
-- `format`: Package format (docker, maven, npm, etc.)
-- `severity`: For scan.completed events
-- `user_id`: Specific user actions
-
-## Webhook Delivery
-
-### Request Format
-
-Webhooks are sent as HTTP POST requests:
-
-```http
-POST /webhook HTTP/1.1
-Host: your-service.example.com
-Content-Type: application/json
-X-Webhook-ID: webhook-789
-X-Webhook-Event: artifact.uploaded
-X-Webhook-Signature: sha256=5d7e8f9a...
-X-Webhook-Delivery: delivery-123
-
-{
-  "event": "artifact.uploaded",
-  "timestamp": "2026-02-01T12:34:56Z",
-  "data": { ... }
-}
-```
-
-### Headers
-
-- `Content-Type`: Always `application/json`
-- `X-Webhook-ID`: Webhook configuration ID
-- `X-Webhook-Event`: Event type
-- `X-Webhook-Signature`: HMAC signature (if secret configured)
-- `X-Webhook-Delivery`: Unique delivery attempt ID
-- `User-Agent`: `Artifact-Keeper-Webhook/1.0`
-
-### Response Handling
-
-Your webhook endpoint should:
-
-- Return 2xx status code for success
-- Return quickly (< 30 seconds)
-- Handle duplicate deliveries idempotently
-
-Example handler:
-
-```javascript
-app.post('/webhook', express.json(), (req, res) => {
-  // Verify signature
-  const signature = req.headers['x-webhook-signature'];
-  if (!verifySignature(req.body, signature, SECRET)) {
-    return res.status(401).send('Invalid signature');
-  }
-
-  // Process event
-  const { event, data } = req.body;
-  console.log(`Received ${event}:`, data);
-
-  // Acknowledge receipt immediately
-  res.status(200).send('OK');
-
-  // Process asynchronously
-  processEvent(event, data);
-});
-```
-
-### Retry Logic
-
-If delivery fails (non-2xx response or timeout):
-
-1. Retry after 1 minute
-2. Retry after 5 minutes
-3. Retry after 30 minutes
-4. Retry after 2 hours
-5. Retry after 6 hours
-6. Give up after 24 hours
-
-Configure retry behavior:
-
-```bash
-WEBHOOK_MAX_RETRIES=5
-WEBHOOK_RETRY_BACKOFF=exponential  # or 'linear'
-```
-
-## Managing Webhooks
-
-### List Webhooks
-
-```bash
-curl https://registry.example.com/api/v1/webhooks \
-  -H "Authorization: Bearer $TOKEN"
-```
-
-### Get Webhook Details
-
-```bash
-curl https://registry.example.com/api/v1/webhooks/webhook-789 \
-  -H "Authorization: Bearer $TOKEN"
-```
-
-Response includes delivery statistics:
-
-```json
-{
-  "id": "webhook-789",
-  "url": "https://your-service.example.com/webhook",
-  "events": ["artifact.uploaded"],
-  "active": true,
-  "stats": {
-    "total_deliveries": 1523,
-    "successful_deliveries": 1521,
-    "failed_deliveries": 2,
-    "last_delivery_at": "2026-02-01T12:34:56Z",
-    "last_delivery_status": 200
-  }
-}
-```
-
-### Update Webhook
-
-```bash
-curl -X PUT https://registry.example.com/api/v1/webhooks/webhook-789 \
-  -H "Authorization: Bearer $TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "active": false
-  }'
-```
-
-### Delete Webhook
-
-```bash
-curl -X DELETE https://registry.example.com/api/v1/webhooks/webhook-789 \
-  -H "Authorization: Bearer $TOKEN"
-```
-
-### Test Webhook
-
-Send a test event:
-
-```bash
-curl -X POST https://registry.example.com/api/v1/webhooks/webhook-789/test \
-  -H "Authorization: Bearer $TOKEN"
-```
-
-Sends a test payload:
-
-```json
-{
-  "event": "webhook.test",
-  "timestamp": "2026-02-01T12:40:00Z",
-  "data": {
-    "webhook_id": "webhook-789",
-    "message": "This is a test webhook delivery"
-  }
-}
-```
-
-## Delivery Tracking
-
-### View Delivery History
-
-```bash
-curl https://registry.example.com/api/v1/webhooks/webhook-789/deliveries \
-  -H "Authorization: Bearer $TOKEN"
-```
-
-Response:
-
-```json
-{
-  "deliveries": [
-    {
-      "id": "delivery-123",
-      "event": "artifact.uploaded",
-      "status_code": 200,
-      "delivered_at": "2026-02-01T12:34:56Z",
-      "duration_ms": 245,
-      "attempts": 1
-    },
-    {
-      "id": "delivery-124",
-      "event": "scan.completed",
-      "status_code": 500,
-      "delivered_at": "2026-02-01T12:35:00Z",
-      "duration_ms": 30000,
-      "attempts": 3,
-      "next_retry_at": "2026-02-01T13:05:00Z"
-    }
-  ]
-}
-```
-
-### Redeliver Webhook
-
-Manually retry a failed delivery:
-
-```bash
-curl -X POST https://registry.example.com/api/v1/webhooks/webhook-789/deliveries/delivery-124/redeliver \
-  -H "Authorization: Bearer $TOKEN"
-```
-
-## Use Cases
-
-### CI/CD Integration
-
-Trigger builds when artifacts are uploaded:
-
-```javascript
-app.post('/webhook', (req, res) => {
-  const { event, data } = req.body;
-
-  if (event === 'artifact.uploaded') {
-    triggerBuild({
-      package: data.package_name,
-      version: data.version,
-      artifact_url: `https://registry.example.com/artifacts/${data.artifact_id}`
-    });
-  }
-
-  res.status(200).send('OK');
-});
-```
-
-### Security Alerting
-
-Alert on critical vulnerabilities:
-
-```javascript
-app.post('/webhook', (req, res) => {
-  const { event, data } = req.body;
-
-  if (event === 'scan.completed' && data.vulnerabilities.critical > 0) {
-    sendAlert({
-      severity: 'critical',
-      message: `${data.vulnerabilities.critical} critical vulnerabilities found in ${data.package_name}:${data.version}`,
-      scan_url: data.report_url
-    });
-  }
-
-  res.status(200).send('OK');
-});
-```
-
-### Audit Logging
-
-Forward events to external logging system:
-
-```javascript
-app.post('/webhook', (req, res) => {
-  const { event, data } = req.body;
-
-  logToSplunk({
-    event_type: event,
-    timestamp: req.body.timestamp,
-    metadata: data
-  });
-
-  res.status(200).send('OK');
-});
-```
-
-### Metrics Collection
-
-Track artifact downloads for analytics:
-
-```javascript
-app.post('/webhook', (req, res) => {
-  const { event, data } = req.body;
-
-  if (event === 'artifact.downloaded') {
-    incrementMetric('artifact.downloads', {
-      package: data.package_name,
-      version: data.version,
-      user: data.downloader.username
-    });
-  }
-
-  res.status(200).send('OK');
-});
-```
-
-## Configuration
-
-### System Settings
-
-```bash
-# Enable webhooks
-WEBHOOKS_ENABLED=true
-
-# Delivery timeout
-WEBHOOK_TIMEOUT_SECONDS=30
-
-# Maximum retries
-WEBHOOK_MAX_RETRIES=5
-
-# Concurrent deliveries
-WEBHOOK_CONCURRENCY=10
-
-# Queue size
-WEBHOOK_QUEUE_SIZE=1000
-```
-
-### Rate Limiting
-
-Limit webhook deliveries per endpoint:
-
-```bash
-WEBHOOK_RATE_LIMIT=100  # Max 100 deliveries per minute per webhook
-```
+- `repository.created` and `repository.deleted`
+- `user.created`
+- `policy.violated` (for example, a vulnerable artifact upload blocked by policy)
 
 ## Troubleshooting
 
-### Webhooks Not Firing
+### Signature mismatch
 
-1. Check webhook is active: `GET /api/v1/webhooks/webhook-789`
-2. Verify event type is subscribed
-3. Check filters aren't too restrictive
-4. Review system logs for errors
+By far the most common cause is the receiver framework parsing the request body before signature verification, so the bytes signed by Artifact Keeper and the bytes the verifier hashes do not match. Capture the raw bytes before any JSON parsing:
 
-### Delivery Failures
+- Flask: `request.get_data(cache=True)` before `request.get_json()`.
+- Express: mount `express.raw({ type: 'application/json' })` on the webhook route, do not use `express.json()`.
+- net/http: `io.ReadAll(r.Body)` and verify before `json.Unmarshal`.
 
-1. Check endpoint is reachable: `curl -X POST $WEBHOOK_URL`
-2. Verify SSL certificate is valid
-3. Check firewall/network rules
-4. Review delivery history for error details
+The receiver samples linked above all do this correctly. Other common causes are: clock skew greater than 5 minutes (run NTP), and a verifier that stops at the first `v1=` token during a rotation overlap (iterate every token).
 
-### High Latency
+### Webhook silently stops firing
 
-1. Ensure webhook endpoint responds quickly
-2. Process events asynchronously
-3. Increase `WEBHOOK_TIMEOUT_SECONDS` if needed
-4. Monitor webhook delivery metrics
+Artifact Keeper auto-disables a webhook after 12 consecutive failed retries. Inspect the webhook record:
+
+```bash
+curl https://registry.example.com/api/v1/webhooks/$WEBHOOK_ID \
+  -H "Authorization: Bearer $TOKEN"
+```
+
+If `is_enabled` is `false` and `disabled_reason` is set, the receiver was unreachable or returning non-2xx for too long. Fix the receiver, then PUT `is_enabled: true` to re-enable. The `ak_webhook_dead_letter_total{event="..."}` Prometheus counter increments on every auto-disable and is a good alerting target.
+
+### Receiver returns 200 but the request hits twice
+
+Artifact Keeper considers a delivery successful only on a 2xx response received within the 30 second timeout. If a receiver responds 200 after the timeout, or if the connection is reset before the response is read, Artifact Keeper retries with the same `X-ArtifactKeeper-Delivery` UUID. Use the delivery UUID as an idempotency key in receiver storage so duplicates are no-ops.

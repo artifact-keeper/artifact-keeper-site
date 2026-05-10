@@ -1,0 +1,134 @@
+---
+title: "Webhook Receiver: Node"
+description: "Verify Artifact Keeper webhook signatures in Node.js with Express, including replay protection and rotation handling."
+---
+
+This page shows a minimal Node receiver that verifies the `X-ArtifactKeeper-Signature` header, enforces the 5 minute replay window, and handles the 24h secret rotation overlap. Signature verification is required for any production receiver, because without it any caller can forge an event payload that looks like Artifact Keeper.
+
+## Verifier
+
+The verifier parses the multi-value header, runs a constant-time HMAC compare, and accepts the request if any `v1=` token matches. During a rotation overlap the header carries both the new and the previous signature, so the receiver MUST iterate every token.
+
+```javascript
+import crypto from 'node:crypto';
+
+const REPLAY_WINDOW_SECS = 300;
+
+/**
+ * Verify an Artifact Keeper webhook signature.
+ *
+ * @param {string} secret    Shared secret stored at the receiver.
+ * @param {string} header    Value of X-ArtifactKeeper-Signature.
+ * @param {Buffer} rawBody   Raw request body bytes (NOT parsed JSON).
+ * @returns {boolean}
+ */
+export function verify(secret, header, rawBody) {
+  if (!header) return false;
+
+  const parts = header.split(',').map((p) => p.trim());
+
+  const tPart = parts.find((p) => p.startsWith('t='));
+  if (!tPart) return false;
+  const t = Number.parseInt(tPart.slice(2), 10);
+  if (!Number.isFinite(t)) return false;
+
+  // Replay window: reject deliveries skewed by more than 5 minutes
+  // in either direction (past or future).
+  const now = Math.floor(Date.now() / 1000);
+  if (Math.abs(now - t) > REPLAY_WINDOW_SECS) return false;
+
+  const signed = Buffer.concat([Buffer.from(`${t}.`), rawBody]);
+  const expected = crypto.createHmac('sha256', secret).update(signed).digest('hex');
+  const expectedBuf = Buffer.from(expected, 'hex');
+
+  const tokens = parts.filter((p) => p.startsWith('v1=')).map((p) => p.slice(3));
+  for (const tok of tokens) {
+    let candidate;
+    try {
+      candidate = Buffer.from(tok, 'hex');
+    } catch {
+      continue;
+    }
+    if (
+      candidate.length === expectedBuf.length &&
+      crypto.timingSafeEqual(candidate, expectedBuf)
+    ) {
+      return true;
+    }
+  }
+  return false;
+}
+```
+
+## Express handler
+
+Express's default `express.json()` middleware parses the body and discards the original bytes, which breaks signature verification. Use `express.raw({ type: 'application/json' })` on the webhook route so `req.body` arrives as a `Buffer`. Verify first, then `JSON.parse` the buffer yourself.
+
+```javascript
+import express from 'express';
+import { verify } from './verify.js';
+
+const SECRET = process.env.WEBHOOK_SECRET ?? 'whsec_replace_me';
+const app = express();
+
+// In production, persist this set (Redis, Postgres, etc.) so retries
+// across restarts still hit the idempotency check.
+const seenDeliveries = new Set();
+
+app.post(
+  '/webhook',
+  express.raw({ type: 'application/json' }),
+  async (req, res) => {
+    const sigHeader = req.get('X-ArtifactKeeper-Signature') ?? '';
+    const rawBody = req.body; // Buffer, thanks to express.raw
+
+    if (!verify(SECRET, sigHeader, rawBody)) {
+      return res.status(401).send('invalid signature');
+    }
+
+    const deliveryId = req.get('X-ArtifactKeeper-Delivery') ?? '';
+    const event = req.get('X-ArtifactKeeper-Event') ?? '';
+    const schema = req.get('X-ArtifactKeeper-Event-Version') ?? '';
+
+    // Idempotency: Artifact Keeper retries on any non-2xx response, so the
+    // same deliveryId can arrive multiple times. Use it as a dedup key.
+    if (seenDeliveries.has(deliveryId)) {
+      return res.status(200).json({ status: 'duplicate' });
+    }
+    seenDeliveries.add(deliveryId);
+
+    const payload = JSON.parse(rawBody.toString('utf8'));
+
+    try {
+      await processEvent(event, schema, payload);
+    } catch (err) {
+      // Returning 5xx tells Artifact Keeper to retry on the schedule.
+      return res.status(500).send('processing failed');
+    }
+
+    // Return 200 only after processing succeeds. Returning 200 too early
+    // (before the work is durable) defeats the retry guarantee.
+    return res.status(200).json({ status: 'ok' });
+  },
+);
+
+async function processEvent(event, schema, payload) {
+  // Your business logic.
+}
+
+app.listen(3000);
+```
+
+## Replay protection
+
+`t=` in the signature header is the wall-clock time on the Artifact Keeper server, in unix seconds, at the moment the signature was computed. The receiver compares it to its own wall-clock time at request handling. Small clock skew (a few seconds) is fine. Anything outside the 5 minute window MUST be rejected, including future-dated `t` values, because a future skew is just as suspicious as a past one. Run NTP on the receiver host.
+
+## Secret rotation
+
+When you call `POST /api/v1/webhooks/{id}/rotate-secret`, Artifact Keeper enters a 24 hour overlap window. During the window every delivery carries two signatures:
+
+```
+X-ArtifactKeeper-Signature: t=1714492800,v1=<new-hmac>,v1=<old-hmac>
+```
+
+The verifier above already iterates every `v1=` token and accepts the request if either matches. If you write a custom verifier, do NOT short-circuit on the first token. Once the overlap window ends, deliveries revert to a single `v1=` value computed with the new secret only.
