@@ -68,14 +68,36 @@ The `upstream_url` field is required for remote repositories and should point to
 
 ### Configuring Cache TTL
 
-Set a custom cache TTL per repository:
+Set a custom cache TTL on a remote repository:
 
 ```bash
-curl -X PUT "http://localhost:8080/api/v1/repositories/pypi-remote/config/cache_ttl_secs" \
+curl -X PUT "http://localhost:8080/api/v1/repositories/pypi-remote/cache-ttl" \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer $TOKEN" \
-  -d '{"value": "3600"}'
+  -d '{"cache_ttl_seconds": 3600}'
 ```
+
+`cache_ttl_seconds` must be between `1` and `2592000` (30 days). Writes are
+only accepted on remote (proxy) repositories.
+
+Read the current TTL for any repository:
+
+```bash
+curl -X GET "http://localhost:8080/api/v1/repositories/pypi-remote/cache-ttl" \
+  -H "Authorization: Bearer $TOKEN"
+```
+
+Response:
+
+```json
+{
+  "repository_key": "pypi-remote",
+  "cache_ttl_seconds": 86400
+}
+```
+
+If no TTL has been set explicitly, the response reports the default the proxy
+will actually apply (`86400` seconds = 24 hours).
 
 ### Write Protection
 
