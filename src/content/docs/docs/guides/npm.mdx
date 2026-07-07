@@ -54,6 +54,10 @@ registry=http://localhost:8080/npm/
 //localhost:8080/npm/:always-auth=true
 ```
 
+## Performance
+
+Packument (metadata) responses for remote and virtual repositories are cached with stale-while-revalidate, which is what makes large installs fast. See [Optimizing npm for Speed](/docs/guides/npm-performance/) for how it works and the four configuration knobs.
+
 ## Publishing Packages
 
 ### Prepare Your Package

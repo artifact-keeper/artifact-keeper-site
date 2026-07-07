@@ -1,0 +1,88 @@
+---
+title: "Optimizing npm for Speed"
+description: "How the npm packument cache works, how to tune its four configuration knobs, and what install speed to expect compared to the public registry"
+---
+
+Artifact Keeper can serve npm installs at the speed of the public registry, and beat it on your own network. This page explains where npm install time actually goes, how the packument cache gets it back, and how to configure it.
+
+## Where install time goes
+
+An `npm install` has two phases with very different shapes:
+
+1. **Metadata.** For every package in the dependency tree, npm requests a *packument* (the package document listing all versions and dist-tags). A 1,300-package app makes over a thousand of these requests, and npm blocks dependency resolution on the answers. This phase dominates any install that resolves versions (`npm install`, floating ranges, lockfile updates).
+2. **Tarballs.** One archive per resolved version. Artifact Keeper answers these with a `302` redirect to a presigned object-storage URL, so the bytes stream from storage at full speed. This phase is already fast and needs no tuning.
+
+Install speed through a registry proxy is therefore decided almost entirely by **time to first byte on packument requests**. Serving a packument involves fetching upstream metadata, rewriting tarball URLs, abbreviating to the install format, and compressing; doing that work on every request costs hundreds of milliseconds per package. The packument cache exists so that work happens once, not once per request.
+
+## The packument cache
+
+Since v1.3.0, Artifact Keeper caches the fully computed packument response for **remote and virtual repositories** and serves it with stale-while-revalidate semantics:
+
+- **Fresh** (age under `FRESH_TTL_SECS`): served directly from cache. No upstream contact.
+- **Stale** (age under `STALE_MAX_SECS`): served *immediately* from cache at hit speed, while a background task refreshes the entry. The client never waits on the upstream.
+- **Expired** (older than `STALE_MAX_SECS`): refetched inline as a safety floor.
+
+Correctness properties you get for free:
+
+- **Bounded staleness.** After a new version is published upstream, at most one request can be served the previous packument before the background refresh replaces it.
+- **Read-your-writes for hosted packages.** The cache applies only to remote and virtual repositories; publishing to a hosted repository is always immediately visible.
+- **Invalidation.** Publish, dist-tag changes, and artifact deletion invalidate affected entries; a definitive upstream `404`/`410` evicts, so takedowns propagate.
+- **No stampedes.** Concurrent misses for the same packument elect a single fetcher; the rest wait for its result.
+
+## Configuration
+
+Four environment variables control the cache:
+
+| Variable | Default | What it does |
+|----------|---------|--------------|
+| `NPM_PACKUMENT_CACHE_ENABLED` | `true` | Kill switch. Set `false` to restore the uncached per-request behavior. |
+| `NPM_PACKUMENT_CACHE_FRESH_TTL_SECS` | `300` | How long an entry is served without triggering any refresh. Raising it reduces upstream traffic; new upstream releases take up to this long to be noticed unless a request lands in the stale window first. |
+| `NPM_PACKUMENT_CACHE_STALE_MAX_SECS` | `86400` | The staleness bound. Entries older than this are refetched inline (the client waits). Lowering it tightens worst-case staleness at the cost of more blocking refreshes for rarely-requested packages. |
+| `NPM_PACKUMENT_CACHE_REDIS_URL` | unset | Optional shared cache backend (`redis://` or `rediss://`). Unset, the cache is in-process per instance. |
+
+```bash
+# Example: a two-replica deployment sharing one cache
+NPM_PACKUMENT_CACHE_ENABLED=true
+NPM_PACKUMENT_CACHE_FRESH_TTL_SECS=300
+NPM_PACKUMENT_CACHE_STALE_MAX_SECS=86400
+NPM_PACKUMENT_CACHE_REDIS_URL=rediss://cache.internal:6379
+```
+
+### When to configure Redis
+
+The in-process cache is per instance. Running more than one replica divides the effective hit rate (each replica only knows what it served), and every deploy or pod replacement starts cold. With `REDIS_URL` set, all replicas share one cache: a single background refresh warms the whole fleet, the hit rate is independent of replica count, and the cache survives restarts.
+
+Redis is an optimization, never a dependency: if Redis is unreachable, the instance degrades to its in-process cache and recovers without a restart when Redis returns.
+
+**Recommendation:** set `REDIS_URL` for any deployment with more than one replica. A small instance is enough; packuments are compact and the workload is read-heavy.
+
+### The defaults are deliberate
+
+`300`/`86400` means: packages requested at least once every five minutes are always served fresh-or-stale at hit speed; a package untouched for a day pays one inline refresh. For CI fleets and developer teams hitting overlapping dependency trees, that keeps effectively every packument request off the upstream path while keeping staleness bounded to a single request per package per release.
+
+## What to expect
+
+From the benchmark that motivated the cache ([artifact-keeper#2166](https://github.com/artifact-keeper/artifact-keeper/pull/2166)): a full re-resolve of a 1,301-package application, measured from a CI runner on the same network as the registry, went from **47.1s uncached to 19.6s cached**, against **20.8s for registry.npmjs.org** from the same runner. A warm cache answered all 1,101 unique packuments of that tree in under six seconds of cumulative request time.
+
+The general shape: on your own network, a warm Artifact Keeper is at parity with or faster than the public registry, because it answers metadata from memory or Redis instead of a CDN round trip away. Cold-cache behavior is unchanged: the first request for a package always pays the upstream fetch.
+
+## Verifying the cache is working
+
+Request the same packument twice and compare timings:
+
+```bash
+curl -so /dev/null -w "%{time_starttransfer}s\n" \
+  -H "Accept: application/vnd.npm.install-v1+json" \
+  https://registry.example.com/npm/my-remote/react
+# first request: upstream fetch (hundreds of ms)
+# repeat within the fresh window: served from cache (tens of ms)
+```
+
+If the second request is not markedly faster, check that the repository is remote or virtual (hosted repositories are intentionally uncached) and that `NPM_PACKUMENT_CACHE_ENABLED` has not been set to `false`.
+
+## Client-side wins that stack
+
+Server-side caching and client behavior are independent; both help:
+
+- **Commit a lockfile and use `npm ci`** where you can. Locked installs skip most of the metadata phase entirely.
+- **pnpm** issues packument requests with much higher concurrency than npm and is markedly faster on resolve-heavy installs against any registry, including Artifact Keeper. It stacks with the server-side cache.
