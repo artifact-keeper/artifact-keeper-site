@@ -27,7 +27,6 @@ Correctness properties you get for free:
 - **Bounded staleness.** After a new version is published upstream, at most one request can be served the previous packument before the background refresh replaces it.
 - **Read-your-writes for hosted packages.** The cache applies only to remote and virtual repositories; publishing to a hosted repository is always immediately visible.
 - **Invalidation.** Publish, dist-tag changes, and artifact deletion invalidate affected entries; a definitive upstream `404`/`410` evicts, so takedowns propagate.
-- **No stampedes.** Concurrent misses for the same packument elect a single fetcher; the rest wait for its result.
 
 ## Configuration
 
@@ -58,7 +57,12 @@ Redis is an optimization, never a dependency: if Redis is unreachable, the insta
 
 ### The defaults are deliberate
 
-`300`/`86400` means: packages requested at least once every five minutes are always served fresh-or-stale at hit speed; a package untouched for a day pays one inline refresh. For CI fleets and developer teams hitting overlapping dependency trees, that keeps effectively every packument request off the upstream path while keeping staleness bounded to a single request per package per release.
+Five minutes fresh and one day stale gives the best of both worlds. On a busy instance the cache does not pay a refresh for every install: concurrent CI runs land inside the fresh window and share the same entry. After five minutes the next request triggers a single refresh, so the instance never drifts far. When a new version is published on npm, a busy cache is at most about five minutes out of sync.
+
+Tune the fresh window to how your teams consume packages:
+
+- **Pinned versions everywhere** (lockfiles, exact versions in `package.json`): freshness barely matters, because installs ask for versions that already exist. Raise `FRESH_TTL_SECS` above five minutes to reduce load on the instance further.
+- **Approximate or wildcard ranges** (`^`, `~`, `latest`) where you expect the absolute latest release: lower the TTLs so new versions are picked up sooner.
 
 ## What to expect
 
