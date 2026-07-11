@@ -253,6 +253,61 @@ If you can submit the login form without errors but the UI redirects back to log
 
 Fix: configure TLS on your reverse proxy, or set `ENVIRONMENT=development` on the backend for HTTP-only setups. See [Reverse Proxy & TLS](/docs/deployment/reverse-proxy) for details.
 
+### Corporate proxy / all services show 503 unhealthy
+
+**Symptom:** On a host that is behind a corporate proxy (`HTTP_PROXY` / `HTTPS_PROXY`
+set in the environment or in the Docker daemon config), every service reports `503` /
+`unhealthy` even though the containers are running. `docker compose ps` shows services
+never becoming healthy, and the backend cannot reach the database, OpenSearch, Trivy, or
+Dependency-Track.
+
+**Cause:** Docker and Podman propagate the host's proxy variables into containers. The
+backend uses `reqwest`, which honours `HTTP_PROXY`/`HTTPS_PROXY` natively, so its
+**internal container-to-container** health checks and service calls (e.g. to `opensearch`,
+`trivy`, `postgres`) get routed through the external corporate proxy. The proxy cannot
+resolve or reach those internal Compose service names, so the connections fail and the
+services report unhealthy.
+
+**Diagnosis:** Check the proxy variables the backend container actually sees:
+
+```bash
+docker compose exec backend env | grep -i proxy
+```
+
+If `HTTP_PROXY`/`HTTPS_PROXY` are set but `no_proxy` does not list the internal service
+names, the proxy is intercepting internal traffic.
+
+**Fix:** The bundled `docker-compose.yml` sets `no_proxy` on the backend to exclude the
+internal service hostnames from proxying:
+
+```yaml
+no_proxy: "${NO_PROXY:-},localhost,127.0.0.1,db,postgres,opensearch,trivy,openscap,dependency-track-apiserver"
+```
+
+If you are on a current deployment, this is already in place — just make sure you are not
+overriding `no_proxy`/`NO_PROXY` with a value that drops those hostnames. **Older
+deployments** (or custom Compose files) that predate this change must add the internal
+service hostnames to `NO_PROXY` themselves:
+
+```bash
+NO_PROXY=localhost,127.0.0.1,db,postgres,opensearch,trivy,openscap,dependency-track-apiserver
+```
+
+If you run additional services, add their Compose service names to the list as well.
+Restart the stack after changing proxy variables:
+
+```bash
+docker compose up -d --force-recreate
+```
+
+:::note[Dependency-Track proxy settings]
+Dependency-Track does not read `HTTP_PROXY`/`no_proxy`. It uses its own Alpine-style
+variables instead. When it genuinely needs the corporate proxy to mirror the NVD /
+external vulnerability data, configure `ALPINE_HTTP_PROXY_ADDRESS`,
+`ALPINE_HTTP_PROXY_PORT`, `ALPINE_HTTP_PROXY_USERNAME`, and `ALPINE_HTTP_PROXY_PASSWORD`,
+and exclude internal hosts with `ALPINE_NO_PROXY` (defaults to `localhost,127.0.0.1`).
+:::
+
 ### Out of Disk Space
 
 ```bash

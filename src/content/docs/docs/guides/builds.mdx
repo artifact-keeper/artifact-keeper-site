@@ -1,0 +1,335 @@
+---
+title: "Populating the Builds UI via the Builds API"
+description: "Create builds, attach artifacts, and mark build status over the REST API so the Builds UI shows your CI runs"
+---
+
+import { Tabs, TabItem } from '@astrojs/starlight/components';
+
+The **Builds** screen in the web UI is populated from the Builds REST API. A "build"
+is a first-class record of a CI/CD run — its name, build number, VCS metadata, timing,
+status, and the artifacts it produced. Your pipeline calls the API to create a build,
+attach the artifacts it published, and mark it complete; the UI then renders it.
+
+All Builds endpoints are mounted under `/api/v1/builds`.
+
+## Authentication
+
+Every Builds endpoint requires authentication. Send a bearer token in the
+`Authorization` header:
+
+```http
+Authorization: Bearer <access_token>
+```
+
+You can obtain a token from `POST /auth/login`, or (recommended for pipelines) use a
+long-lived API token issued to a service account. See the
+[REST API Reference](/docs/reference/api/) and
+[Authentication & RBAC](/docs/advanced/auth/) for how to obtain and scope tokens.
+
+Requests without a valid token receive `401 Authentication required`.
+
+:::note[Base URL]
+Examples below use `https://registry.example.com` as the instance base URL. Replace it
+with your own. The API prefix is always `/api/v1`.
+:::
+
+## Endpoints at a glance
+
+| Method | Path | Purpose |
+| ------ | ---- | ------- |
+| `POST` | `/api/v1/builds/` | Create a build (starts in `running`) |
+| `GET`  | `/api/v1/builds/` | List builds (paginated, filterable) |
+| `GET`  | `/api/v1/builds/{id}` | Fetch a single build |
+| `PUT`  | `/api/v1/builds/{id}` | Update a build's status (and finish time) |
+| `POST` | `/api/v1/builds/{id}/artifacts` | Attach artifacts to a build |
+| `GET`  | `/api/v1/builds/diff` | Diff the artifacts of two builds |
+
+## Build status values
+
+A build's `status` is stored as a free-form string, but the service layer validates it
+on update. The accepted values are:
+
+- `pending`
+- `running`
+- `success`
+- `failed`
+- `cancelled`
+
+A newly created build starts in `running`. Sending any other value to the update
+endpoint returns `400` with:
+
+```
+Invalid build status: <value>. Must be one of: pending, running, success, failed, cancelled
+```
+
+These values are enforced by the backend service (`update_status`), not by a fixed API
+enum — so they are the authoritative set the server will accept.
+
+## Create a build
+
+`POST /api/v1/builds/`
+
+Creates a build record. Only `name` and `build_number` are required; the VCS and
+`metadata` fields are optional but recommended so the UI can link back to source.
+
+**Request body:**
+
+```json
+{
+  "name": "my-service",
+  "build_number": 42,
+  "agent": "github-actions",
+  "started_at": "2026-07-11T10:00:00Z",
+  "vcs_url": "https://github.com/acme/my-service",
+  "vcs_revision": "9fceb02...",
+  "vcs_branch": "main",
+  "vcs_message": "Release 1.4.0",
+  "metadata": { "pipeline_id": "12345" }
+}
+```
+
+**Response** (`200`): a build object. Note the returned field is `number` (not
+`build_number`), and the new build's `status` is `running`:
+
+```json
+{
+  "id": "6b1a...",
+  "name": "my-service",
+  "number": 42,
+  "status": "running",
+  "agent": "github-actions",
+  "started_at": "2026-07-11T10:00:00Z",
+  "created_at": "2026-07-11T10:00:01Z",
+  "updated_at": "2026-07-11T10:00:01Z"
+}
+```
+
+Capture the `id` from this response — you need it to attach artifacts and update status.
+
+```bash
+BUILD_ID=$(curl -sf -X POST https://registry.example.com/api/v1/builds/ \
+  -H "Authorization: Bearer $AK_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "my-service",
+    "build_number": 42,
+    "agent": "github-actions",
+    "vcs_branch": "main",
+    "vcs_revision": "9fceb02"
+  }' | jq -r '.id')
+```
+
+## Attach artifacts
+
+`POST /api/v1/builds/{id}/artifacts`
+
+Attach one or more artifacts to a build. At least one artifact is required, and each
+artifact must have a non-empty `name` and `path`. `module_name` is optional and groups
+artifacts under a build module.
+
+**Request body:**
+
+```json
+{
+  "artifacts": [
+    {
+      "module_name": "server",
+      "name": "my-service.tar.gz",
+      "path": "dist/my-service.tar.gz",
+      "checksum_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "size_bytes": 10485760
+    }
+  ]
+}
+```
+
+```bash
+curl -sf -X POST "https://registry.example.com/api/v1/builds/$BUILD_ID/artifacts" \
+  -H "Authorization: Bearer $AK_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d "{
+    \"artifacts\": [{
+      \"name\": \"my-service.tar.gz\",
+      \"path\": \"dist/my-service.tar.gz\",
+      \"checksum_sha256\": \"$(sha256sum dist/my-service.tar.gz | cut -d' ' -f1)\",
+      \"size_bytes\": $(stat -c%s dist/my-service.tar.gz)
+    }]
+  }"
+```
+
+## Mark the build complete
+
+`PUT /api/v1/builds/{id}`
+
+Update the build's status once the pipeline finishes. Include `finished_at` on the
+final update so the backend computes `duration_ms` (from `started_at` to `finished_at`).
+
+**Request body:**
+
+```json
+{
+  "status": "success",
+  "finished_at": "2026-07-11T10:05:00Z"
+}
+```
+
+```bash
+curl -sf -X PUT "https://registry.example.com/api/v1/builds/$BUILD_ID" \
+  -H "Authorization: Bearer $AK_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d "{\"status\": \"success\", \"finished_at\": \"$(date -u +%Y-%m-%dT%H:%M:%SZ)\"}"
+```
+
+On failure, send `"status": "failed"` (or `"cancelled"`) instead so the UI shows the
+correct outcome.
+
+## List and inspect builds
+
+`GET /api/v1/builds/` returns a paginated list. Supported query parameters:
+
+- `page` (default `1`)
+- `per_page` (default `20`, max `100`)
+- `status` — filter by exact status
+- `search` — case-insensitive match on build name
+- `sort_order` — `asc` (default) or `desc` by build number
+
+```bash
+curl -sf "https://registry.example.com/api/v1/builds/?status=success&per_page=50&sort_order=desc" \
+  -H "Authorization: Bearer $AK_TOKEN" | jq
+```
+
+`GET /api/v1/builds/{id}` returns a single build.
+
+## Diff two builds
+
+`GET /api/v1/builds/diff?build_a=<id>&build_b=<id>` compares the artifacts of two builds
+and returns `added`, `removed`, and `modified` lists:
+
+```bash
+curl -sf "https://registry.example.com/api/v1/builds/diff?build_a=$OLD&build_b=$NEW" \
+  -H "Authorization: Bearer $AK_TOKEN" | jq
+```
+
+## End-to-end CI example
+
+The example below creates a build, attaches the artifact it produced, and marks the
+build complete — after which the run appears on the Builds screen. Store the instance
+URL and token as pipeline secrets.
+
+<Tabs>
+<TabItem label="GitHub Actions">
+
+```yaml
+name: Publish build
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    env:
+      AK_URL: ${{ secrets.AK_URL }}      # e.g. https://registry.example.com
+      AK_TOKEN: ${{ secrets.AK_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build
+        run: make build   # produces dist/my-service.tar.gz
+
+      - name: Register build
+        run: |
+          BUILD_ID=$(curl -sf -X POST "$AK_URL/api/v1/builds/" \
+            -H "Authorization: Bearer $AK_TOKEN" \
+            -H "Content-Type: application/json" \
+            -d "{
+              \"name\": \"my-service\",
+              \"build_number\": ${{ github.run_number }},
+              \"agent\": \"github-actions\",
+              \"vcs_url\": \"${{ github.server_url }}/${{ github.repository }}\",
+              \"vcs_revision\": \"${{ github.sha }}\",
+              \"vcs_branch\": \"${{ github.ref_name }}\"
+            }" | jq -r '.id')
+          echo "BUILD_ID=$BUILD_ID" >> "$GITHUB_ENV"
+
+      - name: Attach artifacts
+        run: |
+          curl -sf -X POST "$AK_URL/api/v1/builds/$BUILD_ID/artifacts" \
+            -H "Authorization: Bearer $AK_TOKEN" \
+            -H "Content-Type: application/json" \
+            -d "{
+              \"artifacts\": [{
+                \"name\": \"my-service.tar.gz\",
+                \"path\": \"dist/my-service.tar.gz\",
+                \"checksum_sha256\": \"$(sha256sum dist/my-service.tar.gz | cut -d' ' -f1)\",
+                \"size_bytes\": $(stat -c%s dist/my-service.tar.gz)
+              }]
+            }"
+
+      - name: Mark build complete
+        if: success()
+        run: |
+          curl -sf -X PUT "$AK_URL/api/v1/builds/$BUILD_ID" \
+            -H "Authorization: Bearer $AK_TOKEN" \
+            -H "Content-Type: application/json" \
+            -d "{\"status\": \"success\", \"finished_at\": \"$(date -u +%Y-%m-%dT%H:%M:%SZ)\"}"
+
+      - name: Mark build failed
+        if: failure()
+        run: |
+          curl -sf -X PUT "$AK_URL/api/v1/builds/$BUILD_ID" \
+            -H "Authorization: Bearer $AK_TOKEN" \
+            -H "Content-Type: application/json" \
+            -d "{\"status\": \"failed\", \"finished_at\": \"$(date -u +%Y-%m-%dT%H:%M:%SZ)\"}"
+```
+
+</TabItem>
+<TabItem label="GitLab CI">
+
+```yaml
+publish:
+  image: alpine:3
+  variables:
+    AK_URL: "https://registry.example.com"
+    # AK_TOKEN is a masked CI/CD variable
+  before_script:
+    - apk add --no-cache curl jq coreutils
+  script:
+    - make build   # produces dist/my-service.tar.gz
+    - |
+      BUILD_ID=$(curl -sf -X POST "$AK_URL/api/v1/builds/" \
+        -H "Authorization: Bearer $AK_TOKEN" \
+        -H "Content-Type: application/json" \
+        -d "{
+          \"name\": \"my-service\",
+          \"build_number\": ${CI_PIPELINE_IID},
+          \"agent\": \"gitlab-ci\",
+          \"vcs_url\": \"${CI_PROJECT_URL}\",
+          \"vcs_revision\": \"${CI_COMMIT_SHA}\",
+          \"vcs_branch\": \"${CI_COMMIT_REF_NAME}\"
+        }" | jq -r '.id')
+    - |
+      curl -sf -X POST "$AK_URL/api/v1/builds/$BUILD_ID/artifacts" \
+        -H "Authorization: Bearer $AK_TOKEN" \
+        -H "Content-Type: application/json" \
+        -d "{
+          \"artifacts\": [{
+            \"name\": \"my-service.tar.gz\",
+            \"path\": \"dist/my-service.tar.gz\",
+            \"checksum_sha256\": \"$(sha256sum dist/my-service.tar.gz | cut -d' ' -f1)\",
+            \"size_bytes\": $(stat -c%s dist/my-service.tar.gz)
+          }]
+        }"
+    - |
+      curl -sf -X PUT "$AK_URL/api/v1/builds/$BUILD_ID" \
+        -H "Authorization: Bearer $AK_TOKEN" \
+        -H "Content-Type: application/json" \
+        -d "{\"status\": \"success\", \"finished_at\": \"$(date -u +%Y-%m-%dT%H:%M:%SZ)\"}"
+```
+
+</TabItem>
+</Tabs>
+
+After the pipeline runs, open the **Builds** screen in the web UI — the new build,
+its artifacts, and its final status will be listed.
