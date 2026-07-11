@@ -1,0 +1,221 @@
+---
+title: "Authentication Security"
+description: "Account lockout, password policies, password expiration, and password history"
+---
+
+Artifact Keeper provides several mechanisms to protect local user accounts. These features apply only to local (non-SSO) accounts. Users who authenticate through OIDC, LDAP, or SAML are subject to the password policies of their identity provider instead.
+
+## Account Lockout
+
+Account lockout protects against brute-force login attacks by temporarily locking accounts after repeated failed attempts.
+
+### Configuration
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `ACCOUNT_LOCKOUT_THRESHOLD` | `5` | Number of consecutive failed login attempts before the account is locked. Set to 0 to disable lockout entirely. |
+| `ACCOUNT_LOCKOUT_DURATION_MINUTES` | `30` | How long (in minutes) a locked account remains locked |
+
+### How It Works
+
+Each local user account tracks a counter of consecutive failed login attempts. When this counter reaches the `ACCOUNT_LOCKOUT_THRESHOLD`, the account is locked for `ACCOUNT_LOCKOUT_DURATION_MINUTES`.
+
+During the lockout period:
+
+- The login endpoint returns an error indicating the account is locked
+- The lockout duration is calculated from the time of the last failed attempt
+- No additional failed attempts can extend the lockout period
+
+After the lockout period expires, the user can attempt to log in again. A successful login resets the failed attempt counter to zero and clears the lockout timestamp.
+
+### Example Configuration
+
+For a strict environment that locks accounts after 3 failures for one hour:
+
+```bash
+ACCOUNT_LOCKOUT_THRESHOLD=3
+ACCOUNT_LOCKOUT_DURATION_MINUTES=60
+```
+
+To disable account lockout:
+
+```bash
+ACCOUNT_LOCKOUT_THRESHOLD=0
+```
+
+### Unlocking Accounts
+
+Administrators can unlock a user account before the lockout period expires through the admin API or the web UI. The admin API endpoint resets the failed login counter and clears the `locked_until` timestamp.
+
+## Password Policies
+
+Password policies enforce minimum complexity requirements when users create or change passwords. These rules are checked server-side during registration, password change, and admin-initiated password reset.
+
+### Complexity Requirements
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `PASSWORD_MIN_LENGTH` | `8` | Minimum password length |
+| `PASSWORD_MAX_LENGTH` | `128` | Maximum password length |
+| `PASSWORD_REQUIRE_UPPERCASE` | `false` | Require at least one uppercase letter (A-Z) |
+| `PASSWORD_REQUIRE_LOWERCASE` | `false` | Require at least one lowercase letter (a-z) |
+| `PASSWORD_REQUIRE_DIGIT` | `false` | Require at least one digit (0-9) |
+| `PASSWORD_REQUIRE_SPECIAL` | `false` | Require at least one special character |
+
+### Strength Scoring (zxcvbn)
+
+In addition to the character-class requirements above, you can enable the [zxcvbn](https://github.com/dropbox/zxcvbn) password strength estimator. This algorithm evaluates password entropy by checking for common patterns (dictionary words, keyboard sequences, dates, repeated characters) and assigns a score from 0 to 4.
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `PASSWORD_MIN_STRENGTH` | `0` | Minimum zxcvbn score. 0 disables the check. |
+
+Score meanings:
+
+| Score | Strength | Approximate Guesses |
+|-------|----------|---------------------|
+| 0 | Too weak | < 10^3 |
+| 1 | Weak | < 10^6 |
+| 2 | Fair | < 10^8 |
+| 3 | Strong | < 10^10 |
+| 4 | Very strong | >= 10^10 |
+
+Setting `PASSWORD_MIN_STRENGTH=3` is a good balance for most organizations. It prevents passwords like `Password1!` (which passes character-class checks but is trivially guessable) while still accepting reasonable passphrases.
+
+### Recommended Production Configuration
+
+```bash
+PASSWORD_MIN_LENGTH=12
+PASSWORD_REQUIRE_UPPERCASE=true
+PASSWORD_REQUIRE_LOWERCASE=true
+PASSWORD_REQUIRE_DIGIT=true
+PASSWORD_REQUIRE_SPECIAL=true
+PASSWORD_MIN_STRENGTH=3
+```
+
+## Password History
+
+Password history prevents users from cycling back to previously used passwords.
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `PASSWORD_HISTORY_COUNT` | `0` | Number of previous passwords to remember (max 24). 0 disables history checking. |
+
+When a user changes their password, the new password is checked against the last N stored password hashes. If the new password matches any of them, it is rejected with a validation error.
+
+The backend stores only bcrypt hashes of previous passwords, not the plaintext values.
+
+### Example
+
+To remember the last 12 passwords:
+
+```bash
+PASSWORD_HISTORY_COUNT=12
+```
+
+With this setting, a user must cycle through 12 different passwords before they can reuse an old one.
+
+## Password Expiration
+
+Password expiration forces local users to change their passwords periodically. This is commonly required for compliance with standards like SOC 2, HIPAA, and PCI DSS.
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `PASSWORD_EXPIRY_DAYS` | `0` | Require password change after this many days (max 3650). 0 disables expiration. |
+
+### How It Works
+
+The backend tracks a `password_changed_at` timestamp for each user. During login, if the difference between the current time and `password_changed_at` exceeds `PASSWORD_EXPIRY_DAYS`, the backend sets the `must_change_password` flag on the user.
+
+When `must_change_password` is set:
+
+- The login response includes `"must_change_password": true`
+- The web UI redirects the user to a password change form
+- API requests (except password change) may return 403 until the password is updated
+- Changing the password clears the flag and records a new `password_changed_at` timestamp
+
+### Example
+
+For a 90-day password expiration policy:
+
+```bash
+PASSWORD_EXPIRY_DAYS=90
+```
+
+## Force Password Change (Admin API)
+
+Administrators can force any local user to change their password on next login using the `force-password-change` endpoint. This is useful for:
+
+- Responding to credential compromise
+- Onboarding new users with temporary passwords
+- Enforcing password rotation during a security incident
+
+### API Request
+
+```bash
+curl -X POST https://registry.example.com/api/v1/users/{user-id}/force-password-change \
+  -H "Authorization: Bearer $ADMIN_TOKEN"
+```
+
+### Response
+
+```json
+{
+  "message": "User must change password on next login"
+}
+```
+
+### Behavior
+
+When this endpoint is called:
+
+1. The user's `must_change_password` flag is set to `true`
+2. All existing sessions for the user are invalidated
+3. On the user's next login, they will be required to set a new password
+
+This endpoint requires admin privileges. It cannot be used on SSO users (returns 422) since their passwords are managed by the identity provider.
+
+## Combining Features
+
+These features work together. A common enterprise configuration might look like this:
+
+```bash
+# Lock after 5 failures for 30 minutes
+ACCOUNT_LOCKOUT_THRESHOLD=5
+ACCOUNT_LOCKOUT_DURATION_MINUTES=30
+
+# Strong password requirements
+PASSWORD_MIN_LENGTH=12
+PASSWORD_REQUIRE_UPPERCASE=true
+PASSWORD_REQUIRE_LOWERCASE=true
+PASSWORD_REQUIRE_DIGIT=true
+PASSWORD_MIN_STRENGTH=3
+
+# Prevent password reuse
+PASSWORD_HISTORY_COUNT=12
+
+# Require rotation every 90 days
+PASSWORD_EXPIRY_DAYS=90
+
+# Email notifications for expiration warnings
+SMTP_HOST=smtp.corp.example.com
+SMTP_PORT=587
+SMTP_FROM_ADDRESS=noreply@registry.corp.example.com
+```
+
+With this configuration, local users must:
+- Choose a password at least 12 characters long with mixed case and a digit
+- Pass the zxcvbn strength estimator at level 3 or above
+- Not reuse any of their last 12 passwords
+- Change their password at least every 90 days
+- Accept account lockout after 5 consecutive bad attempts
+
+## SSO Break-Glass Recovery
+
+When SSO (OIDC, LDAP, or SAML) is enabled, local login is disabled by default. If SSO becomes misconfigured and administrators are locked out, the break-glass setting allows the built-in admin account to bypass SSO and log in with local credentials.
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `ALLOW_LOCAL_ADMIN_LOGIN` | `false` | Allow the admin account to use local credentials when SSO is active |
+
+This should be left disabled in normal operation. Enable it only when recovering from an SSO outage or misconfiguration. To hard-disable the break-glass path entirely (even when `ALLOW_LOCAL_ADMIN_LOGIN` is set), set `SSO_DISABLE_ADMIN_BREAK_GLASS=true`.

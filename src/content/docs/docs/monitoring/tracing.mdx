@@ -3,7 +3,7 @@ title: "Distributed Tracing"
 description: "Configure OpenTelemetry distributed tracing in Artifact Keeper for full request visibility across services"
 ---
 
-Artifact Keeper supports opt-in OpenTelemetry distributed tracing. When enabled, spans are exported via OTLP gRPC to any compatible collector such as Jaeger, Grafana Tempo, Datadog, or AWS X-Ray. When disabled (the default), behavior is identical to stdout-only logging with zero overhead.
+Artifact Keeper supports opt-in OpenTelemetry distributed tracing. When enabled, spans are exported via OTLP gRPC or HTTP to any compatible collector such as Jaeger, Grafana Tempo, Datadog, SigNoz or AWS X-Ray. When disabled (the default), behavior is identical to stdout-only logging with zero overhead.
 
 ## Configuration
 
@@ -12,6 +12,7 @@ Tracing is controlled entirely through environment variables. No code changes or
 | Variable | Required | Default | Description |
 |----------|----------|---------|-------------|
 | `OTEL_EXPORTER_OTLP_ENDPOINT` | No | _(unset)_ | OTLP collector endpoint (e.g., `http://jaeger:4317`). When unset, tracing exports are disabled. |
+| `OTEL_EXPORTER_OTLP_PROTOCOL` | No | `grpc` | Type of exporter for [OpenTelemetry](https://opentelemetry.io/docs/languages/sdk-configuration/otlp-exporter/) (either `grpc` or `http/protobuf`) |
 | `OTEL_SERVICE_NAME` | No | `artifact-keeper` | Service name that appears in traces. |
 | `RUST_LOG` | No | `info,sqlx::query=info` | Log and trace filter directive. The default includes `sqlx::query=info` which enables database query spans. |
 
