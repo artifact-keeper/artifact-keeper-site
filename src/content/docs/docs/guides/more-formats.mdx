@@ -158,19 +158,24 @@ Host private VS Code extensions (also compatible with Cursor, Windsurf, and Kiro
 
 #### Private Marketplace Configuration
 
-Configure VS Code to use your private extension marketplace:
+Configure VS Code-compatible editors that support custom galleries by editing
+their `product.json` extension gallery settings. VS Code itself does not expose
+a supported `settings.json` key for replacing the Microsoft Marketplace.
 
 ```json
-// settings.json
 {
-  "extensions.gallery": {
+  "extensionsGallery": {
     "serviceUrl": "https://artifacts.example.com/vscode/main",
-    "itemUrl": "https://artifacts.example.com/vscode/main/item"
+    "itemUrl": "https://artifacts.example.com/vscode/main/item",
+    "resourceUrlTemplate": "https://artifacts.example.com/vscode/main/{publisher}/{name}/{version}",
+    "extensionUrlTemplate": "https://artifacts.example.com/vscode/main/{publisher}/{name}/latest"
   }
 }
 ```
 
-For Cursor, Windsurf, or Kiro, use the same configuration in their respective settings files.
+For VSCodium, edit `product.json` as documented in its custom extension gallery
+guide. For editors that do not support `product.json` edits, use a gallery
+manager such as VSIX Manager or install the downloaded `.vsix` files directly.
 
 #### Publishing Extensions
 
@@ -188,14 +193,6 @@ curl -X POST \
   -H "Authorization: Bearer $TOKEN" \
   -F "file=@my-extension-1.0.0.vsix" \
   https://artifacts.example.com/vscode/main/extensions
-```
-
-Or use the VS Code publish command with custom registry:
-
-```bash
-vsce publish \
-  --registry https://artifacts.example.com/vscode/main \
-  --pat $TOKEN
 ```
 
 #### Installing Private Extensions
