@@ -5,6 +5,10 @@ description: "Filesystem, S3, Azure Blob, and Google Cloud Storage backends for 
 
 Artifact Keeper supports multiple storage backends to accommodate different deployment scenarios and scale requirements. You can configure a default backend for the entire instance, or assign different backends to individual repositories.
 
+:::note[End-to-end streaming (v1.3.0)]
+As of v1.3.0, artifact data streams end-to-end through the storage backend for both uploads and pull-through (proxy/remote) downloads, rather than being buffered in memory. Backends must implement `StorageBackend::put_stream` — it is a required trait method, so a custom backend cannot silently inherit in-memory buffering. This keeps memory use bounded regardless of artifact size.
+:::
+
 ## Storage Backend Types
 
 ### Filesystem Storage
@@ -605,6 +609,8 @@ Artifact metadata is stored in PostgreSQL, not in the storage backend. The stora
 ## Garbage Collection
 
 Remove orphaned artifacts that are no longer referenced in the database.
+
+Since v1.3.0, blob GC is a two-phase **mark-and-sweep**: an orphaned blob is first marked `pending_delete` in the database, and only removed from storage on a subsequent sweep. The delete itself is idempotent, so a retried or overlapping GC pass is safe and a blob re-referenced between phases is spared.
 
 ### Manual Cleanup
 

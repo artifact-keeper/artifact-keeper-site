@@ -227,6 +227,10 @@ rm "$ARCHIVE"
 
 ## Installing Packages
 
+:::note[Absolute `dist.url` behind a reverse proxy]
+Composer metadata for local/hosted repositories emits an **absolute** `dist.url` (v1.4.2, #2361) so `composer install`/`update` can download the archive directly. The external base URL is derived from the incoming request — honoring `AK_EXTERNAL_URL`, then `X-Forwarded-Host`, then the `Host` header — matching the npm/cargo/nuget/oci/gitlfs handlers. If you run Artifact Keeper behind a reverse proxy, set `AK_EXTERNAL_URL` (or forward `X-Forwarded-Host`) so the emitted URLs point at the public address. Remote/proxied Composer repositories got the same absolute-URL rewrite in v1.5.1 (#2370).
+:::
+
 ### Install Package
 
 ```bash

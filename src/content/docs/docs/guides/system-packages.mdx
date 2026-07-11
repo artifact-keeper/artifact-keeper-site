@@ -100,6 +100,21 @@ echo "deb [trusted=yes] http://localhost:8080/debian/debian-bullseye main" | \
 
 Artifact Keeper provides RPM repository support compatible with `yum`, `dnf`, and `zypper`.
 
+:::note[RPM proxy hardening (v1.5.0)]
+RPM remote/proxy repositories carry Phase-1 SSRF and integrity hardening (#2354):
+
+- **Connect-time private-IP validation** on RPM upstreams — the upstream is
+  re-validated against the SSRF policy at connect time, not just at creation.
+- **RPM cache classification** distinguishes cacheable content from metadata.
+- **Content-integrity verification** of fetched RPM content.
+- **Mirrorlist/metalink rejection** — an RPM remote upstream must be a concrete
+  `baseurl` (e.g. `.../BaseOS/x86_64/os/`), not a `mirrorlist`/`metalink` URL.
+
+The standard SSRF toggles apply: private-network upstreams require explicitly
+opting in via `AK_SSRF_ALLOW_PRIVATE_CIDRS`, and cloud-metadata, loopback, and
+link-local addresses stay blocked regardless.
+:::
+
 ### Endpoint
 
 ```
@@ -648,6 +663,13 @@ Always test packages in a staging environment:
 Use Artifact Keeper as a pull-through cache for public system package repositories or aggregate multiple package sources.
 
 Remote proxy and virtual repository support is available for all system package formats: RPM (yum/dnf), Debian (apt), and Alpine (apk).
+
+For RPM specifically, remote/proxy repositories are hardened as of v1.5.0
+(#2354): connect-time private-IP SSRF validation, RPM cache classification,
+content-integrity verification of fetched content, and rejection of
+`mirrorlist`/`metalink` upstreams (point the upstream at a concrete resolved
+`baseurl` instead). Reaching a private-network upstream still requires opting in
+via `AK_SSRF_ALLOW_PRIVATE_CIDRS`.
 
 ### Pull-Through Cache Examples
 
