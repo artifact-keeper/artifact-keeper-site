@@ -620,13 +620,14 @@ curl -X POST https://registry.example.com/api/v1/admin/cleanup \
 
 ### Scheduled Cleanup
 
-Configure automatic garbage collection:
+Storage garbage collection runs on a cron schedule. Only two environment variables control it:
 
 ```bash
-GC_ENABLED=true
-GC_SCHEDULE="0 2 * * *"  # Daily at 2 AM
-GC_RETENTION_DAYS=90     # Keep artifacts for 90 days
+GC_SCHEDULE="0 0 * * * *"  # 6-field cron (sec min hour day month weekday); default hourly
+BLOB_GC_ENABLED=true       # Opt in to actually deleting blobs (default: false = dry-run pass)
 ```
+
+There is no `GC_ENABLED` or `GC_RETENTION_DAYS` variable. **Retention is not configured here** — artifact retention is governed by [lifecycle policies](/docs/advanced/lifecycle), created and managed via the Admin API or the web UI. By default `BLOB_GC_ENABLED` is `false`, so the scheduled pass dry-runs (logs what it would remove) until an operator explicitly opts in to live blob deletion.
 
 ### What Gets Cleaned
 
@@ -637,13 +638,13 @@ GC_RETENTION_DAYS=90     # Keep artifacts for 90 days
 
 ### Dry Run Mode
 
-Always test with dry run first:
+The scheduled pass is dry-run by default. Leaving `BLOB_GC_ENABLED` unset (or `false`) logs what would be deleted without actually removing anything:
 
 ```bash
-GC_DRY_RUN=true
+BLOB_GC_ENABLED=false   # default — dry-run only
 ```
 
-This logs what would be deleted without actually removing anything.
+Set `BLOB_GC_ENABLED=true` once you have reviewed the logged candidates and are ready for live blob deletion.
 
 ## Storage Migration
 
