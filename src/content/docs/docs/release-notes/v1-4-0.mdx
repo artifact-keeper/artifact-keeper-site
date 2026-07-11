@@ -1,0 +1,65 @@
+---
+title: What's new in 1.4.0
+description: Headline changes, security hardening, and upgrade steps for v1.4.0
+---
+
+v1.4.0 is an auth- and SSO-focused minor release. The headline is keyless CI/CD authentication: pipelines can now exchange a workload OIDC token for an Artifact Keeper token with no long-lived secrets. Alongside that, the release closes several information-disclosure surfaces, adds a dedicated login rate limit, and expands package-format coverage. This page summarises everything you need to know to upgrade.
+
+For the full commit-level changelog, see [the GitHub release notes](https://github.com/artifact-keeper/artifact-keeper/releases/tag/v1.4.0).
+
+## Headline changes
+
+- **Keyless CI/CD token exchange via OIDC** ([#1142](https://github.com/artifact-keeper/artifact-keeper/issues/1142)). CI pipelines can exchange a workload OIDC token (GitHub Actions, GitLab CI, and other OIDC-issuing runners) for an Artifact Keeper token without provisioning or rotating long-lived secrets. See [Authentication &amp; RBAC](/docs/advanced/auth/) and [CI/CD Integration](/docs/guides/ci-cd/).
+- **OCI OAuth2 refresh-token grant** ([#1166](https://github.com/artifact-keeper/artifact-keeper/issues/1166)). The OCI token endpoint now supports the OAuth2 refresh-token grant and `access_type=offline`, and `/v2/token` accepts repeated `scope` query params for kaniko cross-repo push ([#2276](https://github.com/artifact-keeper/artifact-keeper/issues/2276)). See [Docker / OCI](/docs/guides/docker/).
+- **PyPI non-PEP-503 upstream indexes** ([#1995](https://github.com/artifact-keeper/artifact-keeper/issues/1995)). Remote PyPI repositories can point at upstream indexes that don't follow the PEP 503 path layout via the new `upstream_index_path` repo config field. See [PyPI](/docs/guides/pypi/).
+- **Dart Pub support** ([#2008](https://github.com/artifact-keeper/artifact-keeper/issues/2008)). Pub upload protocol compliance plus Remote/Virtual metadata resolution for Dart packages. See [More Languages](/docs/guides/more-languages/).
+- **Expanded audit coverage** ([#2263](https://github.com/artifact-keeper/artifact-keeper/issues/2263)). TOTP, password-change, and session-invalidation auth events are now recorded, extending the auth/audit epic started in 1.3.0.
+- **Canonical `/users/me` self-service aliases** ([#2265](https://github.com/artifact-keeper/artifact-keeper/issues/2265)) for a user's own record, tokens, and password.
+- **npm cross-replica single-flight for SWR refreshes** ([#2256](https://github.com/artifact-keeper/artifact-keeper/issues/2256)) and storage-backend tracing spans ([#1947](https://github.com/artifact-keeper/artifact-keeper/issues/1947)).
+
+## Security
+
+- **`/health` detail and gRPC reflection gated, off by default** ([#2253](https://github.com/artifact-keeper/artifact-keeper/issues/2253)). Detailed health output and gRPC reflection are now behind config and disabled by default, closing version and topology information leaks. See [Health Checks](/docs/monitoring/health-checks/).
+- **Dedicated strict login rate limit** ([#2297](https://github.com/artifact-keeper/artifact-keeper/issues/2297)). The login endpoint now has its own strict rate limit, separated from the general limiter, so login-throttling tuning no longer trades off against normal API traffic. See [Authentication Security](/docs/security/authentication/).
+- **Sync-policy read/preview routes require admin** ([#2252](https://github.com/artifact-keeper/artifact-keeper/issues/2252)) and **build read endpoints require authentication** ([#2254](https://github.com/artifact-keeper/artifact-keeper/issues/2254)).
+- **cargo-audit advisories cleared** ([#2157](https://github.com/artifact-keeper/artifact-keeper/issues/2157)): crossbeam-epoch RUSTSEC-2026-0204 and the crypto-bigint yank.
+
+:::caution[Upgrade notes]
+Review these behavior changes before upgrading:
+
+- **`/health` detail and gRPC reflection are now off by default** ([#2253](https://github.com/artifact-keeper/artifact-keeper/issues/2253)). If your monitoring parses the detailed `/health` payload or relies on gRPC reflection, you must explicitly re-enable them via config. The default is closed.
+- **OIDC sub-2048-bit RSA keys are rejected by default** ([#2041](https://github.com/artifact-keeper/artifact-keeper/pull/2041)). The strict signature path rejects any RSA modulus below 2048 bits, keeping Artifact Keeper aligned with NIST SP 800-131A and OWASP ASVS. If your IdP still publishes a short RSA key on its JWKS, opt in per provider with the new `allow_legacy_rsa_keys` flag (migration 144, defaults to `false`). The legacy path accepts only RS256/RS384/RS512; PS*, ES*, and HS* tokens never engage it, and audience/issuer/expiry/nonce checks stay in force.
+- **Dedicated login rate limit** ([#2297](https://github.com/artifact-keeper/artifact-keeper/issues/2297)). Login throttling is now separate from the general limiter. If you had tuned the general limiter to protect login, review the new dedicated limit. Confirm your trusted-proxy CIDRs are configured so `X-Forwarded-For` is honored correctly behind a reverse proxy.
+:::
+
+## Bug fixes worth calling out
+
+- **Sync task claiming** ([#2221](https://github.com/artifact-keeper/artifact-keeper/issues/2221)). `sync_tasks` are now claimed before peer side effects run, stopping multi-replica double execution.
+- **apt virtual `dists`** ([#2255](https://github.com/artifact-keeper/artifact-keeper/issues/2255)) no longer swallows a 502 cap-exceeded into an empty 200; InRelease cache invalidation was simplified ([#2232](https://github.com/artifact-keeper/artifact-keeper/issues/2232)).
+- **npm canonical `/-/` tarball paths** ([#2280](https://github.com/artifact-keeper/artifact-keeper/issues/2280)) resolve in the generic download/delete handlers.
+- **OCI virtual-repo blob cache-fill** ([#2281](https://github.com/artifact-keeper/artifact-keeper/issues/2281)) streams instead of buffering at the 8&nbsp;MiB metadata cap.
+- **SBOM/scan not offered for proxy-cached remote artifacts** ([#2291](https://github.com/artifact-keeper/artifact-keeper/issues/2291)).
+- **Azure zero-length body signing** ([#2293](https://github.com/artifact-keeper/artifact-keeper/issues/2293)): Content-Length is left empty in the Shared Key string-to-sign for zero-length bodies.
+
+## Upgrade path
+
+1. **Pull the new images**:
+   ```bash
+   docker pull ghcr.io/artifact-keeper/artifact-keeper-backend:1.4.0
+   docker pull ghcr.io/artifact-keeper/artifact-keeper-web:1.4.0
+   ```
+2. **Run migrations**. Migration 144 adds the per-provider `allow_legacy_rsa_keys` OIDC flag (defaults to `false`); no action is required unless you need the legacy path.
+3. **Re-enable `/health` detail or gRPC reflection** via config if your monitoring depends on them — both are now off by default.
+4. **Review login rate limiting** and your trusted-proxy CIDRs so throttling keys off the real client IP.
+5. **Helm / Docker Compose**: bump to the v1.4.0-compatible chart or compose file and apply.
+6. **Verify**: confirm CI OIDC token exchange works from your pipeline, and that SSO logins still succeed against your IdP.
+
+The web UI, CLI, and native clients work unchanged against a 1.4.0 backend. SDKs published to npm, Maven, PyPI, crates.io, and SPM are tagged `1.4.0`.
+
+## Support window
+
+- **1.4.x**: active. Bug fixes, security patches, and feature work all land here.
+- **1.3.x**: maintenance only. Security backports until the next minor ships.
+- **&lt;= 1.2.x**: end of life. Upgrade required.
+
+See [Support Policy](/docs/getting-started/support-policy/) for the full version-support matrix.

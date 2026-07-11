@@ -1,0 +1,35 @@
+---
+title: What's new in 1.4.2
+description: A single Composer metadata fix in the v1.4.2 patch release
+---
+
+v1.4.2 is a focused patch release on top of [1.4.1](/docs/release-notes/v1-4-1/). It fixes Composer downloads from Local/hosted repositories, which previously failed because the package metadata emitted a scheme-less, host-less `dist.url`. There are no breaking changes and no configuration changes.
+
+For the full commit-level changelog, see [the GitHub release notes](https://github.com/artifact-keeper/artifact-keeper/releases/tag/v1.4.2).
+
+## Fixes
+
+- **Composer Local/hosted repositories emit an absolute `dist.url`** ([#2361](https://github.com/artifact-keeper/artifact-keeper/issues/2361)). Composer metadata (`packages.json`, `p2/`, and the legacy `p/`) previously returned a root-relative `dist.url` (`/composer/{repo}/dist/...`) with no scheme or host, so `composer install` / `composer update` could not download the archive. The Composer handler now threads the external base URL through the `RequestBaseUrl` extractor — honoring `AK_EXTERNAL_URL`, `X-Forwarded-Host`, and `Host` — matching the behavior of npm, Cargo, NuGet, OCI, and Git LFS. `dist.shasum` is also fixed: because Composer verifies it with `sha1_file()` and Artifact Keeper stores SHA-256, the field is now emitted empty, with integrity carried on `dist.reference`. Remote/proxied Composer repos use a separate rewrite path and are unaffected (tracked in [#2370](https://github.com/artifact-keeper/artifact-keeper/issues/2370)). See [Composer / PHP](/docs/guides/composer/).
+
+:::note[Set your external URL]
+For the absolute `dist.url` to be correct behind a reverse proxy, make sure `AK_EXTERNAL_URL` is set (or that `X-Forwarded-Host` / `Host` reflect the externally reachable hostname). See [Reverse Proxy &amp; TLS](/docs/deployment/reverse-proxy/) and [Environment Variables](/docs/reference/environment/).
+:::
+
+## Upgrade path
+
+This is a drop-in patch. Pull the new images and restart:
+
+```bash
+docker pull ghcr.io/artifact-keeper/artifact-keeper-backend:1.4.2
+docker pull ghcr.io/artifact-keeper/artifact-keeper-web:1.4.2
+```
+
+Helm and Docker Compose users bump to the v1.4.2-compatible chart or compose file and apply. The web UI, CLI, and native clients work unchanged against a 1.4.2 backend; SDKs are tagged `1.4.2`.
+
+## Support window
+
+- **1.4.x**: active. This patch supersedes 1.4.1.
+- **1.3.x**: maintenance only.
+- **&lt;= 1.2.x**: end of life. Upgrade required.
+
+See [Support Policy](/docs/getting-started/support-policy/) for the full version-support matrix.

@@ -1,0 +1,61 @@
+---
+title: What's new in 1.3.0
+description: Headline changes, security hardening, and upgrade steps for v1.3.0
+---
+
+v1.3.0 is a streaming-focused minor release. The headline theme is that uploads and pull-through downloads now stream end-to-end through the storage backend instead of buffering in memory, blob garbage collection becomes two-phase and idempotent, and the long-running auth/audit epic ([#1617](https://github.com/artifact-keeper/artifact-keeper/issues/1617)) lands its first phases. This page summarises everything you need to know to upgrade.
+
+For the full commit-level changelog, see [the GitHub release notes](https://github.com/artifact-keeper/artifact-keeper/releases/tag/v1.3.0).
+
+## Headline changes
+
+- **End-to-end streaming uploads** ([#1608](https://github.com/artifact-keeper/artifact-keeper/issues/1608)). Chef/Ansible/Pub multipart uploads ([#2176](https://github.com/artifact-keeper/artifact-keeper/issues/2176)), Helm chart metadata-parsing uploads ([#2180](https://github.com/artifact-keeper/artifact-keeper/issues/2180)), and PyPI/NuGet uploads through a shared content-addressed primitive ([#2199](https://github.com/artifact-keeper/artifact-keeper/issues/2199)) now stream to storage rather than buffering the whole body in memory. A CI streaming-invariant enforcement gate ([#2171](https://github.com/artifact-keeper/artifact-keeper/issues/2171)) plus a required `StorageBackend::put_stream` trait method ([#2207](https://github.com/artifact-keeper/artifact-keeper/issues/2207)) stop backends from silently reintroducing buffering. See [Storage Backends](/docs/advanced/storage/).
+- **Two-phase, idempotent blob garbage collection** ([#1660](https://github.com/artifact-keeper/artifact-keeper/issues/1660)). Blob GC now uses a `pending_delete` marker with an idempotent delete and a two-phase mark-and-sweep ([#2209](https://github.com/artifact-keeper/artifact-keeper/issues/2209), [#2213](https://github.com/artifact-keeper/artifact-keeper/issues/2213)), so a retried or interrupted sweep can no longer orphan or double-delete blobs.
+- **Auth/audit epic — first phases** ([#1617](https://github.com/artifact-keeper/artifact-keeper/issues/1617)). Federated logins and API-token lifecycle events are now audited ([#2187](https://github.com/artifact-keeper/artifact-keeper/issues/2187)), `require_admin` is consolidated onto the `AuthExtension` gate ([#2185](https://github.com/artifact-keeper/artifact-keeper/issues/2185)), and a new `AccessScope` enum for repo-scope authorization ([#2195](https://github.com/artifact-keeper/artifact-keeper/issues/2195)) is threaded through the SBOM and search read paths ([#2194](https://github.com/artifact-keeper/artifact-keeper/issues/2194), [#2205](https://github.com/artifact-keeper/artifact-keeper/issues/2205)).
+- **npm stale-while-revalidate packument cache** ([#2166](https://github.com/artifact-keeper/artifact-keeper/issues/2166)). Computed packuments are now cached with stale-while-revalidate, serving cached metadata immediately while refreshing in the background. See [npm Performance](/docs/guides/npm-performance/).
+- **Composer upstream dist caching** ([#2204](https://github.com/artifact-keeper/artifact-keeper/issues/2204)). Upstream `dist` artifacts are now cached for remote/proxy Composer repositories. See [Composer / PHP](/docs/guides/composer/).
+- **SSO regression harnesses**. New end-to-end harnesses cover OIDC login/callback against a mock IdP ([#2210](https://github.com/artifact-keeper/artifact-keeper/issues/2210)) and SAML ACS signed-assertion flows ([#2214](https://github.com/artifact-keeper/artifact-keeper/issues/2214)).
+
+## Security
+
+- **Scans that error now fail closed** ([#2240](https://github.com/artifact-keeper/artifact-keeper/issues/2240)). A vulnerability scan that errors is no longer reported as a clean artifact; it fails closed. See [Vulnerability Scanning](/docs/security/scanning/).
+- **Global security-policy writes require admin** ([#2223](https://github.com/artifact-keeper/artifact-keeper/issues/2223)). Creating, updating, or deleting a global security policy now requires an admin. See [Security Policies](/docs/security/policies/).
+- **Direct delete gated on promotion-only repos** ([#2239](https://github.com/artifact-keeper/artifact-keeper/issues/2239)). Direct artifact delete is now gated on promotion-only release repositories, closing a bypass of the promotion workflow. See [Staging &amp; Promotion](/docs/advanced/staging-promotion/).
+- **bcrypt bumped for RUSTSEC-2026-0199** ([#2216](https://github.com/artifact-keeper/artifact-keeper/issues/2216)) to 0.19.2.
+
+:::caution[Upgrade notes]
+Two changes alter runtime behavior you should review before upgrading:
+
+- **Auth cookie `Secure` flag** ([#2233](https://github.com/artifact-keeper/artifact-keeper/issues/2233), [#2234](https://github.com/artifact-keeper/artifact-keeper/issues/2234)). The `Secure` flag on auth cookies is now gated on the explicit `AK_ENFORCE_HTTPS` setting, with HTTPS auto-detection via `X-Forwarded-Proto` ([#2236](https://github.com/artifact-keeper/artifact-keeper/issues/2236)). If you terminate TLS at a reverse proxy, set `AK_ENFORCE_HTTPS=true` (or ensure `X-Forwarded-Proto` is passed through) so cookies keep the `Secure` attribute.
+- **Fail-closed scanning** ([#2240](https://github.com/artifact-keeper/artifact-keeper/issues/2240)). Artifacts whose scan errors are no longer treated as clean. If your scanner infrastructure is flaky, expect previously "clean" artifacts to surface as scan errors instead.
+:::
+
+## Bug fixes worth calling out
+
+- **Pull-through cache single-flight and streaming** ([#2172](https://github.com/artifact-keeper/artifact-keeper/issues/2172), [#2178](https://github.com/artifact-keeper/artifact-keeper/issues/2178)). The proxy pull-through cache now uses a cross-replica single-flight via a Postgres advisory lock, and blob downloads stream rather than buffer. Buffered upstream metadata reads are capped ([#2181](https://github.com/artifact-keeper/artifact-keeper/issues/2181), [#2191](https://github.com/artifact-keeper/artifact-keeper/issues/2191)).
+- **Authorization-cache invalidation fans out across replicas** ([#2169](https://github.com/artifact-keeper/artifact-keeper/issues/2169)), so a permission change takes effect on every replica, not just the one that handled the write.
+- **Metrics cardinality guard** ([#2217](https://github.com/artifact-keeper/artifact-keeper/issues/2217)). Unmatched HTTP paths now collapse to a single label, preventing scanner-driven cardinality explosion. See [Prometheus Metrics](/docs/monitoring/metrics/).
+- **Storage backend fixes** ([#2200](https://github.com/artifact-keeper/artifact-keeper/issues/2200)). GCS rewrite-loop token refresh plus S3 copy digest-check and abort-on-drop.
+- **Scanner adapter credential scoping** ([#2238](https://github.com/artifact-keeper/artifact-keeper/issues/2238)). The registry pull credential is scoped to the target image so the Trivy DB pull is not rejected (scanner-adapter 1.1.0, [#2242](https://github.com/artifact-keeper/artifact-keeper/issues/2242)).
+
+## Upgrade path
+
+1. **Pull the new images**:
+   ```bash
+   docker pull ghcr.io/artifact-keeper/artifact-keeper-backend:1.3.0
+   docker pull ghcr.io/artifact-keeper/artifact-keeper-web:1.3.0
+   ```
+2. **Review `AK_ENFORCE_HTTPS`**. If you run behind a TLS-terminating reverse proxy, set `AK_ENFORCE_HTTPS=true` or forward `X-Forwarded-Proto` so auth cookies keep the `Secure` attribute. See [Environment Variables](/docs/reference/environment/).
+3. **Helm**: bump the chart to the v1.3.0-compatible version and apply with `helm upgrade`.
+4. **Docker Compose**: pull the v1.3.0 compose file from the release tarball, copy in your `.env`, and run `docker compose up -d`.
+5. **Verify**: confirm scans complete (or surface as errors rather than false-clean), and that authenticated downloads and uploads work across your formats.
+
+The web UI, CLI, and native clients work unchanged against a 1.3.0 backend. SDKs published to npm, Maven, PyPI, crates.io, and SPM are tagged `1.3.0`.
+
+## Support window
+
+- **1.3.x**: active. Bug fixes, security patches, and feature work all land here.
+- **1.2.x**: maintenance only. Security backports until v1.4.0 ships.
+- **&lt;= 1.1.x**: end of life. Upgrade required.
+
+See [Support Policy](/docs/getting-started/support-policy/) for the full version-support matrix.
