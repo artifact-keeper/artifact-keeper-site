@@ -186,20 +186,21 @@ tar -czf mycompany-my-package-1.0.0.tar.gz --exclude='.git' --exclude='tests' --
 
 ### Publish to Repository
 
-Upload the package using the Artifact Keeper API:
+Upload the package archive directly to the Composer endpoint. The artifact is sent as raw zip bytes, and the package name and version are read from `composer.json` inside the archive.
 
 ```bash
-curl -X POST \
-  -F "file=@mycompany-my-package-1.0.0.zip" \
-  -F "name=mycompany/my-package" \
-  -F "version=1.0.0" \
+curl -X PUT \
+  -H "Content-Type: application/zip" \
+  --data-binary @mycompany-my-package-1.0.0.zip \
   -u your-username:your-password \
-  http://localhost:8080/api/v1/composer/my-repo/packages
+  http://localhost:8080/composer/my-repo/api/packages
 ```
+
+> **Note:** The package name and version are always extracted from the `composer.json` file inside the uploaded zip archive. They cannot be overridden by request parameters. If the `version` field is absent from `composer.json`, it defaults to `dev-main`. The endpoint returns JSON `{"status":"ok","package":"...","version":"...","sha256":"..."}` on success (HTTP 201).
 
 ### Automated Publishing with Git Tags
 
-Create a script to automatically publish from Git tags:
+Create a script to automatically publish from Git tags. The script creates a zip archive containing `composer.json` and uploads it to Artifact Keeper.
 
 ```bash
 #!/bin/bash
@@ -213,15 +214,16 @@ ARCHIVE="${PACKAGE_NAME//\//-}-${VERSION}.zip"
 git archive --format=zip --prefix="${PACKAGE_NAME//\//-}/" -o "$ARCHIVE" "$VERSION"
 
 # Upload to Artifact Keeper
-curl -X POST \
-  -F "file=@$ARCHIVE" \
-  -F "name=$PACKAGE_NAME" \
-  -F "version=$VERSION" \
+curl -X PUT \
+  -H "Content-Type: application/zip" \
+  --data-binary "@$ARCHIVE" \
   -u "$ARTIFACT_KEEPER_USER:$ARTIFACT_KEEPER_PASSWORD" \
-  http://localhost:8080/api/v1/composer/my-repo/packages
+  http://localhost:8080/composer/my-repo/api/packages
 
 rm "$ARCHIVE"
 ```
+
+> **Tip:** Ensure your `composer.json` includes the correct `"version"` field before tagging. The version in the uploaded archive is what Artifact Keeper uses — it cannot be overridden in the request.
 
 ## Installing Packages
 
@@ -439,12 +441,11 @@ jobs:
 
       - name: Publish to Artifact Keeper
         run: |
-          curl -X POST \
-            -F "file=@${{ env.ARCHIVE }}" \
-            -F "name=mycompany/my-package" \
-            -F "version=${{ env.VERSION }}" \
+          curl -X PUT \
+            -H "Content-Type: application/zip" \
+            --data-binary "@${{ env.ARCHIVE }}" \
             -u "${{ secrets.ARTIFACT_KEEPER_USER }}:${{ secrets.ARTIFACT_KEEPER_PASSWORD }}" \
-            ${{ secrets.ARTIFACT_KEEPER_URL }}/api/v1/composer/my-repo/packages
+            ${{ secrets.ARTIFACT_KEEPER_URL }}/composer/my-repo/api/packages
 ```
 
 ### GitLab CI
@@ -461,12 +462,11 @@ publish:
     - ARCHIVE="my-package-${VERSION}.zip"
     - zip -r "$ARCHIVE" . -x "*.git*" "tests/*" "vendor/*"
     - |
-      curl -X POST \
-        -F "file=@$ARCHIVE" \
-        -F "name=mycompany/my-package" \
-        -F "version=$VERSION" \
+      curl -X PUT \
+        -H "Content-Type: application/zip" \
+        --data-binary "@$ARCHIVE" \
         -u "$ARTIFACT_KEEPER_USER:$ARTIFACT_KEEPER_PASSWORD" \
-        $ARTIFACT_KEEPER_URL/api/v1/composer/my-repo/packages
+        $ARTIFACT_KEEPER_URL/composer/my-repo/api/packages
   only:
     - tags
 ```
@@ -506,12 +506,11 @@ pipeline {
         stage('Publish') {
             steps {
                 sh '''
-                    curl -X POST \
-                        -F "file=@$ARCHIVE" \
-                        -F "name=mycompany/my-package" \
-                        -F "version=$VERSION" \
+                    curl -X PUT \
+                        -H "Content-Type: application/zip" \
+                        --data-binary "@$ARCHIVE" \
                         -u "$ARTIFACT_KEEPER_CREDS" \
-                        $ARTIFACT_KEEPER_URL/api/v1/composer/my-repo/packages
+                        $ARTIFACT_KEEPER_URL/composer/my-repo/api/packages
                 '''
             }
         }
@@ -550,12 +549,11 @@ jobs:
       - run:
           name: Publish to Artifact Keeper
           command: |
-            curl -X POST \
-              -F "file=@$ARCHIVE" \
-              -F "name=mycompany/my-package" \
-              -F "version=$VERSION" \
+            curl -X PUT \
+              -H "Content-Type: application/zip" \
+              --data-binary "@$ARCHIVE" \
               -u "$ARTIFACT_KEEPER_USER:$ARTIFACT_KEEPER_PASSWORD" \
-              $ARTIFACT_KEEPER_URL/api/v1/composer/my-repo/packages
+              $ARTIFACT_KEEPER_URL/composer/my-repo/api/packages
 
 workflows:
   version: 2
