@@ -53,6 +53,7 @@ export default defineConfig({
             { label: 'Incus / LXC', slug: 'docs/guides/incus' },
             { label: 'Maven', slug: 'docs/guides/maven' },
             { label: 'npm', slug: 'docs/guides/npm' },
+            { label: 'npm Performance', slug: 'docs/guides/npm-performance' },
             { label: 'PyPI', slug: 'docs/guides/pypi' },
             { label: 'Cargo', slug: 'docs/guides/cargo' },
             { label: 'NuGet', slug: 'docs/guides/nuget' },
