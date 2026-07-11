@@ -80,6 +80,8 @@ export default defineConfig({
             { label: 'Health Scores', slug: 'docs/security/health-scores' },
             { label: 'Quality Gates', slug: 'docs/security/quality-gates' },
             { label: 'Security Policies', slug: 'docs/security/policies' },
+            { label: 'Audit Log', slug: 'docs/security/audit-log' },
+            { label: 'CVE Blast Radius', slug: 'docs/security/blast-radius' },
             { label: 'Artifact Signing', slug: 'docs/security/signing' },
             { label: 'Container Hardening', slug: 'docs/security/container-hardening' },
             { label: 'Security Testing', slug: 'docs/security/red-team' },
@@ -101,6 +103,7 @@ export default defineConfig({
             { label: 'Storage Backends', slug: 'docs/advanced/storage' },
             { label: 'Peer Replication', slug: 'docs/advanced/edge-nodes' },
             { label: 'WASM Plugins', slug: 'docs/advanced/plugins' },
+            { label: 'Artifact Versioning', slug: 'docs/advanced/versioning' },
             { label: 'Lifecycle Policies', slug: 'docs/advanced/lifecycle' },
             { label: 'Webhooks', items: [
               { label: 'Overview', slug: 'docs/advanced/webhooks' },
@@ -117,6 +120,7 @@ export default defineConfig({
             { label: 'Health Checks', slug: 'docs/monitoring/health-checks' },
             { label: 'Distributed Tracing', slug: 'docs/monitoring/tracing' },
             { label: 'Prometheus Metrics', slug: 'docs/monitoring/metrics' },
+            { label: 'Download Telemetry', slug: 'docs/monitoring/download-telemetry' },
           ],
         },
         {

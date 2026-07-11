@@ -107,6 +107,10 @@ For models not using HuggingFace format, use the generic ML model endpoint.
 **Endpoint Format:** `/mlmodel/{repo}`
 **Repository Key:** `mlmodel`
 
+:::tip
+Enable [artifact versioning](/docs/advanced/versioning) on an `mlmodel` repository to keep an immutable revision history of each model path — re-uploads append a new revision instead of overwriting, so you can retrieve and roll back to any prior version.
+:::
+
 Upload models via HTTP API:
 
 ```bash
@@ -412,6 +416,10 @@ Store any file type with custom metadata using the generic storage endpoint.
 
 **Endpoint Format:** `/generic/{repo}`
 **Repository Key:** `generic`
+
+:::tip
+Enable [artifact versioning](/docs/advanced/versioning) on a `generic` repository to append an immutable revision on every re-upload to a path (instead of overwriting), with a `?version=<rev|label>` selector for retrieving any prior revision.
+:::
 
 ### Upload Examples
 
