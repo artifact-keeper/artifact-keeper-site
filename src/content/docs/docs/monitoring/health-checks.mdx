@@ -81,6 +81,16 @@ Returns `200 OK` when all services are healthy, or `503 Service Unavailable` whe
 Do not use `/health` as a Kubernetes liveness probe. If an external service like Trivy or OpenSearch goes down, the `/health` endpoint returns 503, which would cause Kubernetes to restart your backend pods, even though the backend itself is functioning correctly. This creates cascading failures. Use `/livez` for liveness instead.
 :::
 
+### Detailed output is off by default (`EXPOSE_DETAILED_HEALTH`)
+
+Since v1.4.0, the operator-only detail in the `/health` response is **suppressed by default** to close a build/topology information leak (#2253). By default the probe stays minimal — overall `status`, `version`, and the per-service `checks`. The extra fields that let an anonymous caller fingerprint the exact build and observe live pool pressure are omitted:
+
+- `commit` — the exact git commit SHA
+- the prerelease / `dirty` build flag
+- `db_pool` — live connection-pool internals (`active`/`idle`/`max`/`size`)
+
+To surface these for debugging, set `EXPOSE_DETAILED_HEALTH=true` explicitly. Administrators can still read pool detail from the authenticated `/metrics` and memory-stats endpoints regardless of this flag.
+
 ## Response Examples
 
 ### Liveness probe
@@ -164,6 +174,8 @@ curl -s http://localhost:8080/health | jq .
   }
 }
 ```
+
+The `db_pool` block (and the `commit`/`dirty` build fields) shown above appear only when `EXPOSE_DETAILED_HEALTH=true`. With the default off, the response is limited to `status`, `version`, and `checks`.
 
 ## Kubernetes Configuration
 

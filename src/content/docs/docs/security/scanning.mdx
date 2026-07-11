@@ -117,7 +117,13 @@ Supported artifact types:
 Configure Trivy integration:
 
 ```bash
-# Required: Trivy server URL
+# Scanner-adapter URL (recommended). Routes filesystem/incus and
+# container-image scans over HTTP through the in-repo scanner-adapter,
+# so no trivy CLI binary is required in the image.
+TRIVY_ADAPTER_URL=http://trivy:8090
+
+# Legacy Trivy server URL. Only consulted when TRIVY_ADAPTER_URL is unset;
+# makes the filesystem/incus scanners spawn a bundled local trivy CLI.
 TRIVY_URL=http://trivy:8080
 
 # Optional: Trivy authentication
@@ -128,6 +134,20 @@ SCAN_ON_UPLOAD=true
 SCAN_TIMEOUT=300
 SCAN_CACHE_TTL=3600
 ```
+
+#### Scanner-adapter routing (hardened image)
+
+Since v1.5.0, filesystem and incus (rootfs) scans route through the in-repo
+scanner-adapter over HTTP. When `TRIVY_ADAPTER_URL` is set, `TrivyFsScanner`
+and `IncusScanner` upload the prepared workspace to the adapter's filesystem
+endpoint instead of shelling out to a local `trivy` binary — restoring
+first-class Trivy filesystem coverage on the hardened, CLI-free image (#2363).
+The adapter drives container-image scans over the same URL.
+
+If the adapter is unavailable, filesystem/incus scans degrade gracefully to
+`not_applicable` rather than failing the whole scan — Grype still covers those
+artifacts, preserving the no-grade-floor contract. The tarred-workspace upload
+budget is tunable via `MAX_FS_SCAN_UPLOAD_BYTES` (default 64 GiB).
 
 ### Database Configuration
 
@@ -240,6 +260,19 @@ Content-Type: application/json
   "scanner": "trivy"
 }
 ```
+
+### API Error Responses
+
+The scan endpoints return explicit error statuses rather than a misleading
+empty payload:
+
+| Status | When | Body |
+|--------|------|------|
+| `503 Service Unavailable` | No scanner is configured (`TRIVY_ADAPTER_URL`/`TRIVY_URL` unset) when a scan is requested | `Scanner service not configured` |
+| `404 Not Found` | The requested `scan_id` (or its findings) does not exist | `Scan not found` |
+
+A `503` here is an operational signal ("scanner not configured"), not a server
+bug — configure a scanner backend and retry.
 
 ## UI Integration
 
@@ -484,6 +517,15 @@ Response:
 ```
 
 ## Troubleshooting
+
+### Fail-Closed on Scan Error
+
+Since v1.3.0, a scan that errors **fails closed**: the artifact is no longer
+reported clean when the scanner itself fails (#2240). An errored scan is
+recorded as a failure rather than an empty/clean result, so security policies
+that block on scan status will not be satisfied by a scanner outage. (A scan
+that runs successfully against an unscannable artifact type still records
+`not_applicable` — that is distinct from an error.)
 
 ### Scan Failures
 

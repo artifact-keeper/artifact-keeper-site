@@ -37,6 +37,8 @@ These metrics track all inbound HTTP traffic to the backend API.
 
 :::tip
 Paths are normalized to prevent high-cardinality label explosion. UUIDs are replaced with `:id` and numeric identifiers are replaced with `:id`. For example, `/api/v1/repositories/550e8400-e29b-41d4-a716-446655440000/artifacts` becomes `/api/v1/repositories/:id/artifacts`.
+
+Since v1.3.0, any request that does not match a known route also collapses to a single placeholder `path` label of `unmatched` (#2217). Without this, a scanner probing thousands of nonexistent URLs would mint a new time series per path and blow up label cardinality; instead every unrouted request shares one series.
 :::
 
 ### Example Queries

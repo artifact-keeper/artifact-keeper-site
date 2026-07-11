@@ -645,6 +645,10 @@ trusted-host = localhost
 
 Internal packages resolve first, public packages are transparently cached from PyPI.
 
+:::note[Dependency-confusion isolation is priority-aware]
+As of v1.4.x (#2311, #2351), a name owned by a higher-priority **local** member suppresses the same name on a lower-priority **remote** member: pip is never offered the public package for a name your own repository already publishes. This closes the dependency-confusion window regardless of upstream version numbers — put your internal repo at the lower `priority` value (checked first), as above.
+:::
+
 For full details on cache TTL configuration, priority ordering, and monitoring, see the [Remote & Virtual Repositories](/docs/advanced/remote-virtual) guide.
 
 ## See Also

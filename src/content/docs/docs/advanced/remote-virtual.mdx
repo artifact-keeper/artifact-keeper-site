@@ -173,6 +173,10 @@ Members with a **lower priority number** are checked first. If a package is foun
 
 Like remote repos, virtual repositories are **read-only**. Uploads must target a specific local repository directly.
 
+### npm scope policy (v1.5.1)
+
+npm virtual repositories support an optional, admin-defined **scope allow-list** (#2327): a Remote member whose scope does not match the policy is skipped before it is ever queried, so a broad linked upstream (e.g. `registry.npmjs.org`) can be restricted to specific `@scope` names. It is configured per repository (`npm_allowed_scopes` / `npm_allow_unscoped`) via the admin-only, Remote-only `PUT`/`GET /api/v1/repositories/{key}/npm-scope-policy` endpoints. The default is unchanged — with no policy, all scopes are allowed. For scoped-package usage on the client side, see the [npm Registry Guide](/docs/guides/npm).
+
 ## Client Configuration
 
 Once your repositories are set up, point your package manager at the virtual (or remote) repository URL. The URL pattern is the same as for local repositories — the format handler is determined by the repository's configured format.

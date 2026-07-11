@@ -134,6 +134,8 @@ StorageBackend trait
 
 Artifacts are stored by their SHA-256 hash, enabling automatic deduplication across repositories. The backend chosen via `STORAGE_BACKEND` env var (`filesystem` or `s3`).
 
+As of v1.3.0, artifact data streams end-to-end through the storage backend — both uploads and pull-through (proxy/remote) downloads — instead of being buffered in memory. `StorageBackend::put_stream` is a required trait method, so a custom backend cannot silently fall back to in-memory buffering. Blob garbage collection is a two-phase mark-and-sweep: orphaned blobs are first marked `pending_delete`, then swept in a later idempotent pass.
+
 ### Database
 
 PostgreSQL 16 with 33 migrations covering:
