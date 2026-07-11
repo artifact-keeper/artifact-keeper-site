@@ -80,6 +80,39 @@ Invalidate current session.
 
 **Response:** `204 No Content`
 
+### POST /auth/ci/token
+
+Exchange a CI-issued OIDC JWT for a short-lived Artifact Keeper access token — keyless CI authentication, no static secrets. *(Added in v1.4.0.)*
+
+The CI JWT is supplied in the `Authorization` header (not the body) so it never appears in access logs or HTTP traces. The provider referenced by `provider_id` must be pre-configured by an administrator (see `POST /admin/ci-oidc`) and enabled.
+
+This endpoint is public — the CI JWT is the credential — so no prior bearer token is required.
+
+**Headers:** `Authorization: Bearer <CI-issued OIDC JWT>`
+
+**Request:**
+
+```json
+{
+  "provider_id": "3f2504e0-4f89-41d3-9a0c-0305e82c3301"
+}
+```
+
+**Response:**
+
+```json
+{
+  "access_token": "eyJhbGc...",
+  "token_type": "Bearer",
+  "expires_in": 900,
+  "username": "ci-abc12345"
+}
+```
+
+The returned `username` can be used directly as the Docker login username (no separate `/auth/me` call needed). `expires_in` is the token lifetime in seconds (default 900). Docker caches credentials and does not auto-refresh — re-exchange the CI JWT if a pipeline runs longer than this window.
+
+**Errors:** `401` invalid CI token or provider configuration (including a disabled provider); `404` CI OIDC provider not found.
+
 ---
 
 ## Repository Endpoints
@@ -172,6 +205,48 @@ Delete repository and all artifacts.
 
 **Response:** `204 No Content`
 
+### GET /repositories/:key/npm-scope-policy
+
+Get the npm scope allow-list for a repository. *(Added in v1.5.1.)*
+
+Only **Remote** (proxy) npm repositories consume this policy — it controls which npm scopes may be resolved through the repository when it is a candidate in a virtual npm repository.
+
+**Auth:** requires `repository:admin` on the target repository (global admins bypass).
+
+**Response:**
+
+```json
+{
+  "repository_key": "npm-proxy",
+  "allowed_scopes": ["@myorg", "@types"],
+  "allow_unscoped": false,
+  "active": true
+}
+```
+
+`active` is `false` when the stored policy places no restriction (virtual resolution then treats the repository as unrestricted).
+
+### PUT /repositories/:key/npm-scope-policy
+
+Set the npm scope allow-list for a Remote npm repository. *(Added in v1.5.1.)*
+
+Scope literals are lowercased, de-duplicated, and validated: each must start with `@` followed by lowercase letters, digits, `-`, `_`, or `.` (no leading `.`/`_`). An empty `allowed_scopes` places no scope restriction.
+
+**Auth:** requires `repository:admin` on the target repository (global admins bypass).
+
+**Request:**
+
+```json
+{
+  "allowed_scopes": ["@myorg", "@types"],
+  "allow_unscoped": false
+}
+```
+
+**Response:** `200 OK` with the same body shape as `GET /repositories/:key/npm-scope-policy`.
+
+**Errors:** `400` when the repository is not a Remote npm repository, or when a scope literal is malformed.
+
 ---
 
 ## Artifact Endpoints
@@ -205,6 +280,54 @@ Get artifact metadata.
 Download artifact file.
 
 **Response:** Binary file with appropriate Content-Type header.
+
+---
+
+## Artifact Versioning Endpoints
+
+First-class artifact versioning keeps an immutable revision history per artifact coordinate. *(Added in v1.4.0.)*
+
+Versioning is active only for repositories that have `versioning_enabled` set **and** whose format is `generic` or `mlmodel`. On any other repository these behaviors are inert. Version-history access is gated by the repository's visibility (public, or the caller has access) — it is **not** admin-only.
+
+A human version label is recorded at upload time via the `X-Artifact-Version` request header on the artifact upload (`PUT /repositories/:key/artifacts/:path`). Each upload to the same coordinate creates a new server-assigned, 1-based `revision`.
+
+### GET /repositories/:key/versions/:path
+
+List the immutable revision history for a versioned artifact, newest first.
+
+**Response:**
+
+```json
+{
+  "repository_key": "models",
+  "path": "vision/resnet50.onnx",
+  "items": [
+    {
+      "revision": 3,
+      "version_label": "v2.1.0",
+      "size_bytes": 104857600,
+      "checksum_sha256": "9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08",
+      "content_type": "application/octet-stream",
+      "uploaded_by": "b1d2c3e4-5f60-7182-93a4-b5c6d7e8f901",
+      "created_at": "2026-02-01T12:00:00Z"
+    }
+  ]
+}
+```
+
+`version_label` is present only when one was supplied at upload. `uploaded_by` is always present (`null` for anonymous uploads).
+
+**Errors:** `404` when the repository or artifact has no version history.
+
+### Version selector: `?version=<revision|label>`
+
+The artifact metadata (`GET /repositories/:key/artifacts/:path`) and download (`GET /repositories/:key/download/:path`) routes accept a `?version=` selector on versioning-enabled repositories:
+
+- a numeric value selects by server-assigned `revision`;
+- `latest` (or omitting the parameter) selects the HEAD revision;
+- any other string selects by human `version_label`.
+
+The selector is ignored on repositories without versioning enabled. When versioning is active, the metadata response also carries `revision` and (if set) `version_label`.
 
 ---
 
@@ -307,6 +430,63 @@ Get current user profile.
 ### PUT /users/me
 
 Update current user profile.
+
+### Canonical self-service aliases
+
+The following `/users/me/*` routes let the authenticated caller manage their own record, API tokens, and password without needing their user id. *(Added in v1.4.0.)*
+
+#### GET /users/me
+
+Return the caller's own user record.
+
+#### GET /users/me/tokens
+
+List the caller's own API tokens.
+
+#### POST /users/me/tokens
+
+Create an API token for the caller.
+
+**Request:**
+
+```json
+{
+  "name": "ci-publish",
+  "scopes": ["read", "write"],
+  "expires_in_days": 90
+}
+```
+
+**Response:** `200 OK`
+
+```json
+{
+  "id": "9c1f...",
+  "name": "ci-publish",
+  "token": "ak_live_..."
+}
+```
+
+The `token` value is shown only once, at creation.
+
+#### DELETE /users/me/tokens/:token_id
+
+Revoke one of the caller's own API tokens.
+
+#### POST /users/me/password
+
+Change the caller's own password. This route is rate-limited (password-change throttle).
+
+**Request:**
+
+```json
+{
+  "current_password": "old-secret",
+  "new_password": "new-secret"
+}
+```
+
+`current_password` is required for non-admin callers.
 
 ### DELETE /users/:id
 
@@ -557,6 +737,180 @@ Run garbage collection (admin only).
 
 Reindex search database (admin only).
 
+### GET /admin/audit
+
+Query the audit log (admin only). *(Added in v1.4.0.)* Returns recorded audit events newest-first.
+
+**Query Parameters:**
+- `user_id` (uuid): Filter by acting/subject user id
+- `action` (string): Filter by action (e.g. `LOGIN`, `USER_CREATED`, `ARTIFACT_DOWNLOADED`)
+- `resource_type` (string): Filter by resource type (e.g. `user`, `repository`, `artifact`)
+- `resource_id` (uuid): Filter by the affected resource id
+- `correlation_id` (string): Filter by exact request correlation ID
+- `from` (RFC 3339): Inclusive lower time bound
+- `to` (RFC 3339): Inclusive upper time bound
+- `page` (number): 1-based page (default 1)
+- `per_page` (number): Page size (default 50, max 200)
+
+**Response:**
+
+```json
+{
+  "items": [
+    {
+      "id": "a1b2c3d4-...",
+      "user_id": "b1d2c3e4-...",
+      "actor_username": "alice",
+      "action": "ARTIFACT_DOWNLOADED",
+      "resource_type": "artifact",
+      "resource_id": "c1d2e3f4-...",
+      "details": {},
+      "ip_address": "203.0.113.10",
+      "correlation_id": "req-abc123",
+      "created_at": "2026-02-01T12:00:00Z"
+    }
+  ],
+  "total": 1284,
+  "page": 1,
+  "per_page": 50
+}
+```
+
+`actor_username` is `null` for system/non-user actors and for actors that have since been deleted. `correlation_id` is a string (caller-supplied values and W3C trace IDs are not UUIDs).
+
+### GET /admin/downloads
+
+List attributed download telemetry (admin only). *(Added in v1.4.0.)* Download attribution is sensitive, so this surface is admin-only.
+
+**Query Parameters:**
+- `artifact_id` (uuid): Filter to downloads of one artifact
+- `user_id` (uuid): Filter to downloads by one user
+- `ip` (string): Filter to downloads from one client IP (exact match)
+- `from` (RFC 3339): Inclusive lower bound on `downloaded_at`
+- `to` (RFC 3339): Inclusive upper bound on `downloaded_at`
+- `page` (number): 1-based page (default 1)
+- `per_page` (number): Page size (default 20, max 100)
+
+**Response:**
+
+```json
+{
+  "downloads": [
+    {
+      "artifact_id": "c1d2e3f4-...",
+      "user_id": "b1d2c3e4-...",
+      "username": "alice",
+      "ip_address": "203.0.113.10",
+      "user_agent": "docker/24.0.5",
+      "downloaded_at": "2026-02-01T12:00:00Z"
+    }
+  ],
+  "total": 42,
+  "page": 1,
+  "per_page": 20
+}
+```
+
+`ip_address` is `null` for legacy rows and unresolvable clients; `username` is `null` for anonymous downloads or deleted users.
+
+### GET /admin/downloads/by-ip/:ip
+
+Downloads originating from one client IP — "what did this network location pull?" (admin only). The `:ip` path segment must be a valid IP address and overrides the `ip` filter. Accepts the same `artifact_id`, `user_id`, `from`, `to`, `page`, and `per_page` query parameters; returns the same envelope as `GET /admin/downloads`.
+
+**Errors:** `400` invalid IP address.
+
+### GET /admin/downloads/by-user/:user_id
+
+Downloads performed by one user — "what did this user pull?" (admin only). The `:user_id` path segment overrides the `user_id` filter. Accepts the same `artifact_id`, `ip`, `from`, `to`, `page`, and `per_page` query parameters; returns the same envelope as `GET /admin/downloads`.
+
+### GET /admin/security/cve/:cve_id/blast-radius
+
+Blast-radius report for a CVE (admin only): who downloaded any artifact flagged with the CVE, and how exposed the repositories holding those artifacts are. *(Added in v1.5.0.)*
+
+**Query Parameters:**
+- `from` (RFC 3339): Inclusive lower bound on `downloaded_at`
+- `to` (RFC 3339): Inclusive upper bound on `downloaded_at`
+- `page` (number): 1-based page over the downloaders list (default 1)
+- `per_page` (number): Downloaders per page (default 20, max 100)
+
+**Response:**
+
+```json
+{
+  "target": { "kind": "cve", "value": "CVE-2021-44228" },
+  "summary": {
+    "affected_artifact_count": 4,
+    "affected_repo_count": 2,
+    "downloader_user_count": 3,
+    "anonymous_download_present": true,
+    "distinct_ip_count": 7,
+    "total_download_count": 19
+  },
+  "affected_repos": [
+    {
+      "repository_id": "d1e2f3a4-...",
+      "repository_key": "libs-release",
+      "is_public": false,
+      "access_scope": "restricted_acl"
+    }
+  ],
+  "downloaders": [
+    {
+      "user_id": "b1d2c3e4-...",
+      "username": "alice",
+      "download_count": 5,
+      "distinct_ip_count": 2,
+      "first_download": "2026-01-10T09:00:00Z",
+      "last_download": "2026-02-01T12:00:00Z",
+      "ip_addresses": ["203.0.113.10", "198.51.100.4"]
+    }
+  ],
+  "total_downloaders": 3,
+  "page": 1,
+  "per_page": 20
+}
+```
+
+Notes:
+- `access_scope` classifies each repository as `public`, `restricted_acl` (private with at least one explicit ACL row), or `restricted_roles` (private with no ACL rows; access flows through roles).
+- `affected_repos` lists every repository containing an affected artifact (downloaded or not), bounded to 200 entries.
+- Each downloader's `ip_addresses` is a bounded sample of at most 50 distinct IPs; the counts (`distinct_ip_count`, etc.) stay exact.
+- `downloaders` with a `null` `user_id`/`username` is the aggregated anonymous bucket, which counts as one entry in `total_downloaders`.
+
+**Errors:** `400` empty/invalid parameter.
+
+### GET /admin/security/artifact/:artifact_id/blast-radius
+
+Blast-radius report for one artifact (admin only): who downloaded it, regardless of which CVE flagged it. *(Added in v1.5.0.)* Same query parameters and response shape as the CVE blast-radius endpoint, with `target.kind` set to `artifact`.
+
+### GET /admin/ci-oidc
+
+List configured CI OIDC providers (admin only). *(Added in v1.4.0.)* Provider config powers the keyless `POST /auth/ci/token` exchange.
+
+### POST /admin/ci-oidc
+
+Create a CI OIDC provider (admin only).
+
+### GET /admin/ci-oidc/:id
+
+Get a CI OIDC provider (admin only).
+
+### PUT /admin/ci-oidc/:id
+
+Update a CI OIDC provider (admin only).
+
+### DELETE /admin/ci-oidc/:id
+
+Delete a CI OIDC provider (admin only).
+
+### PATCH /admin/ci-oidc/:id/toggle
+
+Enable/disable a CI OIDC provider (admin only).
+
+### GET /admin/ci-oidc/:id/mappings
+
+List identity mappings for a provider (admin only). Mappings are also created (`POST`), read/updated/deleted (`GET`/`PUT`/`DELETE /admin/ci-oidc/:id/mappings/:mid`), and toggled (`PATCH /admin/ci-oidc/:id/mappings/:mid/toggle`).
+
 ---
 
 ## Search Endpoints
@@ -685,6 +1039,19 @@ Sign artifact.
 ### GET /signing/verify/:id
 
 Verify artifact signature.
+
+---
+
+## OCI Distribution Token
+
+### GET /v2/token
+
+The OCI/Distribution bearer-token endpoint used by Docker/OCI clients (registry root, **not** under `/api/v1`). The issued token is derived from the authenticated identity's permissions, not from the requested scope.
+
+Two behaviors were tightened in v1.5.1:
+
+- **Repeated `?scope=` parameters are honored.** The OCI token spec permits multiple `scope` query parameters, and clients such as kaniko/BuildKit send one per resource (e.g. a push target plus a base-image repo for a cross-repo blob mount). The endpoint now ignores the repeated `scope` values instead of rejecting the request with `400 duplicate field scope`.
+- **API-token repository allow-lists are enforced.** When the caller authenticates with an API token that declares an `allowed_repo_ids` allow-list, that allow-list is carried into the minted OCI bearer and enforced by the resource handlers on pull/push — a ceiling that applies even to admins. JWT/password credentials (no allow-list) are unaffected.
 
 ---
 
