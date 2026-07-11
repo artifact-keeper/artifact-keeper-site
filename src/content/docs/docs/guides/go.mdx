@@ -197,14 +197,20 @@ Use the HTTP API to publish your module:
 # Create a zip archive of your module
 git archive --format=zip --prefix=mymodule@v1.0.0/ v1.0.0 -o mymodule-v1.0.0.zip
 
-# Upload to Artifact Keeper
-curl -X POST \
+# Upload the module zip (raw request body — the Go proxy expects
+# application/zip, not a multipart form)
+curl -X PUT \
   -H "Authorization: Bearer your-auth-token" \
-  -F "file=@mymodule-v1.0.0.zip" \
-  -F "format=go" \
-  -F "name=github.com/yourcompany/mymodule" \
-  -F "version=v1.0.0" \
-  https://registry.example.com/api/artifacts
+  -H "Content-Type: application/zip" \
+  --data-binary @mymodule-v1.0.0.zip \
+  https://registry.example.com/go/{repository-name}/github.com/yourcompany/mymodule/@v/v1.0.0.zip
+
+# Upload the go.mod (also required)
+cat go.mod | curl -X PUT \
+  -H "Authorization: Bearer your-auth-token" \
+  -H "Content-Type: text/plain" \
+  --data-binary @- \
+  https://registry.example.com/go/{repository-name}/github.com/yourcompany/mymodule/@v/v1.0.0.mod
 ```
 
 ### Automated Publishing Script
@@ -217,25 +223,64 @@ MODULE_NAME="github.com/yourcompany/mymodule"
 VERSION=${1:-$(git describe --tags --abbrev=0)}
 REGISTRY="https://registry.example.com"
 TOKEN="${ARTIFACT_KEEPER_TOKEN}"
+REPOSITORY="your-go-repository"
 
 echo "Publishing ${MODULE_NAME}@${VERSION} to ${REGISTRY}"
 
 # Create zip archive
 git archive --format=zip --prefix="${MODULE_NAME}@${VERSION}/" "${VERSION}" -o "/tmp/${MODULE_NAME##*/}-${VERSION}.zip"
 
-# Upload to registry
-curl -X POST \
+# Upload the module zip (raw request body, not multipart)
+curl -X PUT \
   -H "Authorization: Bearer ${TOKEN}" \
-  -F "file=@/tmp/${MODULE_NAME##*/}-${VERSION}.zip" \
-  -F "format=go" \
-  -F "name=${MODULE_NAME}" \
-  -F "version=${VERSION}" \
-  "${REGISTRY}/api/artifacts"
+  -H "Content-Type: application/zip" \
+  --data-binary "@/tmp/${MODULE_NAME##*/}-${VERSION}.zip" \
+  "${REGISTRY}/go/${REPOSITORY}/${MODULE_NAME}/@v/${VERSION}.zip"
+
+# Upload the go.mod (also required)
+cat go.mod | curl -X PUT \
+  -H "Authorization: Bearer ${TOKEN}" \
+  -H "Content-Type: text/plain" \
+  --data-binary @- \
+  "${REGISTRY}/go/${REPOSITORY}/${MODULE_NAME}/@v/${VERSION}.mod"
 
 # Cleanup
 rm "/tmp/${MODULE_NAME##*/}-${VERSION}.zip"
 
 echo "Successfully published ${MODULE_NAME}@${VERSION}"
+```
+
+### Makefile
+
+The same flow as a `Makefile`. Recipe lines must be indented with tabs:
+
+```makefile
+REGISTRY = https://registry.example.com
+REPOSITORY = go-private
+MODULE_NAME = github.com/yourcompany/mymodule
+VERSION = v0.0.6
+REF = branch-or-tag
+TOKEN = your-secret
+
+packaging:
+	git archive --format=zip --prefix="$(MODULE_NAME)@$(VERSION)/" "$(REF)" -o "module.zip"
+
+publish:
+	curl -X PUT \
+		-H "Authorization: Bearer $(TOKEN)" \
+		-H "Content-Type: application/zip" \
+		--data-binary "@module.zip" \
+		$(REGISTRY)/go/$(REPOSITORY)/$(MODULE_NAME)/@v/$(VERSION).zip
+	cat go.mod | curl -X PUT \
+		-H "Authorization: Bearer $(TOKEN)" \
+		-H "Content-Type: text/plain" \
+		--data-binary @- \
+		$(REGISTRY)/go/$(REPOSITORY)/$(MODULE_NAME)/@v/$(VERSION).mod
+
+release:
+	make packaging
+	make publish
+	rm -rf module.zip
 ```
 
 ## Private Modules Workflow
