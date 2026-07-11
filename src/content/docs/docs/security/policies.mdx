@@ -16,6 +16,38 @@ Security policies provide automated governance over which artifacts can be deplo
 - **Allow**: Permit without restrictions
 - **Quarantine**: Mark artifact as quarantined for review
 
+## Repository Access Control (RBAC)
+
+Beyond vulnerability policies, Artifact Keeper enforces role-based access control on repository operations. Recent hardening tightened how write, delete, and admin-only actions are authorized.
+
+### Action-Specific Write/Delete Permissions
+
+The generic-REST and OCI artifact paths now enforce **action-specific** permissions rather than collapsing read, write, and delete into a single predicate. A grantee with read-only access can no longer write or delete artifacts — read, write, and delete are evaluated independently.
+
+:::caution
+If your automation previously relied on a read-only grant being able to push or delete (an over-broad predicate), it will now be rejected. Grant the specific write/delete permission the workflow needs.
+:::
+
+### Admin / Repo-Admin Gated Operations
+
+The following operations are gated to **admin** or **repo-admin** and are no longer available to ordinary write grantees:
+
+- **Dependency-Track integration**
+- **SBOM CVE-status updates**
+- **Webhook creation**
+- **Scan triggering**
+- **Cache invalidation**
+
+Promotion and peer-replication paths are unaffected by this change and keep their existing authorization.
+
+### Denials Are Audited
+
+Every authorization denial from these checks emits a `PERMISSION_DENIED` event to the [audit log](/docs/security/audit-log). This gives you a record of *attempted* privileged actions that were blocked — the signal to watch for misconfigured automation or probing. Query them with:
+
+```bash
+GET /api/v1/admin/audit?action=PERMISSION_DENIED
+```
+
 ## Policy Configuration
 
 ### Policy Definition
@@ -623,6 +655,7 @@ cache:
 
 ## See Also
 
+- [Audit Log](/docs/security/audit-log) - Query `PERMISSION_DENIED` and other security events
 - [SBOM & License Compliance](/docs/security/sbom) - Software Bill of Materials and Dependency-Track integration
 - [Vulnerability Scanning](/docs/security/scanning) - Configure artifact security scanning
 - [Artifact Signing](/docs/security/signing) - Verify artifact authenticity

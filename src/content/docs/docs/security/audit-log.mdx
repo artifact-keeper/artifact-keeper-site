@@ -1,0 +1,110 @@
+---
+title: "Audit Log"
+description: "Query the functional audit trail of security-relevant events in Artifact Keeper"
+---
+
+Artifact Keeper records security-relevant events into a functional audit trail and exposes them through an admin-only query API and the admin web UI. The audit log answers "who did what, to which resource, and when" — including the denials that were blocked before they could take effect.
+
+## What Gets Recorded
+
+Every audit event captures the acting user, an action string, the affected resource, the client IP, a request correlation ID, and a timestamp. The events currently recorded include:
+
+- **Artifact operations** — `ARTIFACT_UPLOADED`, `ARTIFACT_DOWNLOADED`, `ARTIFACT_DELETED`, `ARTIFACT_METADATA_UPDATED`
+- **User and role management** — `USER_CREATED`, `USER_UPDATED`, `USER_DELETED`, `USER_DISABLED`, `ROLE_ASSIGNED`, `ROLE_REVOKED`
+- **Repository lifecycle** — `REPOSITORY_CREATED`, `REPOSITORY_UPDATED`, `REPOSITORY_DELETED`, `REPOSITORY_PERMISSION_CHANGED`
+- **Authentication** — `LOGIN`, `LOGOUT`, `LOGIN_FAILED`, `PASSWORD_CHANGED`, `API_TOKEN_CREATED`, `API_TOKEN_REVOKED`, `TOTP_ENABLED`, `TOTP_DISABLED`, `SESSIONS_INVALIDATED`
+- **Authorization denials** — `PERMISSION_DENIED`, emitted whenever a caller is rejected for lacking the required permission (see [Security Policies](/docs/security/policies) for the tightened RBAC rules that raise these)
+- **Platform operations** — backups and restores, peer registration and sync, plugin lifecycle, setting changes, SBOM generation, and more
+
+:::note
+`PERMISSION_DENIED` events give you a record of *attempted* access that was blocked — not just successful actions. This is the signal to watch for probing behavior or misconfigured automation.
+:::
+
+## Querying the Audit Log
+
+The audit log is queried through a single admin-only endpoint. It requires an administrator bearer token; non-admin callers receive `403 Forbidden`.
+
+```bash
+GET /api/v1/admin/audit
+```
+
+### Filters
+
+All filters are optional and combine with AND semantics:
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `user_id` | UUID | Filter by acting/subject user |
+| `action` | string | Exact action string, e.g. `ARTIFACT_DOWNLOADED` |
+| `resource_type` | string | e.g. `user`, `repository`, `artifact` |
+| `resource_id` | UUID | The affected resource id |
+| `correlation_id` | string | Exact request correlation / trace id |
+| `from` | RFC 3339 | Inclusive lower time bound |
+| `to` | RFC 3339 | Inclusive upper time bound |
+| `page` | integer | 1-based page index (default `1`) |
+| `per_page` | integer | Page size (default `50`, max `200`) |
+
+Events are returned newest-first.
+
+```bash
+# Every artifact deletion in a time window, most recent first
+curl -H "Authorization: Bearer $ADMIN_TOKEN" \
+  "https://artifacts.example.com/api/v1/admin/audit?action=ARTIFACT_DELETED&from=2026-07-01T00:00:00Z&per_page=100"
+```
+
+### Response
+
+```json
+{
+  "items": [
+    {
+      "id": "5c1f2e8a-1b3c-4d5e-8f90-1a2b3c4d5e6f",
+      "user_id": "9a8b7c6d-5e4f-3a2b-1c0d-9e8f7a6b5c4d",
+      "actor_username": "ci-bot",
+      "action": "ARTIFACT_DELETED",
+      "resource_type": "artifact",
+      "resource_id": "1122aabb-ccdd-eeff-0011-223344556677",
+      "details": { "path": "builds/v1.0.0/output.tar.gz" },
+      "ip_address": "203.0.113.9",
+      "correlation_id": "b7c3f1a2-9d4e-4c5b-8a1f-0e2d3c4b5a69",
+      "created_at": "2026-07-10T18:42:07Z"
+    }
+  ],
+  "total": 1,
+  "page": 1,
+  "per_page": 50
+}
+```
+
+### Actor Username Resolution
+
+Each row embeds `actor_username`, resolved server-side so clients do not have to make a second lookup per event. It is `null` in two cases:
+
+- The action was performed by a **system/non-user actor** (e.g. a scheduled maintenance task).
+- The acting user has since been **deleted** — the historical `user_id` is retained, but the name can no longer be resolved.
+
+The `correlation_id` is a string (not a UUID): it carries the request's `X-Correlation-ID` or W3C trace id, which lets you tie an audit event back to the specific request across your logs and traces.
+
+## Retention
+
+Audit events are retained according to the `audit_retention_days` system setting (default **90 days**). Retention is enforced when the audit cleanup task runs:
+
+```bash
+POST /api/v1/admin/cleanup
+Content-Type: application/json
+
+{ "cleanup_audit_logs": true }
+```
+
+Events older than the configured retention window are deleted. Increase `audit_retention_days` through the admin settings if your compliance program requires a longer trail, and export events on a schedule if you need retention beyond what you keep in the database.
+
+## Admin Web UI
+
+The audit trail is also browsable from the admin area of the web console. The UI wraps the same query endpoint with a filterable, paginated table — filter by action, actor, resource, and time range, and drill into individual events to see the embedded details and correlation id. Because the underlying endpoint is admin-only, the audit view is visible only to administrators.
+
+## See Also
+
+- [Security Policies](/docs/security/policies) — the RBAC rules whose denials emit `PERMISSION_DENIED` audit events
+- [Download Telemetry](/docs/monitoring/download-telemetry) — per-download IP and user attribution
+- [CVE Blast Radius](/docs/security/blast-radius) — join CVE findings to the users and IPs that downloaded an affected artifact
+- [Authentication & RBAC](/docs/advanced/auth) — users, roles, and permissions

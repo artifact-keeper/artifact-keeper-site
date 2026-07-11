@@ -1,0 +1,119 @@
+---
+title: "Download Telemetry"
+description: "Per-download client IP and user attribution across all package formats in Artifact Keeper"
+---
+
+Artifact Keeper records the real client IP and authenticated user for every artifact download, across all 40+ package formats, into the `download_statistics` table. This gives administrators per-download attribution — "who pulled this, and from where" — that powers usage reporting, incident response, and the [CVE blast-radius](/docs/security/blast-radius) analysis.
+
+## What Gets Captured
+
+For each content-serving request, Artifact Keeper records:
+
+- **Client IP** — the resolved real client address (see [Real-Client-IP Resolution](#real-client-ip-resolution) below)
+- **User** — the authenticated principal, or `null` for anonymous downloads
+- **User agent** — the request's `User-Agent` header, when present
+- **Timestamp** — when the download was served
+
+Recording is best-effort and never blocks or rejects a download: an anonymous request records a `null` user, and an unresolvable client records a `null` IP — never a sentinel such as `0.0.0.0`.
+
+### Coverage
+
+Attribution covers **every** content-serving path, not just the native package-manager routes. In this release, recording was extended to close the remaining gaps:
+
+- The generic `/artifacts/{path}` download branch
+- Virtual-repository member-local download branches
+- Presigned-redirect download paths (object-storage backends)
+
+The result is uniform per-download attribution regardless of format or storage backend.
+
+## Real-Client-IP Resolution
+
+When Artifact Keeper runs behind a reverse proxy or load balancer, the socket peer is the proxy, not the end client — so the real client IP must come from the `X-Forwarded-For` (XFF) header. Trusting that header blindly would let any caller spoof attribution, so resolution is gated on a trusted-proxy allowlist:
+
+- The **socket peer address is authoritative** by default.
+- `X-Forwarded-For` is believed **only when the peer is inside a configured trusted-proxy CIDR range**.
+- If nothing resolves, the IP is recorded as `null`.
+
+The trusted-proxy ranges are configured with the `RATE_LIMIT_TRUSTED_PROXY_CIDRS` environment variable (the same allowlist the rate limiter uses). It is empty by default, which means XFF is ignored and the socket peer is always used.
+
+```bash
+# Trust XFF only from your ingress / load-balancer subnets
+RATE_LIMIT_TRUSTED_PROXY_CIDRS="10.0.0.0/8,192.168.0.0/16"
+```
+
+:::caution
+If you terminate connections behind a proxy but leave `RATE_LIMIT_TRUSTED_PROXY_CIDRS` empty, every download will be attributed to the proxy's IP. Set it to the CIDR ranges of your trusted proxies so the real client IP is recorded. Conversely, listing an untrusted range here would let clients in that range spoof their attributed IP via XFF — only list infrastructure you control.
+:::
+
+This resolution rule also closed a trusted-proxy XFF-spoofing gap on the download path, so an untrusted peer can no longer steer its recorded IP through a forged `X-Forwarded-For` header.
+
+## Querying Downloads
+
+Download telemetry is queried through admin-only endpoints. They require an administrator bearer token; download attribution is sensitive, so non-admin callers receive `403 Forbidden`.
+
+### List Downloads
+
+```bash
+GET /api/v1/admin/downloads
+```
+
+All filters are optional and combine with AND semantics:
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `artifact_id` | UUID | Downloads of one artifact |
+| `user_id` | UUID | Downloads by one user |
+| `ip` | string | Downloads from one client IP (exact match) |
+| `from` | RFC 3339 | Inclusive lower bound on `downloaded_at` |
+| `to` | RFC 3339 | Inclusive upper bound on `downloaded_at` |
+| `page` | integer | 1-based page index (default `1`) |
+| `per_page` | integer | Page size (default `20`, max `100`) |
+
+Events are returned newest-first.
+
+```json
+{
+  "downloads": [
+    {
+      "artifact_id": "1122aabb-ccdd-eeff-0011-223344556677",
+      "user_id": "9a8b7c6d-5e4f-3a2b-1c0d-9e8f7a6b5c4d",
+      "username": "alice",
+      "ip_address": "203.0.113.9",
+      "user_agent": "npm/10.2.0 node/v20.11.0",
+      "downloaded_at": "2026-07-10T18:42:07Z"
+    }
+  ],
+  "total": 1,
+  "page": 1,
+  "per_page": 20
+}
+```
+
+`username` is populated when the download was authenticated and the user still exists; `ip_address` is `null` for legacy rows and unresolvable clients.
+
+### Downloads by IP
+
+"What did this network location pull?" The IP is a path parameter and must be a valid address (otherwise `400`):
+
+```bash
+curl -H "Authorization: Bearer $ADMIN_TOKEN" \
+  "https://artifacts.example.com/api/v1/admin/downloads/by-ip/203.0.113.9"
+```
+
+### Downloads by User
+
+"What did this user pull?" The user id is a path parameter:
+
+```bash
+curl -H "Authorization: Bearer $ADMIN_TOKEN" \
+  "https://artifacts.example.com/api/v1/admin/downloads/by-user/9a8b7c6d-5e4f-3a2b-1c0d-9e8f7a6b5c4d"
+```
+
+Both scoped endpoints accept the same `artifact_id`, `from`, `to`, `page`, and `per_page` filters as `GET /downloads` and return the same response shape.
+
+## See Also
+
+- [CVE Blast Radius](/docs/security/blast-radius) — join CVE findings to the users and IPs that downloaded a vulnerable artifact
+- [Audit Log](/docs/security/audit-log) — the security-event audit trail, including download events
+- [Prometheus Metrics](/docs/monitoring/metrics) — aggregate download and usage metrics
+- [Reverse Proxy & TLS](/docs/deployment/reverse-proxy) — running Artifact Keeper behind a proxy

@@ -1,0 +1,124 @@
+---
+title: "CVE Blast Radius"
+description: "Determine who is exposed by a vulnerability by joining CVE findings to download attribution"
+---
+
+When a new CVE lands, the first question is "who is exposed?" Artifact Keeper's blast-radius analysis answers it by joining vulnerability scan findings to the [per-download attribution](/docs/monitoring/download-telemetry) collected across the registry: it reports the users and client IPs that actually downloaded an affected artifact, plus a bounded classification of how widely each affected repository is reachable.
+
+## What Blast Radius Answers
+
+Given a CVE id — or a single artifact — the report tells you:
+
+- **Which artifacts** carry the finding and have been downloaded.
+- **Which users and IPs** downloaded them (with per-downloader counts and first/last download times).
+- **How exposed** each affected repository is, via a per-repository access-scope classification.
+
+:::note
+This analysis reports who **downloaded** a vulnerable artifact. Full enumeration of every principal who *could* access it but has not downloaded it (expanding all roles and groups) is deferred to a follow-up phase; the per-repository `access_scope` gives you the exposure signal in the meantime.
+:::
+
+## Endpoints
+
+Both endpoints are admin-only (download attribution is sensitive) and require an administrator bearer token; non-admin callers receive `403 Forbidden`.
+
+### Blast Radius for a CVE
+
+```bash
+GET /api/v1/admin/security/cve/{cve_id}/blast-radius
+```
+
+`cve_id` is matched exactly against the canonical id stored by the scanners (e.g. `CVE-2021-44228`).
+
+```bash
+curl -H "Authorization: Bearer $ADMIN_TOKEN" \
+  "https://artifacts.example.com/api/v1/admin/security/cve/CVE-2021-44228/blast-radius"
+```
+
+### Blast Radius for an Artifact
+
+```bash
+GET /api/v1/admin/security/artifact/{artifact_id}/blast-radius
+```
+
+Reports who downloaded one specific artifact, regardless of which CVE flagged it.
+
+### Query Parameters
+
+Both endpoints accept the same optional filters, which scope the downloader analysis to a time window and paginate the downloaders list:
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `from` | RFC 3339 | Inclusive lower bound on `downloaded_at` |
+| `to` | RFC 3339 | Inclusive upper bound on `downloaded_at` |
+| `page` | integer | 1-based page over the downloaders list (default `1`) |
+| `per_page` | integer | Downloaders per page (default `20`, max `100`) |
+
+## Response Shape
+
+```json
+{
+  "target": { "kind": "cve", "value": "CVE-2021-44228" },
+  "summary": {
+    "affected_artifact_count": 3,
+    "affected_repo_count": 2,
+    "downloader_user_count": 5,
+    "anonymous_download_present": true,
+    "distinct_ip_count": 11,
+    "total_download_count": 27
+  },
+  "affected_repos": [
+    {
+      "repository_id": "aa11bb22-cc33-dd44-ee55-ff6677889900",
+      "repository_key": "public-libs",
+      "is_public": true,
+      "access_scope": "public"
+    }
+  ],
+  "downloaders": [
+    {
+      "user_id": "9a8b7c6d-5e4f-3a2b-1c0d-9e8f7a6b5c4d",
+      "username": "alice",
+      "download_count": 4,
+      "distinct_ip_count": 2,
+      "first_download": "2026-07-02T09:15:00Z",
+      "last_download": "2026-07-10T18:42:07Z",
+      "ip_addresses": ["203.0.113.9", "198.51.100.7"]
+    }
+  ],
+  "total_downloaders": 6,
+  "page": 1,
+  "per_page": 20
+}
+```
+
+Notes on the shape:
+
+- `summary` counts are scoped to the requested download window. `anonymous_download_present` flags whether any download in the window was unauthenticated.
+- `downloaders` collapses events per principal; the anonymous bucket appears as a single row with `user_id: null`. `username` is `null` for anonymous or deleted users. `total_downloaders` is the pagination total (the anonymous bucket counts as one).
+- `ip_addresses` is a **bounded sample** (up to 50 distinct IPs per downloader); `distinct_ip_count` remains the exact total.
+- `affected_repos` lists **every** repository holding an affected artifact — independent of the download window, so you see exposure even before the first pull. The list is bounded (up to 200 entries) while `summary.affected_repo_count` remains the true total.
+
+## Exposure Classes
+
+Each affected repository is classified by how widely it is reachable:
+
+| `access_scope` | Meaning |
+|----------------|---------|
+| `public` | Anyone, including anonymous clients, can read the repository. |
+| `restricted_acl` | Private, with at least one explicit ACL entry granting specific users or groups access. |
+| `restricted_roles` | Private with no repository ACL entries; access flows only through role assignments and admin rights. |
+
+### Public Repositories: Bounded "Everyone Exposed"
+
+A public repository is, by definition, readable by an unbounded and unknowable population — every anonymous client on the network. Rather than attempt to enumerate that population, blast radius reports the bounded, factual signals: it flags the repository as `access_scope: public` (so you can see at a glance that "this is a public repo — everyone is potentially exposed"), and it still lists the concrete users and IPs that *did* download the artifact, with `anonymous_download_present` set when unauthenticated pulls occurred. You get an honest exposure picture without a misleadingly precise "affected users" list that could never be complete.
+
+## Admin Web UI
+
+Blast radius is surfaced in the admin security area of the web console. From a CVE finding you can open its blast-radius view to see the summary counts, the affected repositories with their exposure classes highlighted, and the paginated downloaders table with per-user IP samples. As with the API, the view is admin-only.
+
+## See Also
+
+- [Download Telemetry](/docs/monitoring/download-telemetry) — the per-download IP and user attribution this analysis joins against
+- [Vulnerability Scanning](/docs/security/scanning) — how CVE findings are produced
+- [Audit Log](/docs/security/audit-log) — the security-event audit trail
+- [Security Policies](/docs/security/policies) — block vulnerable artifacts before they spread
