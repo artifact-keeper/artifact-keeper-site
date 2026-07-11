@@ -142,6 +142,7 @@ export default defineConfig({
             { label: 'Package Manager Configuration', slug: 'docs/reference/cli' },
             { label: 'Environment Variables', slug: 'docs/reference/environment' },
             { label: 'CI/CD Integration', slug: 'docs/guides/ci-cd' },
+            { label: 'Builds API', slug: 'docs/guides/builds' },
             { label: 'UI Gallery', slug: 'docs/ui-gallery' },
           ],
         },
