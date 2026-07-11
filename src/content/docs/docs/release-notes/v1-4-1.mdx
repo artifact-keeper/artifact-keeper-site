@@ -1,0 +1,50 @@
+---
+title: What's new in 1.4.1
+description: Bug fixes and a small authorization-baseline change in the v1.4.1 patch release
+---
+
+v1.4.1 is a patch release on top of [1.4.0](/docs/release-notes/v1-4-0/). It aligns the OpenAPI spec with runtime behavior, fixes a handful of storage, format-handler, and auth issues, and adjusts the public-repo read baseline so that logging in never grants *less* access than an anonymous client. There are no breaking changes.
+
+For the full commit-level changelog, see [the GitHub release notes](https://github.com/artifact-keeper/artifact-keeper/releases/tag/v1.4.1).
+
+## Highlights
+
+- **OpenAPI / runtime alignment** ([#2335](https://github.com/artifact-keeper/artifact-keeper/issues/2335)). The OpenAPI spec is now aligned with runtime behavior on six endpoints, and five schema-name collisions were resolved with the collision ratchet emptied ([#2340](https://github.com/artifact-keeper/artifact-keeper/issues/2340)). This keeps the generated SDKs faithful to the live API. See [REST API](/docs/reference/api/).
+- **Authenticated-user public-repo read baseline** ([#2346](https://github.com/artifact-keeper/artifact-keeper/issues/2346)). Authenticated users are now granted the anonymous read baseline on public repositories, so logging in can no longer see less than an anonymous client would.
+
+## Fixes
+
+- **Auth**: the guest-access guard now returns 503 (not 401) when the auth path is overloaded ([#2315](https://github.com/artifact-keeper/artifact-keeper/issues/2315)), and the credential watermark check tolerates app-vs-DB clock skew ([#2350](https://github.com/artifact-keeper/artifact-keeper/issues/2350)).
+- **Azure storage**: the health-check HEAD probe is signed in Shared Key mode ([#2295](https://github.com/artifact-keeper/artifact-keeper/issues/2295)), and the SAS signed start is backdated 15 minutes to tolerate clock skew ([#2294](https://github.com/artifact-keeper/artifact-keeper/issues/2294)).
+- **npm**: the packument cache buffer cap was raised ([#2313](https://github.com/artifact-keeper/artifact-keeper/issues/2313)).
+- **Swift**: release versions are aggregated across all virtual repo members ([#2342](https://github.com/artifact-keeper/artifact-keeper/issues/2342)).
+- **Signing**: `key_type` is normalized so RSA algorithm variants no longer 500 at key creation ([#2344](https://github.com/artifact-keeper/artifact-keeper/issues/2344)). See [Artifact Signing](/docs/security/signing/).
+- **Scanner**: a scan records `not_applicable` when the Trivy CLI is absent instead of failing outright ([#2324](https://github.com/artifact-keeper/artifact-keeper/issues/2324)).
+- **Uploads**: concurrent duplicate chunk uploads are serialized ([#2316](https://github.com/artifact-keeper/artifact-keeper/issues/2316), [#2348](https://github.com/artifact-keeper/artifact-keeper/issues/2348)).
+- **OCI**: the packages catalog is populated on manifest push ([#2337](https://github.com/artifact-keeper/artifact-keeper/issues/2337)).
+- **Downloads**: presigned-redirect downloads are now recorded in `download_statistics` ([#2349](https://github.com/artifact-keeper/artifact-keeper/issues/2349)).
+- **Migration**: `storage_backend` is persisted for auto-provisioned repos ([#2336](https://github.com/artifact-keeper/artifact-keeper/issues/2336), [#2338](https://github.com/artifact-keeper/artifact-keeper/issues/2338)).
+- **PyPI**: virtual-repo dependency-confusion isolation is now priority-aware ([#2351](https://github.com/artifact-keeper/artifact-keeper/issues/2351)).
+
+## Security
+
+- **Scan-policy validation** ([#2345](https://github.com/artifact-keeper/artifact-keeper/issues/2345)). `max_severity` and `repository_id` are validated before insert.
+
+## Upgrade path
+
+This is a drop-in patch. Pull the new images and restart:
+
+```bash
+docker pull ghcr.io/artifact-keeper/artifact-keeper-backend:1.4.1
+docker pull ghcr.io/artifact-keeper/artifact-keeper-web:1.4.1
+```
+
+Helm and Docker Compose users bump to the v1.4.1-compatible chart or compose file and apply. No configuration changes are required. The web UI, CLI, and native clients work unchanged against a 1.4.1 backend; SDKs are tagged `1.4.1`.
+
+## Support window
+
+- **1.4.x**: active. This patch supersedes 1.4.0.
+- **1.3.x**: maintenance only.
+- **&lt;= 1.2.x**: end of life. Upgrade required.
+
+See [Support Policy](/docs/getting-started/support-policy/) for the full version-support matrix.
