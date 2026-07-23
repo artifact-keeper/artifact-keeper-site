@@ -47,7 +47,7 @@ graph LR
 | **OpenSearch** | Full-text search across artifacts and repos | Optional |
 | **Trivy** | Vulnerability scanning for uploaded artifacts | Optional |
 
-OpenSearch, Trivy, and Grype degrade gracefully. The system works without them, just without search or scanning.
+OpenSearch, Trivy, and Grype degrade gracefully. The system works without them. Full-text search still runs on PostgreSQL when OpenSearch is not configured; OpenSearch adds the enhanced layer (typeahead, fuzzy matching, and global search across repositories). Without Trivy or Grype you lose vulnerability scanning.
 
 ## Backend Layers
 

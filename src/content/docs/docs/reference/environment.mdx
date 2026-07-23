@@ -407,11 +407,11 @@ Email delivery is disabled when `SMTP_HOST` is not set. Used for password expira
 
 ## Search (OpenSearch)
 
-Search is powered by [OpenSearch](https://opensearch.org/). When `OPENSEARCH_URL` is set, the backend indexes artifacts for full-text search. On first boot the backend auto-reindexes from PostgreSQL, so no data migration step is required. Read by the **backend** process.
+The enhanced search layer is powered by [OpenSearch](https://opensearch.org/). OpenSearch is optional: full-text search always works on PostgreSQL, and setting `OPENSEARCH_URL` adds typeahead, fuzzy matching, and global search across repositories. When `OPENSEARCH_URL` is set, the backend indexes artifacts into OpenSearch; on first boot it auto-reindexes from PostgreSQL, so no data migration step is required. Read by the **backend** process.
 
 | Variable | Required | Default | Description |
 |----------|----------|---------|-------------|
-| `OPENSEARCH_URL` | No | - | OpenSearch server URL (e.g., `https://opensearch:9200`). Search is disabled when unset. |
+| `OPENSEARCH_URL` | No | - | OpenSearch server URL (e.g., `https://opensearch:9200`). When unset, the enhanced search layer is disabled and search falls back to PostgreSQL full-text. |
 | `OPENSEARCH_USERNAME` | No | - | OpenSearch username (required when the security plugin is enabled, which is the default) |
 | `OPENSEARCH_PASSWORD` | No | - | OpenSearch password |
 | `OPENSEARCH_ALLOW_INVALID_CERTS` | No | `false` | Skip TLS certificate verification. Only set to `true` for self-signed dev clusters. |
