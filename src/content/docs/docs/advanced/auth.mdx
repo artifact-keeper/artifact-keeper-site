@@ -216,8 +216,8 @@ Support for OpenID Connect (OIDC) enables SSO with providers like:
 OIDC_ISSUER=https://accounts.google.com
 OIDC_CLIENT_ID=your-client-id.apps.googleusercontent.com
 OIDC_CLIENT_SECRET=your-client-secret
-OIDC_REDIRECT_URI=https://registry.example.com/api/v1/auth/oidc/callback
-OIDC_SCOPES=openid,email,profile
+OIDC_REDIRECT_URI=https://registry.example.com/api/v1/auth/sso/oidc/callback
+OIDC_SCOPES=openid email profile
 ```
 
 ### Authorization Code Flow
@@ -474,4 +474,6 @@ ldapsearch -x -H $LDAP_URL -b $LDAP_BASE_DN -D $LDAP_BIND_DN -w $LDAP_BIND_PASSW
 
 ### OIDC Configuration
 
-Verify redirect URI is registered with your OIDC provider and matches `OIDC_REDIRECT_URI` exactly.
+Verify the redirect URI is registered with your OIDC provider and matches `OIDC_REDIRECT_URI` exactly.
+
+`OIDC_SCOPES` must be **space-separated**, not comma-separated (e.g. `openid email profile`).
