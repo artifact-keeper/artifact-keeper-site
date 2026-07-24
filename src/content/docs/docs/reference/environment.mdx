@@ -106,6 +106,8 @@ These settings apply to local users only. SSO users authenticate through their i
 | `OIDC_EMAIL_CLAIM` | No | `email` | OIDC claim for email |
 | `OIDC_NAME_CLAIM` | No | `name` | OIDC claim for full name |
 | `OIDC_GROUPS_CLAIM` | No | `groups` | OIDC claim for groups |
+| `OIDC_MAP_GROUPS_TO_GROUPS` | No | `false` | Map OIDC groups to local groups. When enabled, group memberships asserted by the IdP are synced to matching local groups on each login. |
+| `OIDC_PKCE_ENABLED` | No | `true` | Enable PKCE (Proof Key for Code Exchange) for the OIDC authorization code flow. |
 
 ## SAML Integration
 
