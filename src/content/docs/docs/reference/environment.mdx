@@ -18,7 +18,7 @@ Configure Artifact Keeper using environment variables. This page provides a comp
 | `LOG_FORMAT` | No | `json` | Log format (json, pretty, compact) |
 | `ENVIRONMENT` | No | `production` | Runtime environment. Set to `development` to disable the `Secure` flag on auth cookies, allowing cookie-based auth over plain HTTP. See [Reverse Proxy & TLS](/docs/deployment/reverse-proxy). |
 | `DEMO_MODE` | No | `false` | Enable demo mode (read-only) |
-| `BASE_URL` | No | - | Public base URL (e.g., https://registry.example.com) |
+| `AK_EXTERNAL_URL` | No | - | Public base URL (e.g., `https://registry.example.com`). See [Network Security](#network-security) for the full behavior. |
 
 ## Database
 
@@ -95,19 +95,74 @@ These settings apply to local users only. SSO users authenticate through their i
 
 ## OIDC/SSO Integration
 
+Setting `OIDC_ISSUER`, `OIDC_CLIENT_ID`, and `OIDC_CLIENT_SECRET` together bootstraps
+an OIDC provider from environment variables on every startup — no admin API call
+needed. All three are required together to activate env-based bootstrap; the rest of
+the `OIDC_*` variables below are optional and only take effect once those three are
+set.
+
 | Variable | Required | Default | Description |
 |----------|----------|---------|-------------|
-| `OIDC_ISSUER` | No | - | OIDC provider issuer URL |
-| `OIDC_CLIENT_ID` | No | - | OIDC client ID |
-| `OIDC_CLIENT_SECRET` | No | - | OIDC client secret |
-| `OIDC_REDIRECT_URI` | No | - | OIDC redirect URI. Must be set to `{BASE_URL}/api/v1/auth/sso/oidc/callback` and registered with your identity provider. |
-| `OIDC_SCOPES` | No | `openid email profile` | OIDC scopes (space-separated) |
+| `OIDC_ISSUER` | No* | - | OIDC provider issuer URL |
+| `OIDC_CLIENT_ID` | No* | - | OIDC client ID |
+| `OIDC_CLIENT_SECRET` | No* | - | OIDC client secret |
+| `OIDC_NAME` | No | `default` | Provider name and login-button label — see below |
+| `OIDC_REDIRECT_URI` | No | auto-computed — see below | Redirect URI to register with your identity provider |
+| `OIDC_SCOPES` | No | `openid profile email` | OIDC scopes, space-separated |
 | `OIDC_USERNAME_CLAIM` | No | `preferred_username` | OIDC claim for username |
 | `OIDC_EMAIL_CLAIM` | No | `email` | OIDC claim for email |
-| `OIDC_NAME_CLAIM` | No | `name` | OIDC claim for full name |
-| `OIDC_GROUPS_CLAIM` | No | `groups` | OIDC claim for groups |
-| `OIDC_MAP_GROUPS_TO_GROUPS` | No | `false` | Map OIDC groups to local groups. When enabled, group memberships asserted by the IdP are synced to matching local groups on each login. |
-| `OIDC_PKCE_ENABLED` | No | `true` | Enable PKCE (Proof Key for Code Exchange) for the OIDC authorization code flow. |
+| `OIDC_NAME_CLAIM` | No | `name` | OIDC claim for display name |
+| `OIDC_GROUPS_CLAIM` | No | `groups` | OIDC claim for groups — see below |
+| `OIDC_MAP_GROUPS_TO_GROUPS` | No | `false` | Sync IdP group membership to matching local groups on login |
+| `OIDC_PKCE_ENABLED` | No | `true` | Enable PKCE for the authorization code flow |
+| `OIDC_ADMIN_GROUP` | No | - | OIDC group whose members are granted admin rights on login |
+| `OIDC_AUTO_CREATE_USERS` | No | `true` | Create a local account on first OIDC login |
+
+\* `OIDC_ISSUER`, `OIDC_CLIENT_ID`, and `OIDC_CLIENT_SECRET` are individually optional,
+but all three are required together to activate env-based OIDC bootstrap.
+
+**`OIDC_NAME`** sets both the provider's internal name and the login page's button
+label: **"Sign in with `{OIDC_NAME}`"** (e.g. `OIDC_NAME=Apps-SSO` → "Sign in with
+Apps-SSO"). If left unset, the login page shows a generic "Sign in with SSO (OIDC)"
+label rather than the literal word "default". This same value is also the key used
+to match the provider on every restart — see "Env-bootstrap reconciliation" below
+before renaming an existing deployment.
+
+**`OIDC_REDIRECT_URI`** defaults to `{external-url}/api/v1/auth/sso/oidc/callback`,
+where `{external-url}` is `AK_EXTERNAL_URL` if you've set it, otherwise it's
+auto-detected from the incoming request (reverse-proxy headers, then the `Host`
+header). Set `AK_EXTERNAL_URL` explicitly for a stable, spoof-proof value rather than
+relying on auto-detection. Only set `OIDC_REDIRECT_URI` itself if you need to
+override that computed value. Note this callback path (no provider ID in it) is for
+the **env-bootstrapped** provider only — providers created via the Admin UI/API
+instead use `{external-url}/api/v1/auth/sso/oidc/{provider_id}/callback`, where
+`{provider_id}` is the provider's UUID shown in the admin SSO settings page.
+
+**`OIDC_GROUPS_CLAIM`**, when unset, falls back to trying `groups_direct` and then
+`roles` (useful for IdPs like GitLab that publish direct group membership under
+`groups_direct` rather than `groups`).
+
+### Env-bootstrap reconciliation
+
+The env-bootstrapped provider is reconciled against `OIDC_*` on every backend
+restart, matched by `OIDC_NAME` (or `default` if unset):
+
+- **No provider is named `OIDC_NAME` yet, and no other OIDC providers exist** — one
+  is created from the current `OIDC_*` values.
+- **A provider named `OIDC_NAME` already exists** — it's updated in place from the
+  current `OIDC_*` values on every restart. Changing `OIDC_ISSUER`, scopes, claims,
+  etc. and restarting is enough to apply the change — no admin API call needed.
+- **One or more OIDC providers exist, but none is named `OIDC_NAME`** — for example,
+  a provider was created by hand through the Admin UI under a different name, or
+  `OIDC_NAME` was just changed to a new value. Bootstrap skips creating or updating
+  anything and logs a warning, rather than silently creating a duplicate provider.
+  To let env vars take over an existing provider, set `OIDC_NAME` to that provider's
+  exact name (or rename the provider to match `OIDC_NAME` via the Admin UI).
+- **`OIDC_ISSUER`/`OIDC_CLIENT_ID`/`OIDC_CLIENT_SECRET` are later removed** — the
+  env-managed provider (matched by `OIDC_NAME`) is disabled, not deleted, so it
+  stops appearing on the login page. Re-setting the env vars and restarting
+  re-enables it. Providers created via the Admin UI/API are never touched by this
+  reconciliation, regardless of name.
 
 ## SAML Integration
 
