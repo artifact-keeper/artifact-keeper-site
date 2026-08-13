@@ -212,13 +212,28 @@ Support for OpenID Connect (OIDC) enables SSO with providers like:
 
 ### Configuration
 
+Setting `OIDC_ISSUER`, `OIDC_CLIENT_ID`, and `OIDC_CLIENT_SECRET` bootstraps an OIDC
+provider from environment variables — no admin API call needed. This provider is
+reconciled against the current env vars on every restart (see
+[Environment Variables reference](/docs/reference/environment/#oidcsso-integration)
+for the full reconciliation rules, including what happens when the vars are later
+removed).
+
 ```bash
 OIDC_ISSUER=https://accounts.google.com
 OIDC_CLIENT_ID=your-client-id.apps.googleusercontent.com
 OIDC_CLIENT_SECRET=your-client-secret
-OIDC_REDIRECT_URI=https://registry.example.com/api/v1/auth/oidc/callback
-OIDC_SCOPES=openid,email,profile
+OIDC_NAME=Google
+OIDC_REDIRECT_URI=https://registry.example.com/api/v1/auth/sso/oidc/callback
+OIDC_SCOPES=openid email profile
 ```
+
+`OIDC_NAME` sets the login page label ("Sign in with Google") and is optional —
+if unset, the button reads "Sign in with SSO (OIDC)" rather than the literal word
+"default". `OIDC_REDIRECT_URI` is also optional: it defaults to
+`{AK_EXTERNAL_URL}/api/v1/auth/sso/oidc/callback` (or the request's detected host if
+`AK_EXTERNAL_URL` isn't set), which is what's shown above; only set it explicitly if
+that default doesn't match what you need to register with the IdP.
 
 ### Authorization Code Flow
 
@@ -474,4 +489,16 @@ ldapsearch -x -H $LDAP_URL -b $LDAP_BASE_DN -D $LDAP_BIND_DN -w $LDAP_BIND_PASSW
 
 ### OIDC Configuration
 
-Verify redirect URI is registered with your OIDC provider and matches `OIDC_REDIRECT_URI` exactly.
+Verify the redirect URI registered with your OIDC provider matches what Artifact
+Keeper actually uses. If `OIDC_REDIRECT_URI` is set, it must match exactly. If it's
+unset, Artifact Keeper defaults to `{AK_EXTERNAL_URL}/api/v1/auth/sso/oidc/callback`
+(no provider ID in the path) — don't hand-craft a URL with a provider UUID in it for
+an env-bootstrapped provider, since that path only exists for providers created via
+the Admin UI/API.
+
+`OIDC_SCOPES` must be **space-separated** (e.g. `openid email profile`).
+
+If the login page shows "Sign in with SSO (OIDC)" instead of a custom name, set
+`OIDC_NAME` (e.g. `OIDC_NAME=Okta`) and restart. If it disappears entirely after a
+restart, check that `OIDC_ISSUER`/`OIDC_CLIENT_ID`/`OIDC_CLIENT_SECRET` are still set
+— removing them disables the env-managed provider rather than deleting it.
