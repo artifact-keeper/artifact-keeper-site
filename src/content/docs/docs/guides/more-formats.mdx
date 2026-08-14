@@ -100,6 +100,38 @@ snapshot_download(
 )
 ```
 
+#### Remote Repositories and Xet Storage
+
+When a HuggingFace repository is configured as **remote** (pull-through to
+`https://huggingface.co`), disabling Xet on the client is recommended:
+
+```bash
+export HF_HUB_DISABLE_XET=1
+export HF_ENDPOINT=https://artifacts.example.com/huggingface/hf-remote
+
+hf download openai-community/gpt2
+```
+
+:::caution
+Without `HF_HUB_DISABLE_XET=1`, `hf download` fails with a `404` on
+`/api/models/{model_id}/xet-read-token/{revision}`.
+
+The Hub now serves most models through Xet, its content-addressed storage
+backend. `huggingface_hub` detects Xet-backed files from the upstream file
+listing and then requests a Xet access token, which Artifact Keeper does not
+issue. Setting the variable makes the client use the ordinary `/resolve/`
+download path, which is fully supported.
+:::
+
+Disabling Xet does not change what you get: the downloaded files are
+byte-identical, and integrity is still verified against the upstream checksum.
+Only the transfer mechanism differs — plain HTTP range downloads instead of
+Xet's chunked deduplication.
+
+This applies to remote (proxying) repositories only. Hosted repositories that
+you upload models to yourself are unaffected, since their files never come from
+the Hub.
+
 ### ML Model (Generic)
 
 For models not using HuggingFace format, use the generic ML model endpoint.
