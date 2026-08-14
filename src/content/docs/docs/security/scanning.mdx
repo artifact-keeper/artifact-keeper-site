@@ -274,7 +274,22 @@ empty payload:
 A `503` here is an operational signal ("scanner not configured"), not a server
 bug — configure a scanner backend and retry.
 
-## UI Integration
+## Download-time enforcement
+
+Scan policies (`block_unscanned`, `block_on_fail`, `max_severity`) now gate downloads, not just promotion. Every download path (roughly 30 per-format handlers) runs through a shared gate that checks quarantine status first, then evaluates the repository's scan policy: a quarantined artifact returns `409`, and an artifact that violates an enabled scan policy returns `403`. Repositories with no enabled scan policy are unaffected, since policy evaluation no-ops to "allowed" when no policy matches.
+
+The `403` response deliberately omits which policy was violated or per-artifact finding counts, because download routes are anonymous-readable for public repositories. Authenticated callers can read the specifics from the security scan endpoints.
+
+### Proxy-time scanning
+
+For remote (pull-through) repositories, artifacts can be scanned inline as they are fetched from the upstream, before being served to the client. This applies to the PyPI, npm, and OCI manifest proxy paths, and to virtual-repository serves that resolve to a remote member.
+
+Because the proxy download path streams the upstream body to avoid buffering large files in memory, inline scanning is bounded by two fixed limits (not environment-configurable):
+
+- A byte ceiling on how large an object may be buffered for scanning. Objects larger than this fall back to a streaming serve (fail-open) or a `423` response (fail-closed) instead of an unbounded in-memory buffer.
+- A wall-clock budget for the inline scan itself, so a slow or contended scan cannot stall the pull indefinitely. OCI manifest scans get a wider budget than file-format scans because the gate also eager-fetches config and layer blobs from the upstream before Grype runs.
+
+A scan that hits either limit is treated as inconclusive: fail-open configurations serve the artifact with the scan left pending, and fail-closed configurations return `423`. See the [environment variable reference](/docs/reference/environment) for the rate limiting and outbound-request controls that apply to the same proxy paths.
 
 ### Viewing Scan Results
 

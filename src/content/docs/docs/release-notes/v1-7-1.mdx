@@ -1,0 +1,59 @@
+---
+title: What's new in 1.7.1
+description: An in-house-built Trivy scanner clearing a blocking CVE, multi-scanner gate correctness, and age-gate enforcement extended to npm, PyPI, and Go
+---
+
+v1.7.1 is a maintenance release. The headline is that the bundled Trivy scanner is now built and hardened in-house, clearing a HIGH advisory that no upstream Trivy release fixes yet and had been blocking the release pipeline. Alongside it: NuGet remote-repository search now actually reaches the upstream feed, a scan-gate evaluation bug that could let a blocked artifact through is closed, and a cluster of Maven, PyPI, OIDC, and multi-replica correctness fixes.
+
+For the full commit-level changelog, see [the GitHub release notes](https://github.com/artifact-keeper/artifact-keeper/releases/tag/v1.7.1).
+
+## Upgrade note: proxy downloads may start being blocked
+
+The [age gate](/docs/security/age-gate/) is now genuinely enforced on **npm, PyPI, and Go proxy downloads**. It was configurable before but silently did not apply to those formats, so a repository with an age gate configured was not actually gating them. After upgrading, package downloads younger than the configured `min_age_days` will return `451` where they previously succeeded.
+
+**Am I affected?** Only if you have the age gate enabled on a remote/proxy repository serving npm, PyPI, or Go. Check with `GET /api/v1/repositories/{key}/age-gate` (admin only as of this release). If you were relying on the previous non-enforcement, raise the threshold or disable the gate before upgrading. The `451` body carries `min_age_days` so blocked callers can see the policy that stopped them.
+
+## Security
+
+- **The bundled Trivy scanner is now built in-house from pinned upstream source.** The scanner-adapter image vendored `ghcr.io/aquasecurity/trivy:0.73.0`, whose bundled `oras-go v2.6.1` carries CVE-2026-50163 (HIGH). Upstream merged the fix on `main` but has not released it, and 0.73.0 remains the latest release, so there was no upstream tag to move to. The scanner is now built from the same upstream v0.73.0 source with a pinned Go toolchain and one documented dependency override, on a hardened UBI 9 base, in [artifact-keeper/trivy](https://github.com/artifact-keeper/trivy), with its own blocking CVE gate, DISA STIG evaluation, and build verification.
+- **Scan gates are evaluated across all scanners, not just the most recent result** ([#3138](https://github.com/artifact-keeper/artifact-keeper/issues/3138)). A repository scanned by more than one scanner had its download gate decided by whichever row was newest, so an OpenSCAP result registering last could leave the severity gate inert for npm, PyPI, Maven, and generic downloads.
+- **Age-gate policy is enforced on npm, PyPI, and Go proxy downloads**, and the age-gate config read endpoint now requires admin ([#2264](https://github.com/artifact-keeper/artifact-keeper/issues/2264)) rather than returning gate posture to any authenticated caller with read scope.
+- **OIDC outbound responses are size-capped** (userinfo, token, discovery, and JWKS), so a hostile or malfunctioning identity provider cannot exhaust memory through an unbounded response body.
+
+## Added
+
+- System stats now report proxy-cache storage consumption and artifact count.
+
+## Fixed
+
+- **NuGet remote repositories now proxy search to the upstream feed.** A remote repository advertised `SearchQueryService` in its service index but answered every query from the local database, so a proxy repository with nothing cached returned zero results in Visual Studio, while `dotnet restore` against the same repository worked. Search now reaches upstream and rewrites result URLs back through the proxy.
+- **Per-repository storage-GC estimates work again.** The web UI's per-repository storage panel called `POST /api/v1/repositories/{key}/storage-gc` for its "reclaimable now" figure, but only the instance-wide route existed, so every estimate returned 404.
+- **Maven catalog versions are derived from the GAV path** on the generic and chunked upload paths, and a migration no longer aborts startup on a unique-constraint violation when a package has two broken catalog rows and one candidate version.
+- **PyPI proxying**: an upstream `<base href>` on a proxied Simple index no longer re-anchors rewritten download URLs onto the upstream origin; PEP 658 `core-metadata` is advertised for wheels so installers can skip downloading whole wheels to resolve; the PEP 691 `versions` array is ordered by PEP 440 rather than byte order; invalid PEP 440 local versions are rejected instead of silently mangled; and an advertised-but-unavailable metadata file now falls back instead of failing the install.
+- **OCI**: a manifest pushed by digest is verified against that digest rather than accepted with a mismatch, and cross-repository blob mount (`?mount=&from=`) is implemented so a client can mount an existing layer instead of re-uploading it.
+- **Proxy-cache redirects are gated on the object actually existing.** An object deleted out of band (for example a storage lifecycle rule expiring cache entries) previously produced a dead redirect that kept serving 404s until repaired by hand; a miss now falls through to a buffered read and repopulates the cache.
+- **Multi-replica background jobs claim their remaining cluster-work items**, so replicas no longer duplicate or drop work: scheduled backups claim one durable run per due occurrence, password-expiry notifications are claimed before SMTP so concurrent replicas no longer double-email, generic chunked uploads take a completion lease before finalizing, Incus chunked finalize takes an exclusive lease, OCI cleanup-journal sweeps claim keys before deleting storage objects, and health monitoring, lifecycle execution, and the OpenSearch bootstrap reindex are cluster-leased.
+- **Curation sync honors `curation_sync_interval_secs`.** The configured interval was previously read and discarded, so every enabled staging repository re-fetched upstream metadata on every five-minute tick. Repositories now record `curation_last_synced_at` after a successful fetch-and-evaluate and are skipped until their interval elapses (60-second floor).
+- Probe endpoints (`/health`, `/healthz`, `/ready`, `/readyz`, `/livez`) no longer emit a per-request log line, which had buried real request logs under Kubernetes polling. Set `LOG_PROBE_REQUESTS=1` to restore the previous behavior.
+- The hardened backend image includes `xz`, which Incus `.tar.xz` extraction requires.
+
+## Performance
+
+- Repository listing reads storage totals from the usage ledger instead of computing a live `SUM`.
+
+## Upgrade path
+
+```bash
+docker pull ghcr.io/artifact-keeper/artifact-keeper-backend:1.7.1
+docker pull ghcr.io/artifact-keeper/artifact-keeper-web:1.7.1
+```
+
+Review the age-gate upgrade note above before rolling out if you use the age gate on npm, PyPI, or Go repositories. Helm and Docker Compose users bump to the v1.7.1-compatible chart or compose file and apply. The web UI, CLI, and native clients work unchanged against a 1.7.1 backend; SDKs are tagged `1.7.1`.
+
+## Support window
+
+- **1.7.x**: active. This patch supersedes 1.7.0.
+- **1.6.x**: maintenance only.
+- **&lt;= 1.5.x**: end of life. Upgrade required.
+
+See [Support Policy](/docs/getting-started/support-policy/) for the full version-support matrix.

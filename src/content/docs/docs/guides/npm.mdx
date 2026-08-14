@@ -592,6 +592,31 @@ registry=http://localhost:8080/npm-virtual/
 
 For full details on cache TTL, priority ordering, and monitoring, see the [Remote & Virtual Repositories](/docs/advanced/remote-virtual) guide.
 
+### Scope Policy
+
+Restrict which npm scopes (and, additively, which full package name globs) a Remote npm repository is allowed to resolve. This is useful when a Remote repository is a member of a virtual repository and should only ever serve your organization's scope, not the entire public registry.
+
+```bash
+# Read the current policy
+curl http://localhost:8080/api/v1/repositories/npm-remote/npm-scope-policy \
+  -H "Authorization: Bearer $TOKEN"
+
+# Set the policy
+curl -X PUT http://localhost:8080/api/v1/repositories/npm-remote/npm-scope-policy \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $TOKEN" \
+  -d '{
+    "allowed_scopes": ["@mycompany", "@types"],
+    "allow_unscoped": false
+  }'
+```
+
+`allowed_scopes` is an allow-list of `@scope` literals; an empty list places no scope restriction. `allow_unscoped` controls whether unscoped package names may resolve at all.
+
+For finer-grained control beyond exact scopes, set `npm_allowed_name_patterns` on the repository itself (via `PUT /repositories/:key`, not the scope-policy endpoint): a list of case-insensitive glob patterns (`*`/`?`) such as `@acme/*` or `internal-*`. A package name is allowed if its scope is in `allowed_scopes` **or** any glob pattern matches the full name; the two lists are additive. There is no separate deny/block list; a name that matches neither list is refused.
+
+The policy is enforced on package metadata (packument) resolution and tarball downloads, both when the Remote repository is a virtual-repository member and when it is accessed directly. Only Remote (proxy) npm repositories can carry a policy; setting one on a Local, Virtual, or Staging repository, or a non-npm repository, is rejected.
+
 ## See Also
 
 - [Security Scanning](/security/scanning) - Automatic vulnerability scanning for npm packages

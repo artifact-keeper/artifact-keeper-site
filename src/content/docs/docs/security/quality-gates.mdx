@@ -178,6 +178,33 @@ curl -X DELETE "https://registry.example.com/api/v1/quality/gates/{gate_id}" \
   -H "Authorization: Bearer $TOKEN"
 ```
 
+### Cross-Repository Check Results (Admin)
+
+`GET /admin/quality-checks` lists quality check results across every repository and artifact, newest first, for the admin quality-checks dashboard. Unlike `GET /quality/checks` (which requires an `artifact_id`), this endpoint has no required scope and is admin-only.
+
+```bash
+curl "https://registry.example.com/api/v1/admin/quality-checks?status=failed&page=1&per_page=50" \
+  -H "Authorization: Bearer $ADMIN_TOKEN"
+```
+
+**Query Parameters:**
+- `repository_id` (uuid): Filter to one repository
+- `artifact_id` (uuid): Filter to one artifact
+- `status` (string): Filter by check status (`completed`, `running`, `failed`, etc.)
+- `page` (number): 1-based page (default 1)
+- `per_page` (number): Page size (default 50, max 200)
+
+**Response:**
+
+```json
+{
+  "items": [],
+  "total": 0,
+  "page": 1,
+  "per_page": 50
+}
+```
+
 ## Skipping Gates
 
 For emergency releases, promotion supports `skip_policy_check: true` which bypasses both quality gates and policy checks. This is recorded in the promotion history for audit.

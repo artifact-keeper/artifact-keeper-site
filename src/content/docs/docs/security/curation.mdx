@@ -1,0 +1,267 @@
+---
+title: "Package Curation"
+description: "Vet packages synced from an upstream registry before they are served to clients"
+---
+
+Package curation evaluates packages synced from an upstream registry against a set of rules before they are served through a repository's proxy paths. It sits upstream of [security policies](/docs/security/policies) and [quality gates](/docs/security/quality-gates): where those two act on artifacts already inside the registry, curation decides whether an upstream package should be admitted into the catalog at all.
+
+Use curation on a **remote proxy repository** where you don't fully trust the upstream to only ever publish safe content: a public PyPI or npm mirror, or an RPM remote pointed at a third-party vendor feed. Enabling curation on a repository (`curation_enabled: true`) turns that repository into the staging point curation rules evaluate against; the repository's own key is the `staging_repo_id` referenced throughout the curation API.
+
+## How It Works
+
+When curation is enabled on a repository, packages observed from the upstream are tracked in a staging catalog with a `status`: `pending`, `approved`, `blocked`, or `review`. Each package carries its format, name, version, and (for RPM) architecture, plus the evaluation outcome:
+
+```json
+{
+  "id": "b2c1a0d8-1234-4a5b-9c3d-abcdef012345",
+  "staging_repo_id": "aa11bb22-cc33-dd44-ee55-ff6677889900",
+  "remote_repo_id": "11223344-5566-7788-99aa-bbccddeeff00",
+  "format": "pypi",
+  "package_name": "requests",
+  "version": "2.31.0",
+  "release": null,
+  "architecture": null,
+  "checksum_sha256": "9f2b...c41a",
+  "upstream_path": "packages/.../requests-2.31.0.tar.gz",
+  "status": "approved",
+  "evaluated_at": "2026-07-10T18:42:07Z",
+  "evaluated_by": null,
+  "evaluation_reason": "matched rule: trusted publisher",
+  "rule_id": "cc33dd44-ee55-ff66-7788-99aabbccddee",
+  "metadata": {},
+  "first_seen_at": "2026-07-10T18:40:02Z"
+}
+```
+
+A package with no matching rule falls back to the repository's `curation_default_action`, which is `allow` or `review` (`block` is rejected: use a block rule for specific packages instead). Setting `curation_default_action: "review"` means every unmatched package lands in the review queue rather than being served automatically.
+
+## Rule Types
+
+A curation rule has a `rule_type` that selects the evaluation engine, and a `scope` of `repository` (attached to one staging repo via `staging_repo_id`) or `global` (an instance-wide baseline, evaluated for every curation-enabled repository in addition to that repository's own rules). Rule scope and `staging_repo_id` must agree: `global` forbids a repo id, `repository` requires one.
+
+### Pattern Rules
+
+The original glob/version/architecture matcher, and the default `rule_type` when omitted. `package_pattern` and `version_constraint` support `*` and `?` wildcards; `version_constraint` also accepts comparison operators (`>= 1.0`, `< 2.0`) with lexicographic fallback for non-semver versions such as RPM epochs.
+
+```bash
+curl -X POST "https://artifacts.example.com/api/v1/curation/rules" \
+  -H "Authorization: Bearer $ADMIN_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "staging_repo_id": "aa11bb22-cc33-dd44-ee55-ff6677889900",
+    "package_pattern": "evil-*",
+    "action": "block",
+    "reason": "known-bad package family"
+  }'
+```
+
+`package_pattern`, `version_constraint`, and `architecture` default to `*`, `priority` defaults to `100`, and `action` and `reason` are the only fields a pattern rule must supply.
+
+### Publisher Trust Rules
+
+`rule_type: "publisher_trust"` matches a package's publisher identity against an allowlist:
+
+```json
+{
+  "trusted_publishers": ["Microsoft", "NumFOCUS"],
+  "match": "attestation",
+  "action": "block"
+}
+```
+
+`trusted_publishers` is required and matched case-insensitively but exactly, never by substring. `match` selects which signal quality counts as trusted:
+
+- `attestation` (default, the secure setting): only a cryptographically verified provenance identity satisfies the allowlist. A listed publisher asserted through an attestation that hasn't been verified resolves to `Flag`, never `Allow`.
+- `metadata`: also accepts self-asserted `author`/`maintainer` fields from package metadata. Only use this where the threat model tolerates a spoofable identity.
+
+`action` defaults to `flag`: `block` rejects anything not from a trusted publisher, `allow` passes trusted packages and flags everything else for review, and `flag` just tags packages that do come from a listed publisher (useful for auditing a specific vendor's output without gating on it).
+
+A format with no publisher concept (anything other than PyPI and npm today) always evaluates to "not applicable" for this rule type, so a global publisher-trust rule doesn't carpet-flag formats it can't judge. A package on an applicable format with no extractable publisher identity is flagged, not blocked: absence of identity is surfaced for review, never silently trusted or hard-blocked.
+
+### Popularity Rules
+
+`rule_type: "popularity"` combines a download-count floor with typo-squat detection:
+
+```json
+{
+  "min_downloads": 500,
+  "typosquat_check": true,
+  "max_distance": 2,
+  "homoglyph_check": true,
+  "affix_check": true,
+  "affix_max_downloads": 1000,
+  "action": "flag",
+  "block_unknown": false,
+  "block_typosquat": false,
+  "popular_packages": ["requests", "numpy", "..."]
+}
+```
+
+Download counts come from the public registry stats APIs (pypistats.org for PyPI, `api.npmjs.org` for npm), cached with a TTL so repeated evaluations don't hammer those services. `min_downloads` defaults to `0` (the threshold check is disabled), `action` defaults to `flag`, and `popular_packages` defaults to a built-in per-ecosystem seed list if omitted.
+
+Two opt-in hardening flags default to `false`, keeping the rule advisory unless you turn them on:
+
+- `block_unknown`: with `action: "block"`, a package whose download count can't be resolved (brand-new, unlisted, or the stats source is down) is blocked instead of flagged, closing the gap where a freshly published typosquat evades the threshold check for having no history yet.
+- `block_typosquat`: a typo-squat match blocks outright regardless of `action`, instead of only being flagged. Off by default because lexical proximity produces false positives by construction.
+
+#### Typosquat and Homoglyph Detection
+
+Three independent lexical signals feed the typosquat check, each comparing a candidate package name against the `popular_packages` list:
+
+- **Edit distance**: Damerau-Levenshtein distance (insertions, deletions, substitutions, and adjacent transpositions) within `max_distance` (default `2`, clamped to 1-2) of a popular name.
+- **Homoglyph/mixed-script**: the candidate's UTS #39 confusable skeleton (Unicode-normalized, visually-confusable characters mapped to a canonical form, e.g. Cyrillic `а` folded onto Latin `a`) collides with a popular name's skeleton. This catches full-substitution lookalikes like `nｕmpy` or a Cyrillic `реqueѕts` that are pixel-identical to the real package but many edits away in raw text.
+- **Affix**: the candidate embeds a popular name as a complete, boundary-delimited token with an extra prefix or suffix (`data-numpy`, `numpy2024`, `fastNumpy`), or is the popular name with separators stuffed in (`l.o.d.a.s.h`). A name merely containing the popular name without a boundary (`supernumpyish`) does not match.
+
+A name that is itself on the `popular_packages` list is always excluded from matching against itself, so a curated list containing both `request` and `requests` never flags either.
+
+**Popularity suppresses false positives on the affix signal specifically**: an affix match is only treated as a typosquat while the candidate's own download count is below `affix_max_downloads` (default `1000`) or unknown. A legitimately popular affixed package, like `pytest-django` or `python-dateutil`, has its own substantial download count and is never flagged for merely containing a popular name as a substring.
+
+## Package Review Workflow
+
+### Listing and Inspecting
+
+```bash
+curl -H "Authorization: Bearer $ADMIN_TOKEN" \
+  "https://artifacts.example.com/api/v1/curation/packages?staging_repo_id=$REPO_ID&status=pending&limit=50"
+```
+
+```bash
+GET /api/v1/curation/packages/{id}
+```
+
+### Approve, Block, and Bulk Operations
+
+```bash
+# Approve one package
+curl -X POST "https://artifacts.example.com/api/v1/curation/packages/$PKG_ID/approve" \
+  -H "Authorization: Bearer $ADMIN_TOKEN"
+
+# Block one package
+curl -X POST "https://artifacts.example.com/api/v1/curation/packages/$PKG_ID/block" \
+  -H "Authorization: Bearer $ADMIN_TOKEN"
+
+# Bulk-approve a batch
+curl -X POST "https://artifacts.example.com/api/v1/curation/packages/bulk-approve" \
+  -H "Authorization: Bearer $ADMIN_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"ids": ["b2c1...", "c3d2..."], "reason": "reviewed, no known issues"}'
+```
+
+`bulk-approve` and `bulk-block` accept the same `{ ids, reason }` shape and return the number of packages updated. All package mutation endpoints (approve, block, bulk-approve, bulk-block, re-evaluate, and rule CRUD) are admin-only.
+
+### Re-evaluating Pending Packages
+
+After adding or editing rules, re-run them against everything still `pending` in a staging repo without waiting for the next upstream sync:
+
+```bash
+curl -X POST "https://artifacts.example.com/api/v1/curation/packages/re-evaluate" \
+  -H "Authorization: Bearer $ADMIN_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"staging_repo_id": "aa11bb22-cc33-dd44-ee55-ff6677889900", "default_action": "review"}'
+```
+
+`default_action` is the fallback stance (`allow`, `block`, or a review flag) applied to packages that still match no rule after re-evaluation.
+
+### Stats
+
+```bash
+GET /api/v1/curation/stats?staging_repo_id={id}
+```
+
+```json
+{
+  "staging_repo_id": "aa11bb22-cc33-dd44-ee55-ff6677889900",
+  "counts": [
+    { "status": "approved", "count": 412 },
+    { "status": "pending", "count": 6 },
+    { "status": "blocked", "count": 3 }
+  ]
+}
+```
+
+## Publisher Attestation Verification
+
+Publisher-trust evaluation under `match: "attestation"` looks for a cryptographically verified provenance record, not a self-asserted claim. Today verification is implemented for **PyPI PEP 740** provenance: the service checks the DSSE signature envelope, the Fulcio certificate chain, the signed certificate timestamp, and certificate validity, then confirms the certificate-bound identity against the claimed publisher, all offline against the bundle the registry already served.
+
+npm attestations are recorded as unsupported rather than verified: npm's provenance binds its subject with SHA-512 only, and the sigstore library this server uses requires a SHA-256 subject at bundle construction, so every npm bundle fails before any cryptographic check runs. Until that upstream limitation is resolved, npm publisher-trust evaluation stays on the fail-safe `Flag` outcome and never reports `verified: true`.
+
+A verification failure is never silently treated as absence of an attestation: the specific failing check is recorded, and evaluation falls through to the unverified extraction path (which, under `match: "attestation"`, still can't produce `Allow`).
+
+## RPM-Specific Behavior
+
+RPM curation adds a few things the generic package pipeline doesn't need:
+
+### Trusted GPG Key
+
+Set `trusted_gpg_key` when creating or updating the **remote** repository (not the curation API) that the staging repo syncs from:
+
+```bash
+curl -X PUT "https://artifacts.example.com/api/v1/repositories/rpm-vendor-mirror" \
+  -H "Authorization: Bearer $ADMIN_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "trusted_gpg_key": "-----BEGIN PGP PUBLIC KEY BLOCK-----\n...\n-----END PGP PUBLIC KEY BLOCK-----"
+  }'
+```
+
+The key must be an ASCII-armored OpenPGP **public** key block (a private-key block is rejected) and is write-only: repository responses only ever expose the boolean `has_trusted_gpg_key`, never the key material. When set, curation sync fetches `repomd.xml.asc` and verifies the detached signature on `repodata/repomd.xml` before ingesting any upstream metadata. Without a trusted key configured, a keyless sync refuses to ingest unverified upstream packages by default; set `curation_allow_unverified: true` on the repository to opt back into the legacy unverified-ingest behavior.
+
+### Manual Sync Trigger
+
+Curation sync normally runs on a schedule, but you can trigger one pass immediately:
+
+```bash
+curl -X POST "https://artifacts.example.com/api/v1/curation/repos/{repo_key}/sync" \
+  -H "Authorization: Bearer $ADMIN_TOKEN"
+```
+
+```json
+{
+  "repository": "rpm-vendor-staging",
+  "triggered": true,
+  "succeeded": true
+}
+```
+
+`triggered: true` means the request was accepted and a sync pass ran; `succeeded: false` alongside it means the pass ran but an upstream fetch or verification step failed (check server logs for details, since the response deliberately doesn't echo upstream error text). Triggering a sync requires being an admin, or an API token carrying the `trigger:sync` scope; a repo-scoped admin cannot trigger a sync for a repository outside their tenant.
+
+### Package Search
+
+```bash
+curl -H "Authorization: Bearer $ADMIN_TOKEN" \
+  "https://artifacts.example.com/api/v1/curation/repos/{repo_key}/packages/search?q=kernel&arch=x86_64&status=approved"
+```
+
+Searches synced packages in one staging repo by name substring (case-insensitive), with optional exact `arch` and `status` filters. `limit` defaults to 50 and is clamped to 500.
+
+### Curated Snapshot Versions
+
+RPM curation supports freezing the currently approved packages into a signed, immutable numbered snapshot that clients can pin to:
+
+```bash
+# Create a new version from the current approved set
+curl -X POST "https://artifacts.example.com/api/v1/curation/repos/{repo_key}/versions" \
+  -H "Authorization: Bearer $ADMIN_TOKEN"
+
+# Publish it (signs the repodata; the version becomes immutable at this point)
+curl -X POST "https://artifacts.example.com/api/v1/curation/repos/{repo_key}/versions/3/publish" \
+  -H "Authorization: Bearer $ADMIN_TOKEN"
+```
+
+```json
+{
+  "repository": "rpm-vendor-staging",
+  "version_number": 3,
+  "package_count": 412,
+  "published": true
+}
+```
+
+A published version is served under `/rpm/{key}/@N/` and cannot be republished (a second publish attempt on the same version number returns `409 Conflict`). Both endpoints require the same authorization as the manual sync trigger: admin, or an API token with `trigger:sync`, plus tenant ownership of the repository.
+
+## See Also
+
+- [Security Policies](/docs/security/policies): CVE and license enforcement on artifacts already in the registry
+- [Quality Gates](/docs/security/quality-gates): health-score thresholds for promotion
+- [Age-Gate Quarantine](/docs/security/age-gate): a complementary time-based gate for freshly published upstream releases
+- [System Packages](/docs/guides/system-packages): RPM, Debian, and other OS-package repository setup

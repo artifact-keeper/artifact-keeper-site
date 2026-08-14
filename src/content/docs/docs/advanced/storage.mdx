@@ -652,6 +652,80 @@ BLOB_GC_ENABLED=false   # default — dry-run only
 
 Set `BLOB_GC_ENABLED=true` once you have reviewed the logged candidates and are ready for live blob deletion.
 
+## Storage Accounting and Reclamation
+
+Beyond the scheduled GC pass above, Artifact Keeper exposes on-demand garbage collection scoped to a single repository, and a deduplicated, per-prefix breakdown of what a repository is actually storing.
+
+### On-Demand GC
+
+`POST /admin/cleanup` triggers an instance-wide dry-run/live GC pass (see [Manual Cleanup](#manual-cleanup) above). Two more endpoints scope the same reclaim logic:
+
+```bash
+# Instance-wide, admin-only
+curl -X POST https://registry.example.com/api/v1/admin/storage-gc \
+  -H "Authorization: Bearer $ADMIN_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"dry_run": true}'
+
+# Scoped to one repository (what the web UI's per-repo storage panel calls)
+curl -X POST https://registry.example.com/api/v1/repositories/my-repo/storage-gc \
+  -H "Authorization: Bearer $ADMIN_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"dry_run": true}'
+```
+
+Both return the same shape:
+
+```json
+{
+  "dry_run": true,
+  "storage_keys_deleted": 42,
+  "artifacts_removed": 58,
+  "bytes_freed": 1073741824,
+  "errors": []
+}
+```
+
+The repository-scoped call restricts its candidate sweep (soft-deleted artifacts, abandoned OCI upload sessions, orphaned upload cleanup keys, orphaned Maven flat-object attribution rows) to that repository, but a storage key is only reclaimed when no live reference to it exists anywhere on the instance. The dry-run estimate is dedup-aware: bytes still shared with another repository are never reported as reclaimable. Both endpoints are admin-only.
+
+### Per-Prefix Storage Tree
+
+`GET /repositories/:key/storage/tree` returns a folder-level rollup of a repository's storage, read from a materialized cache rather than walking the artifact table:
+
+```bash
+curl "https://registry.example.com/api/v1/repositories/my-repo/storage/tree?prefix=com/mycompany&depth=2" \
+  -H "Authorization: Bearer $TOKEN"
+```
+
+```json
+{
+  "repository_key": "my-repo",
+  "node": {
+    "prefix": "com/mycompany",
+    "depth": 2,
+    "logical_bytes": 5368709120,
+    "physical_bytes": 4294967296,
+    "file_count": 142,
+    "blob_count": 118
+  },
+  "children": [],
+  "truncated": false,
+  "max_materialized_depth": 5,
+  "computed_at": "2026-02-01T12:00:00Z"
+}
+```
+
+`logical_bytes` sums every reference under the prefix; `physical_bytes` counts each distinct physical object once within the repository. Because a shared object counts once in each sibling subtree but once at their common ancestor, the sum of children's `physical_bytes` can exceed the parent's: the difference is the cross-subtree dedup saving. `depth` (1-5, default 1) controls how many folder levels below `prefix` are returned, and `limit` (default 200, max 1000) bounds the number of descendant nodes, setting `truncated` when it cuts the listing. Visibility follows the repository's own rules: public repos and repo members can read it, everyone else gets an existence-hiding 404.
+
+### Backend-Aware Dedup Accounting
+
+The repository- and instance-level storage totals (including the per-repo `storage_used_bytes` field returned by `GET /repositories`) are computed by a dedicated accounting pass over three physical sources: the `artifacts` table, `oci_blobs` (OCI layers), and `proxy_cache_artifacts`. Every physical object is identified by a dedup key, and how a key shared across repositories is counted depends on the storage backend:
+
+- **Filesystem** (`DedupScope::PerRepo`): each repository has its own directory, so a digest present in two repositories is two physical files. `shared_bytes` is always 0 and the instance total sums every `(repository, key)` pair.
+- **Cloud backends** (S3/GCS/Azure, `DedupScope::Instance`): one physical object backs a digest across every repository that references it, so a key seen in more than one repository is counted as `shared`, and the instance total counts each global key once.
+
+This accounting is read-only and does not feed quota enforcement, which continues to check the live logical sum so that switching to the deduplicated figure never silently loosens an operator's configured limit.
+
 ## Storage Migration
 
 ### From Filesystem to S3

@@ -15,7 +15,8 @@ Configure Artifact Keeper using environment variables. This page provides a comp
 |----------|----------|---------|-------------|
 | `BIND_ADDRESS` | No | `0.0.0.0:8080` | HTTP server bind address in `host:port` form. (There is no separate `PORT`/`HOST` variable.) |
 | `RUST_LOG` | No | `info` | Log level (trace, debug, info, warn, error) |
-| `LOG_FORMAT` | No | `json` | Log format (json, pretty, compact) |
+| `LOG_FORMAT` | No | `pretty` | Diagnostics stdout log format. Accepted values are `pretty` (human-readable multi-line) and `json` (one JSON object per line, for structured stdout collection). Unrecognized values fall back to `pretty`. |
+| `LOG_PROBE_REQUESTS` | No | `false` | Log the per-request "Request completed" line for health/readiness/liveness probe endpoints (`/health`, `/healthz`, `/ready`, `/readyz`, `/livez`). Off by default so probe polling does not bury real request logs; a non-2xx probe response is always logged. Read once at first request. |
 | `ENVIRONMENT` | No | `production` | Runtime environment. Set to `development` to disable the `Secure` flag on auth cookies, allowing cookie-based auth over plain HTTP. See [Reverse Proxy & TLS](/docs/deployment/reverse-proxy). |
 | `DEMO_MODE` | No | `false` | Enable demo mode (read-only) |
 | `BASE_URL` | No | - | Public base URL (e.g., https://registry.example.com) |
@@ -46,6 +47,7 @@ Configure Artifact Keeper using environment variables. This page provides a comp
 | `SSO_ENCRYPTION_KEY` | No | - | Encryption key for storing OIDC/LDAP/SAML client secrets in the database |
 | `REQUIRE_HTTPS` | No | `false` | Require HTTPS for all connections |
 | `ALLOW_LOCAL_ADMIN_LOGIN` | No | `false` | When SSO is enabled, local login is disabled by default. Set to `true` to allow the built-in admin account to log in with local credentials even when SSO providers are configured. Intended as a break-glass recovery mechanism. See [Authentication Security](/docs/security/authentication). |
+| `SETUP_PASSWORD_HINT` | No | - | Free-text hint shown alongside the setup lock, telling operators how to retrieve the generated admin password (e.g. a `kubectl exec` command or a link to internal documentation). Leave unset to keep the built-in Docker Compose default. Whitespace-only values are ignored. |
 
 Login attempt limits are configured in the [Rate Limiting](#rate-limiting) section, and brute-force lockout in [Account Lockout](#account-lockout) below.
 
@@ -106,6 +108,9 @@ These settings apply to local users only. SSO users authenticate through their i
 | `OIDC_EMAIL_CLAIM` | No | `email` | OIDC claim for email |
 | `OIDC_NAME_CLAIM` | No | `name` | OIDC claim for full name |
 | `OIDC_GROUPS_CLAIM` | No | `groups` | OIDC claim for groups |
+| `OIDC_MAP_GROUPS_TO_GROUPS` | No | `false` | Reflect OIDC group claims as local Artifact Keeper groups. Accepts `true`/`1` or `false`/`0`. |
+| `OIDC_AUTO_CREATE_USERS` | No | `true` | Auto-provision users on first OIDC login. Accepts `true`/`1` or `false`/`0`. |
+| `OIDC_PKCE_ENABLED` | No | `true` | Enable PKCE (S256) on the authorization request. Accepts `true`/`1` or `false`/`0`. |
 
 ## SAML Integration
 
@@ -136,6 +141,7 @@ All storage variables are read by the **backend** process.
 | `STORAGE_BACKEND` | No | `filesystem` | Storage backend type (`filesystem`, `s3`, `gcs`, `azure`) |
 | `STORAGE_PATH` | No | `/var/lib/artifact-keeper/artifacts` | Filesystem storage path |
 | `STORAGE_PATH_FORMAT` | No | `native` | Path layout: `native`, `artifactory` (JFrog-compatible), or `migration` (reads both during migration) |
+| `STORAGE_KEY_SCHEME` | No | `repo-scoped` | Storage key scheme for path-addressed format objects (Maven/sbt) on shared cloud backends (S3/GCS/Azure): `repo-scoped` writes `{format}/{repository_id}/{path}` so keys can never collide across repositories; `flat` keeps the legacy `{format}/{path}` layout. Reads fall back to the flat key, so existing objects stay readable either way. Filesystem storage is unaffected (already isolated per repository). |
 | `STORAGE_DIRECT_IO` | No | `false` | Enable direct I/O for large files |
 | `STORAGE_BUFFER_SIZE` | No | `1048576` | Buffer size in bytes (1 MB) |
 
@@ -320,6 +326,7 @@ Read by the **backend** process.
 | `OTEL_SERVICE_NAME` | No | `artifact-keeper` | Service name reported in traces |
 | `AUDIT_LOG_ENABLED` | No | `true` | Enable audit logging |
 | `AUDIT_LOG_PATH` | No | `/var/log/artifact-keeper/audit.log` | Audit log file path |
+| `AUDIT_STREAM` | No | `off` | Emit every recorded audit action as a self-contained NDJSON record on stdout, so it can be shipped to a SIEM by collecting stdout without polling the admin API or reading Postgres. `off` emits nothing; `stdout` emits one NDJSON audit record per line, matching the published schema at `backend/schemas/audit-event.v1.schema.json`. Independent of `LOG_FORMAT`, though pairing with `LOG_FORMAT=json` gives fully structured stdout. See the [audit log export reference](/docs/security/audit-log/#exporting-audit-events) for the schema. |
 
 ## Rate Limiting
 

@@ -1,0 +1,28 @@
+---
+title: What's new in 1.7.2
+description: 1.7.2 was retired after a botched image publish; install 1.7.3 instead
+---
+
+**There is no 1.7.2 release. Install [1.7.3](/docs/release-notes/v1-7-3/) instead.**
+
+During the 1.7.2 cut, the backend and OpenSCAP images were published to both container registries before the release gate completed, and were publicly pullable for roughly nine hours before those tags were deleted. Republishing the same version number with different content is exactly the "same tag, different bytes" hazard the exact-version immutability check exists to prevent, so the number was retired rather than re-pointed. Everything staged for 1.7.2 shipped instead as [1.7.3](/docs/release-notes/v1-7-3/), unchanged in scope. No GitHub Release was ever published for 1.7.2, so going from 1.7.1 straight to 1.7.3 does not skip anything.
+
+**If you pulled a `1.7.2` image during that window, discard it and take 1.7.3.** Those bytes carry no release-gate certification, and while the tags no longer resolve in either registry, a local or mirrored cache can still hold a copy.
+
+What was staged for 1.7.2, and shipped in 1.7.3 instead, included:
+
+- OCI/Docker `/v2` read authorization, closing anonymous and under-scoped access to private images and repository-scoped token confinement on the direct-credential path.
+- Migration job `repo_mappings` for renaming repositories on import.
+- PyPI project-name validation against PEP 508 and upload metadata/identity consistency checks.
+- Filesystem-backend backups correctly reporting failure when artifact bytes are missing, instead of a false "completed."
+- Storage dashboard totals that include OCI blob and proxy-cached bytes.
+
+See [What's new in 1.7.3](/docs/release-notes/v1-7-3/) for the full, current account of this work.
+
+## Support window
+
+- **1.7.x**: active. 1.7.2 was never released; use 1.7.3 or later.
+- **1.6.x**: maintenance only.
+- **&lt;= 1.5.x**: end of life. Upgrade required.
+
+See [Support Policy](/docs/getting-started/support-policy/) for the full version-support matrix.
