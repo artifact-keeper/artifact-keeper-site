@@ -1,0 +1,31 @@
+---
+title: What's new in 1.6.3
+description: A single security patch closing a federated-identity account-takeover path in startup admin provisioning
+---
+
+v1.6.3 is a security patch for the 1.6.0 line. In-place upgrade from any 1.6.x is a drop-in image swap with no database migration.
+
+For the full commit-level changelog, see [the GitHub release notes](https://github.com/artifact-keeper/artifact-keeper/releases/tag/v1.6.3).
+
+## Security
+
+- **Startup admin provisioning no longer merges a federated (SSO) identity into the built-in local admin** ([#2875](https://github.com/artifact-keeper/artifact-keeper/issues/2875)). When a federated OIDC/SAML/LDAP user held the username `admin` (which occurs under `SKIP_ADMIN_PROVISIONING`, SSO-managed admin, or when the identity provider's username claim is `admin`), a backend restart would convert that user's account to a local login and stamp the built-in admin password onto it, collapsing the two identities into a single administrator account. This is a cross-identity privilege-escalation / account-takeover path. Startup provisioning now refuses to cross the local/federated boundary and never mutates a federated account.
+
+  **Am I affected?** Only deployments using federated SSO where a federated user has, or previously had, the username `admin`. On startup the backend now logs a `SECURITY (#2875)` warning if it detects an already-merged account (a local account that still carries a federated `external_id`); operators of such installs should verify each flagged account's true owner and reset the built-in admin credential.
+
+## Upgrade path
+
+```bash
+docker pull ghcr.io/artifact-keeper/artifact-keeper-backend:1.6.3
+docker pull ghcr.io/artifact-keeper/artifact-keeper-web:1.6.3
+```
+
+No database migration is required. After upgrading, check the startup log for a `SECURITY (#2875)` warning: its presence means an account was already merged under the prior behavior and needs manual review.
+
+## Support window
+
+- **1.6.x**: active. This patch supersedes 1.6.2.
+- **1.5.x**: maintenance only.
+- **&lt;= 1.4.x**: end of life. Upgrade required.
+
+See [Support Policy](/docs/getting-started/support-policy/) for the full version-support matrix.

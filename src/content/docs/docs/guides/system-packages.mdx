@@ -36,18 +36,65 @@ sudo apt update
 
 ### GPG Key Import
 
-For signed repositories, import the GPG key:
+For signed repositories, import the GPG key from `GET /debian/{repo_key}/gpg-key.asc`:
 
 ```bash
 # Download and add GPG key
-curl -fsSL http://localhost:8080/debian/stable/key.gpg | \
+curl -fsSL http://localhost:8080/debian/stable/gpg-key.asc | \
   sudo gpg --dearmor -o /etc/apt/trusted.gpg.d/artifact-keeper.gpg
 
-# Configure with signed repository
+# Configure with signed repository (legacy sources.list format)
 echo "deb [signed-by=/etc/apt/trusted.gpg.d/artifact-keeper.gpg] http://localhost:8080/debian/stable main" | \
   sudo tee /etc/apt/sources.list.d/artifact-keeper.list
 
 sudo apt update
+```
+
+#### DEB822 .sources Format
+
+Modern APT (2.4+) prefers the DEB822 `.sources` format over `sources.list` entries. Point `Signed-By` at the same `gpg-key.asc` endpoint, either fetched ahead of time or referenced directly:
+
+```bash
+# Fetch the key once, keyring is referenced by path
+curl -fsSL http://localhost:8080/debian/stable/gpg-key.asc | \
+  sudo gpg --dearmor -o /usr/share/keyrings/artifact-keeper.gpg
+
+sudo tee /etc/apt/sources.list.d/artifact-keeper.sources <<'EOF'
+Types: deb
+URIs: http://localhost:8080/debian/stable
+Suites: main
+Components: main
+Signed-By: /usr/share/keyrings/artifact-keeper.gpg
+EOF
+
+sudo apt update
+```
+
+Both formats are supported side by side; use whichever your distribution's APT version and configuration management expect.
+
+### Repository Metadata Fields
+
+The `Release` file's `Origin`, `Label`, `Version`, and `Description` fields are configurable per repository, read back from `repository_config`:
+
+| Field | Config Key | Description |
+|-------|-----------|--------------|
+| `apt_origin` | `apt_origin` | `Origin` field in the `Release` file (default: `artifact-keeper`) |
+| `apt_label` | `apt_label` | `Label` field in the `Release` file (default: `artifact-keeper`) |
+| `apt_release_version` | `apt_release_version` | `Version` field. Omitted from `Release` when unset. |
+| `apt_description` | `apt_description` | `Description` field. Omitted from `Release` when unset. |
+
+Set them via the repository update endpoint:
+
+```bash
+curl -X PUT http://localhost:8080/api/v1/repositories/stable \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "apt_origin": "Acme Corp",
+    "apt_label": "Acme Stable",
+    "apt_release_version": "2026.08",
+    "apt_description": "Acme internal Debian repository"
+  }'
 ```
 
 ### Publishing Packages

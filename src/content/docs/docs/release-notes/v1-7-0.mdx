@@ -1,0 +1,80 @@
+---
+title: What's new in 1.7.0
+description: Inline scan-and-block on download, a typed curation engine with typo-squat detection, and a re-architected release pipeline
+---
+
+v1.7.0 is a supply-chain-enforcement and release-assurance release closing the 1.7.0 milestone. Scan and curation policy now block at serve time: an inline scan-and-block gate rejects vulnerable artifacts on download across proxy and hosted repositories (PyPI, npm, Docker/OCI) and the virtual repositories that aggregate them, while a new typed curation engine adds publisher-trust and popularity/typo-squat rules, including Unicode-confusable (homoglyph) and affix detection, that stop suspect packages before they reach a client. Underneath the features, the release pipeline is re-architected into a real assurance gate (a blocking security suite, a Deployment Test Framework gate run against the candidate digest, promote-by-digest, dispatch-rehearsable dry runs), the repository usage ledger becomes authoritative to enable O(1) quota admission, and a broad performance pass lands (keyset pagination, GIN-indexed full-text search, off-hot-path side effects). It also closes a cluster of token, refresh, and federated-admin authorization gaps, several with GHSA advisories, and a deep set of cloud-storage, migration, and native-format fidelity fixes.
+
+For the full commit-level changelog, see [the GitHub release notes](https://github.com/artifact-keeper/artifact-keeper/releases/tag/v1.7.0).
+
+## Headline changes
+
+- **Inline scan-and-block on download** ([#2954](https://github.com/artifact-keeper/artifact-keeper/issues/2954), [#3003](https://github.com/artifact-keeper/artifact-keeper/issues/3003), [#3023](https://github.com/artifact-keeper/artifact-keeper/issues/3023)). Vulnerable artifacts are now blocked at serve time, not only at ingestion, across proxy-PyPI, npm, and Docker/OCI pulls, over a shared scan-gate core, and the gate now also covers virtual-repository serves, closing an aggregation bypass where a blocked artifact previously served 200-unscanned through a virtual repo. See [Vulnerability Scanning](/docs/security/scanning/).
+- **Typed curation policy engine with typo-squat detection** ([#2947](https://github.com/artifact-keeper/artifact-keeper/issues/2947), [#2956](https://github.com/artifact-keeper/artifact-keeper/issues/2956)). Publisher-trust and popularity evaluators with global scope and decision dispatch form the base for allow/flag/block curation rules, plus popularity-threshold rules and Unicode-confusable (homoglyph) and affix-based typo-squat detection. Curation block rules are now enforced on proxy pulls across npm, Docker, Maven, Cargo, and NuGet; previously `curation_enabled` was settable but silently inert on 26 of 27 proxy formats. See [Package Curation](/docs/security/curation/) and [Security Policies](/docs/security/policies/).
+- **RPM curated snapshots** ([#2358](https://github.com/artifact-keeper/artifact-keeper/issues/2358)): versioned publications with signed, immutable `@N` snapshot serving.
+- **Release pipeline re-architected into a real assurance gate.** The release security suite is now blocking with the fake-green SAML oracle fixed ([#2700](https://github.com/artifact-keeper/artifact-keeper/issues/2700)); the Deployment Test Framework runs as a required release gate against the candidate digest ([#2697](https://github.com/artifact-keeper/artifact-keeper/issues/2697)); `:VERSION`/`:latest` publish only after the gate passes (promote-by-digest, with a digest-aware republish guard and idempotent mirror, [#2698](https://github.com/artifact-keeper/artifact-keeper/issues/2698)); and the release gate is dispatch-rehearsable as a dry run, with a pre-tag preflight check to catch main-vs-release drift ([#2701](https://github.com/artifact-keeper/artifact-keeper/issues/2701), [#3042](https://github.com/artifact-keeper/artifact-keeper/issues/3042)).
+- **Durable repository-owner capability** ([#2666](https://github.com/artifact-keeper/artifact-keeper/issues/2666)), so repository owners carry a real, persisted permission grant rather than an implicit one, and **per-artifact quarantine state is surfaced in the artifact listing** ([#2940](https://github.com/artifact-keeper/artifact-keeper/issues/2940)).
+- **O(1) quota admission** ([#2523](https://github.com/artifact-keeper/artifact-keeper/issues/2523), [#2992](https://github.com/artifact-keeper/artifact-keeper/issues/2992)). Uploads no longer scan all live artifact sizes twice; admission reads maintained usage-ledger counters, kept authoritative via row-level triggers on the source tables.
+
+## Security
+
+- **Refresh-token consume-and-rotate is now atomic**, closing a token-replay race (GHSA-qxxr, [#2813](https://github.com/artifact-keeper/artifact-keeper/issues/2813)), and **effective admin is scope-gated for token principals** so a scoped token can no longer act with full admin authority (GHSA-vvc3, [#2814](https://github.com/artifact-keeper/artifact-keeper/issues/2814)).
+- **Chunked-upload verbs enforce token write/delete scope** (GHSA-5f2q, [#2812](https://github.com/artifact-keeper/artifact-keeper/issues/2812)), **webhook management requires admin and no longer returns the rotated secret** (GHSA-qcmj, [#2818](https://github.com/artifact-keeper/artifact-keeper/issues/2818)), and **peer-announcement upserts are atomic** with peer data-plane management routes now requiring admin (GHSA-gw36, [#2816](https://github.com/artifact-keeper/artifact-keeper/issues/2816), [#2815](https://github.com/artifact-keeper/artifact-keeper/issues/2815)).
+- **The first-run admin password file is written atomically at `0o600` and is no longer logged by default** (GHSA-8523, [#2817](https://github.com/artifact-keeper/artifact-keeper/issues/2817)).
+- **Federated admin mapping requires an explicit admin group**, so a fuzzy/substring group match can no longer auto-grant admin ([#2759](https://github.com/artifact-keeper/artifact-keeper/issues/2759)), and **startup admin provisioning no longer hijacks a federated identity** that shares the `admin` username ([#2875](https://github.com/artifact-keeper/artifact-keeper/issues/2875)).
+- **Token minting validates and bounds requested scopes at the choke-point** ([#2996](https://github.com/artifact-keeper/artifact-keeper/issues/2996)), and **the `/api/v1` Basic-auth boundary is enforced**: API tokens are accepted as a Basic password on format endpoints but rejected on the management API ([#2809](https://github.com/artifact-keeper/artifact-keeper/issues/2809)).
+- **Maven and sbt objects use repo-scoped cloud-storage keys**, closing the flat-namespace first-publish TOCTOU structurally, so S3 keys carry a repository identifier and cross-repository reads are impossible ([#2586](https://github.com/artifact-keeper/artifact-keeper/issues/2586), [#2624](https://github.com/artifact-keeper/artifact-keeper/issues/2624)).
+- **Virtual PyPI local-ownership is guarded at distribution granularity** instead of coarsely by name, without suppressing remote platform-specific wheels ([#2937](https://github.com/artifact-keeper/artifact-keeper/issues/2937)), and **virtual Debian repositories enforce each member's dist/component/architecture filter** ([#2727](https://github.com/artifact-keeper/artifact-keeper/issues/2727)).
+- **RPM keyless sync defaults to fail-closed**, requiring a configured trusted GPG key ([#2569](https://github.com/artifact-keeper/artifact-keeper/issues/2569)).
+- **`Content-Disposition` filenames are sanitized per RFC 6266**, removing a header-injection and panic surface ([#2654](https://github.com/artifact-keeper/artifact-keeper/issues/2654)), and **diagnostic URL redaction strips userinfo**, so upstream credentials no longer leak in 502 bodies ([#2926](https://github.com/artifact-keeper/artifact-keeper/issues/2926)).
+- **Bundled Grype updated to v0.116.0** to clear CVE-2026-56852 ([#2777](https://github.com/artifact-keeper/artifact-keeper/issues/2777)).
+
+## Added
+
+- **SSO-synced group membership can be made immutable**, blocking manual member edits on externally sourced groups ([#2874](https://github.com/artifact-keeper/artifact-keeper/issues/2874)).
+- **Backup enhancements**: custom archive name, per-repository exclusions, incremental backup from a given date, a configurable `BACKUP_S3_PREFIX`, and a separate S3 bucket for backup archives ([#2790](https://github.com/artifact-keeper/artifact-keeper/issues/2790), [#2772](https://github.com/artifact-keeper/artifact-keeper/issues/2772), [#2789](https://github.com/artifact-keeper/artifact-keeper/issues/2789), [#2507](https://github.com/artifact-keeper/artifact-keeper/issues/2507)). See [Backup & Recovery](/docs/advanced/backup/).
+- **Per-prefix folder-tree storage rollup** with a `/storage/tree` endpoint for deduplicated per-folder usage ([#2601](https://github.com/artifact-keeper/artifact-keeper/issues/2601)).
+- **APT repositories expose the GPG public key at the repository root** for a natural keyring URI ([#2694](https://github.com/artifact-keeper/artifact-keeper/issues/2694)). See [System Packages](/docs/guides/system-packages/).
+- **Age-gate reviews can be reopened and re-decided** instead of being terminal once approved or rejected ([#2939](https://github.com/artifact-keeper/artifact-keeper/issues/2939)). See [Age Gate](/docs/security/age-gate/).
+- **Server version and git SHA are logged at startup** so support log dumps identify the running release ([#2597](https://github.com/artifact-keeper/artifact-keeper/issues/2597)).
+
+## Fixed
+
+- **npm hosted-publish packument invalidation fans out to all replicas**, fixing stale dist-tags and split `npm pack` filename/bytes across a cluster ([#2490](https://github.com/artifact-keeper/artifact-keeper/issues/2490)).
+- **PyPI simple-index responses gain HTTP caching** (ETag/`Cache-Control`/304) ([#2780](https://github.com/artifact-keeper/artifact-keeper/issues/2780)), and **remote Cargo crate downloads stream** instead of buffering at the metadata cap ([#2918](https://github.com/artifact-keeper/artifact-keeper/issues/2918)).
+- **Composer preserves all valid `composer.json` properties on upload** and resolves packages from Composer v1-protocol upstreams ([#2846](https://github.com/artifact-keeper/artifact-keeper/issues/2846), [#2693](https://github.com/artifact-keeper/artifact-keeper/issues/2693)).
+- **NuGet and Chocolatey remote pull-through proxying works**, and conda-forge and Hugging Face pull-through proxies are fixed, preserving `Content-Length` on compressed upstreams ([#2779](https://github.com/artifact-keeper/artifact-keeper/issues/2779), [#2915](https://github.com/artifact-keeper/artifact-keeper/issues/2915)).
+- **GCS metadata-server token fetches use a dedicated HTTP client**, fixing dropped Workload Identity connections on `docker push` ([#2611](https://github.com/artifact-keeper/artifact-keeper/issues/2611)), and **Azure Shared Key requests are signed correctly for path-style endpoints** ([#2649](https://github.com/artifact-keeper/artifact-keeper/issues/2649)).
+- **First-time-setup admin login works**: peer replicas unlock after the admin password change without a restart ([#2492](https://github.com/artifact-keeper/artifact-keeper/issues/2492)), and **the admin LDAP test-connection performs a real bind** ([#2486](https://github.com/artifact-keeper/artifact-keeper/issues/2486)).
+- **Nexus migration** populates the Packages catalog, repairs hollow Docker repositories on re-migration, creates rows for by-digest child manifests, migrates Go and APT repositories, correlates group members to virtual-repository members, populates `upstream_url` for remote/proxy repositories, and resolves the source version instead of reporting "unknown" ([#2676](https://github.com/artifact-keeper/artifact-keeper/issues/2676), [#2596](https://github.com/artifact-keeper/artifact-keeper/issues/2596), [#2576](https://github.com/artifact-keeper/artifact-keeper/issues/2576), [#2797](https://github.com/artifact-keeper/artifact-keeper/issues/2797), [#2799](https://github.com/artifact-keeper/artifact-keeper/issues/2799), [#2822](https://github.com/artifact-keeper/artifact-keeper/issues/2822), [#2872](https://github.com/artifact-keeper/artifact-keeper/issues/2872)). See [From Nexus](/docs/migration/from-nexus/).
+- **Virtual-repository total aggregation is corrected and member edits are allowed** ([#2795](https://github.com/artifact-keeper/artifact-keeper/issues/2795)), and **large virtual-repository delete storage cleanup is deferred off the request path** ([#2778](https://github.com/artifact-keeper/artifact-keeper/issues/2778)).
+
+## Performance
+
+- **Full-text search is backed by a GIN-indexed `search_vector`** instead of recomputing `to_tsvector` per row ([#2871](https://github.com/artifact-keeper/artifact-keeper/issues/2871)).
+- **Keyset pagination** replaces full materialization for flat catalog listings and substring search, remote-cache browsing, and grouped Docker/Maven listings past the 10k bound ([#2518](https://github.com/artifact-keeper/artifact-keeper/issues/2518), [#2519](https://github.com/artifact-keeper/artifact-keeper/issues/2519), [#2520](https://github.com/artifact-keeper/artifact-keeper/issues/2520)).
+- **Common upload routes stream** instead of buffering artifacts up to the 10 GiB limit ([#2517](https://github.com/artifact-keeper/artifact-keeper/issues/2517)), and **download-path stats and audit writes move off the hot path** via a bounded queue plus flush-worker pool ([#2522](https://github.com/artifact-keeper/artifact-keeper/issues/2522)).
+- **RPM repodata is served from a fingerprint-validated cached render** ([#2521](https://github.com/artifact-keeper/artifact-keeper/issues/2521)).
+
+## Upgrade path
+
+1. **Pull the new images**:
+   ```bash
+   docker pull ghcr.io/artifact-keeper/artifact-keeper-backend:1.7.0
+   docker pull ghcr.io/artifact-keeper/artifact-keeper-web:1.7.0
+   ```
+2. **Run migrations.** No manual data migration is required.
+3. **Review token scopes.** GHSA-vvc3 and the token-minting changes ([#2996](https://github.com/artifact-keeper/artifact-keeper/issues/2996)) mean a token's effective authority is now strictly bounded by its granted scopes; audit any automation that relied on an admin-owned token acting with full admin authority regardless of scope.
+4. **Review curation and scan-and-block enforcement** before upgrading a repository with curation rules or a scan policy enabled: proxy pulls across npm, Docker, Maven, Cargo, NuGet, and PyPI are now actively gated rather than only audited.
+5. **Federated admin mapping**: if you rely on implicit substring matching for admin groups, configure an explicit admin group before upgrading ([#2759](https://github.com/artifact-keeper/artifact-keeper/issues/2759)).
+6. **Helm / Docker Compose**: bump to the v1.7.0-compatible chart or compose file and apply.
+
+The web UI, CLI, and native clients work unchanged against a 1.7.0 backend. SDKs published to npm, Maven, PyPI, crates.io, and SPM are tagged `1.7.0`.
+
+## Support window
+
+- **1.7.x**: active. Bug fixes, security patches, and feature work all land here.
+- **1.6.x**: maintenance only. Security backports until the next minor ships.
+- **&lt;= 1.5.x**: end of life. Upgrade required.
+
+See [Support Policy](/docs/getting-started/support-policy/) for the full version-support matrix.

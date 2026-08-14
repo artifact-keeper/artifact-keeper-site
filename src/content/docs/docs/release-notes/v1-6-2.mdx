@@ -1,0 +1,43 @@
+---
+title: What's new in 1.6.2
+description: A federated admin-group mapping fix plus Nexus migration and OIDC group-sync corrections for the 1.6.0 line
+---
+
+v1.6.2 is a patch release for the 1.6.0 line resolving three customer-reported migration and OIDC issues from 1.6.1 field deployments, plus a security fix for federated admin-group mapping. There is one behavioral breaking change for federated (OIDC/SAML/LDAP) SSO deployments that rely on implicit admin-group name matching: see Upgrade notes.
+
+For the full commit-level changelog, see [the GitHub release notes](https://github.com/artifact-keeper/artifact-keeper/releases/tag/v1.6.2).
+
+## Security
+
+- **Federated admin-group mapping now requires an explicitly configured, exact-match admin group** ([#2829](https://github.com/artifact-keeper/artifact-keeper/issues/2829)). OIDC/SAML/LDAP login no longer infers administrator from a fuzzy substring match against built-in patterns (`admin`, `administrators`, `superusers`, `artifact-admins`). Previously, when a provider had no admin group configured, any asserted group name merely containing one of those substrings (even a benign group such as `nonadmin-users`) elevated the user to administrator. Administrator is now granted only when an admin group is explicitly configured and matched exactly (case-insensitive). **Breaking: see Upgrade notes.**
+
+## Fixed
+
+- **Virtual (Nexus group) repositories no longer copy member artifact data during migration** ([#2821](https://github.com/artifact-keeper/artifact-keeper/issues/2821)). Migrating a Nexus group repository provisioned the virtual repository correctly but then physically transferred the aggregated member components into it; a regression introduced in 1.6.0. Virtual repositories are now provisioned and member-correlated without transferring bytes.
+- **Proxy and remote repository migrations now capture the upstream URL** ([#2822](https://github.com/artifact-keeper/artifact-keeper/issues/2822)). Migrating a Nexus proxy or Artifactory remote repository previously did not record the upstream URL, so the destination silently violated the upstream-URL constraint and was skipped. The source upstream URL is now captured (Nexus `proxy.remoteUrl`, Artifactory remote `url`), and a clear configuration error is returned when a remote has none.
+- **OIDC group synchronization now works out of the box for GitLab and resolves inherited subgroups** ([#2831](https://github.com/artifact-keeper/artifact-keeper/issues/2831)). Group memberships were previously read only from an `id_token` claim literally named `groups`; GitLab publishes direct memberships under `groups_direct` and the full effective set, including inherited subgroups, only at the OIDC UserInfo endpoint. Group resolution now checks a candidate claim list (`groups`, `groups_direct`, `roles`) and additionally fetches UserInfo (SSRF-guarded, non-fatal) to obtain the complete effective set. An explicit `groups_claim` mapping still takes precedence, and the UserInfo fetch can be disabled per provider via `attribute_mapping.fetch_userinfo_groups=false`.
+
+## Upgrade notes
+
+In-place upgrade from 1.6.1 is a drop-in image swap; no database migration is required.
+
+**Breaking (federated admin mapping, #2829).** If you relied on Artifact Keeper inferring administrator access from group names that merely contain `admin` (etc.) without configuring an admin group, those users no longer receive admin on login. To restore admin for a federated provider, configure an explicit admin group (OIDC `attribute_mapping.admin_group` or `OIDC_ADMIN_GROUP`, SAML `admin_group`, LDAP `admin_group_dn`) matching the exact group name your identity provider asserts.
+
+**OIDC groups (#2831).** GitLab and other providers that publish memberships under `groups_direct` now synchronize with no configuration change. If you previously worked around this by setting a custom `groups_claim`, that setting still takes precedence and continues to work.
+
+## Upgrade path
+
+```bash
+docker pull ghcr.io/artifact-keeper/artifact-keeper-backend:1.6.2
+docker pull ghcr.io/artifact-keeper/artifact-keeper-web:1.6.2
+```
+
+Helm and Docker Compose users bump to the v1.6.2-compatible chart or compose file and apply. The web UI, CLI, and native clients work unchanged against a 1.6.2 backend; SDKs are tagged `1.6.2`.
+
+## Support window
+
+- **1.6.x**: active. This patch supersedes 1.6.1.
+- **1.5.x**: maintenance only.
+- **&lt;= 1.4.x**: end of life. Upgrade required.
+
+See [Support Policy](/docs/getting-started/support-policy/) for the full version-support matrix.

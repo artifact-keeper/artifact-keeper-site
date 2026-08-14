@@ -1,0 +1,70 @@
+---
+title: What's new in 1.6.1
+description: A field-driven patch for the 1.6.0 line combining SSO, migration, and registry fixes with a scoped-admin token bypass and a refresh-token rotation race
+---
+
+v1.6.1 is a patch release for the 1.6.0 line, combining early-adopter field fixes with a focused round of security hardening. On the correctness side it fixes SSO group mapping and LDAPS trust configuration, three Nexus-migration gaps, virtual-repository storage accounting and editability, CI/CD authentication with service-account tokens, backup retention cleanup, and NuGet/PyPI/Maven registry handling. On the security side it closes an authorization and hardening cluster, most notably a systemic scoped-admin token bypass (GHSA-vvc3) and a refresh-token rotation race (GHSA-qxxr).
+
+For the full commit-level changelog, see [the GitHub release notes](https://github.com/artifact-keeper/artifact-keeper/releases/tag/v1.6.1).
+
+## Security
+
+- **Effective admin now requires an admin-scoped credential, not just an admin owner** (GHSA-vvc3). API tokens and login-exchanged JWTs no longer inherit unconditional admin from the owner's account flag: admin authorization is granted only when the principal is an admin *and* the presented credential carries the `admin` (or `*`) scope. This closes a systemic bypass in which a narrow/read-scoped personal access token owned by an admin passed every admin gate, and retroactively hardens the plugin-install, signing-key, and webhook management surfaces. **Breaking: see Upgrade notes.**
+- **Refresh-token rotation is atomic under concurrency** (GHSA-qxxr). Two simultaneous refreshes of the same refresh token can no longer both succeed and mint successor token families; a single atomic consume elects exactly one winner, and a genuine replay still revokes the whole family.
+- **Chunked uploads enforce the token action-scope** (GHSA-5f2q). The `/api/v1/uploads/*` verbs now require the token's `write` (and `delete` for cancel) scope, matching the direct upload path.
+- **Peer data-plane management requires admin** (GHSA-f7qf), instead of authentication alone, on the peer transfer, chunk, and connection mutation routes.
+- **Webhook management requires admin and no longer discloses the rotated secret** (GHSA-qcmj). Delete, enable, disable, test, rotate-secret, and redeliver now require admin; secret rotation returns only a digest and expiry, never the raw signing secret.
+- **Peer-announcement writes are atomic** (GHSA-gw36), eliminating a partial-write window between the endpoint/credential upsert and its connection record.
+- **The initial admin password file is written atomically at `0o600` and is no longer logged by default** (GHSA-8523). **See Upgrade notes.**
+- **Bundled Grype updated to v0.116.0** to clear CVE-2026-56852 flagged by the container scan ([#2749](https://github.com/artifact-keeper/artifact-keeper/issues/2749)).
+- **The API-token-as-Basic-password fallback is strictly confined to format/registry endpoints** ([#2806](https://github.com/artifact-keeper/artifact-keeper/issues/2806)). The `/api/v1` management API now refuses an API token supplied in the Basic-auth password position; token-as-Basic on package-manager endpoints is preserved.
+- **PyPI simple-index proxy responses are content-sniffed instead of trusting the upstream `Content-Type`** ([#2801](https://github.com/artifact-keeper/artifact-keeper/issues/2801)), so a mislabeled upstream body can no longer be served with un-rewritten offsite download URLs.
+
+## Fixed
+
+**SSO & identity**
+
+- OIDC group sync now populates the Groups admin when "Map OIDC groups to local groups" is enabled, including a `groups` claim delivered as a delimited string rather than a JSON array, with an ownership guard that refuses to hijack groups owned by another provider ([#2781](https://github.com/artifact-keeper/artifact-keeper/issues/2781)).
+- LDAPS trust is configurable per provider again (a regression since 1.2.0): each LDAP provider can supply a custom CA certificate or opt into skipping certificate verification for lab/self-signed environments ([#2782](https://github.com/artifact-keeper/artifact-keeper/issues/2782)).
+- OIDC-generated service accounts can authenticate CI/CD pipelines using their token as the HTTP Basic password, matching the `pip`/Artifactory `token:<api_token>` convention, on format endpoints ([#2786](https://github.com/artifact-keeper/artifact-keeper/issues/2786)).
+
+**Migration from Nexus**
+
+- Nexus `group` repositories now correlate to Artifact Keeper virtual repositories, with member repositories linked in order ([#2783](https://github.com/artifact-keeper/artifact-keeper/issues/2783)).
+- Nexus Go and APT repositories migrate successfully, with a Go module-proxy parser and OpenSearch indexing so migrated dependencies appear under Artifacts, Packages, and search ([#2784](https://github.com/artifact-keeper/artifact-keeper/issues/2784)).
+- The Packages tab is populated after migration for Docker, Helm, NuGet, and other formats that previously imported empty ([#2676](https://github.com/artifact-keeper/artifact-keeper/issues/2676)).
+
+**Repositories & storage**
+
+- A virtual repository's reported total now matches the deduplicated sum of its child repositories, and a virtual repository can be edited after creation to change its member set ([#2785](https://github.com/artifact-keeper/artifact-keeper/issues/2785)).
+- Deleting a large Maven virtual repository no longer times out: storage cleanup is deferred off the request path ([#2776](https://github.com/artifact-keeper/artifact-keeper/issues/2776)).
+- Backup retention cleanup reclaims archive storage instead of deleting only the database row and leaking the `.tar.gz` object ([#2787](https://github.com/artifact-keeper/artifact-keeper/issues/2787)). See [Backup & Recovery](/docs/advanced/backup/).
+- Legacy row-less Maven GAV-grouped companions (`.pom`, `.module`, `-sources.jar`) are served again on cloud backends: 1.6.0's flat-key attribution matched `files[]` entries by snake_case `storage_key`, but the upload handler has always written camelCase `storageKey`, so every legacy companion 404'd despite being legitimately owned. The read-time lookup now accepts both spellings ([#2706](https://github.com/artifact-keeper/artifact-keeper/issues/2706)).
+
+**Registry format handling**
+
+- NuGet and Chocolatey remote (pull-through) proxying works end-to-end ([#2775](https://github.com/artifact-keeper/artifact-keeper/issues/2775)).
+- PyPI simple-index responses now support HTTP caching (ETag / Cache-Control / 304), eliminating redundant full-index transfers on every metadata request ([#2773](https://github.com/artifact-keeper/artifact-keeper/issues/2773)).
+
+## Upgrade notes
+
+- **In-place upgrade from 1.6.0 is a drop-in image swap.** A single additive, non-breaking migration is applied on boot (adds a nullable `superseded_by` column to the refresh-token table for the GHSA-qxxr fix); no operator action is required.
+- **Breaking (admin tokens), GHSA-vvc3.** If any admin automation authenticated to `/api/v1` admin endpoints using an API token minted with a narrow/read scope, those calls now return `403`. Mint a replacement token carrying the `admin` (or `*`) scope. Interactive admin logins (Bearer JWT) and tokens already minted with an admin/`*` scope are unaffected.
+- **Admin password logging, GHSA-8523.** The generated initial admin password is no longer written to logs by default. The previous `ARTIFACT_KEEPER_HIDE_ADMIN_PASSWORD` variable is removed; to intentionally echo the generated password to startup logs, set `ARTIFACT_KEEPER_LOG_ADMIN_PASSWORD=true`. The password is always available in the `0o600` admin password file.
+
+## Upgrade path
+
+```bash
+docker pull ghcr.io/artifact-keeper/artifact-keeper-backend:1.6.1
+docker pull ghcr.io/artifact-keeper/artifact-keeper-web:1.6.1
+```
+
+Helm and Docker Compose users bump to the v1.6.1-compatible chart or compose file and apply. The web UI, CLI, and native clients work unchanged against a 1.6.1 backend; SDKs are tagged `1.6.1`.
+
+## Support window
+
+- **1.6.x**: active. This patch supersedes 1.6.0.
+- **1.5.x**: maintenance only.
+- **&lt;= 1.4.x**: end of life. Upgrade required.
+
+See [Support Policy](/docs/getting-started/support-policy/) for the full version-support matrix.

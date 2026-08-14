@@ -1,0 +1,149 @@
+---
+title: "Age-Gate Quarantine"
+description: "Delay newly published upstream packages until they've aged past a configurable threshold"
+---
+
+The age gate blocks upstream package versions from being downloaded through a proxy repository until they've existed for a minimum number of days. It targets a specific threat: a freshly compromised or malicious upstream release (a hijacked maintainer account, a supply-chain injection into a popular package) is most dangerous in the first hours or days after publication, before the community or the upstream registry has had a chance to notice and pull it. Delaying young versions gives that detection window a chance to work before your organization's build pipelines ever touch the package.
+
+This is a proxy-side control, distinct from [package curation](/docs/security/curation)'s rule-based evaluation of a staging catalog: the age gate applies directly to the live proxy download and metadata-listing paths for npm, PyPI, and Go module proxy repositories, with no staging step in between.
+
+## Gated Formats
+
+The age gate is enforced for:
+
+| Format | `upstream_publish_time` | `first_seen` |
+|--------|:---:|:---:|
+| npm (and Yarn/pnpm, which speak the npm registry protocol) | Yes | Yes |
+| PyPI (and Poetry, which speaks the PyPI protocol) | Yes | Yes |
+| Go module proxy | No | Yes |
+
+Any other format has no age-gate support today; the repository configuration endpoint rejects an attempt to enable it.
+
+## Measurement Modes
+
+Each repository's cooldown clock is measured one of two ways, set via the `mode` field:
+
+### `upstream_publish_time` (default)
+
+Uses the timestamp the upstream registry itself reports as the package's publish time (npm's packument `time` map, PyPI's Warehouse `upload-time`). This measures true package age, but is only as trustworthy as the upstream registry serving it.
+
+### `first_seen`
+
+Uses the timestamp this server first observed the version, recorded the first time it appears in an upstream metadata document or download request. This needs no upstream-reported timestamp and can't be backdated by a compromised publisher, at the cost of measuring local freshness rather than true age: a version that has existed upstream for years but that this repository has never proxied before is "new" the moment it's first seen. Go module proxy repositories support only this mode, since Go's `.info` timestamps are VCS tag times a publisher controls and cannot be trusted as a publish-time signal.
+
+A repository's mode is part of its policy identity, not just a display setting: a review decided under one mode never satisfies the other, and switching modes on a repository resets any decision that no longer has a matching identity back to pending (see [Auto-Approval](#auto-approval-and-the-review-queue) below). A `first_seen` observation is also bound to the specific upstream URL it was made against, so repointing a remote repository at a different registry starts a fresh clock rather than inheriting the previous upstream's elapsed time.
+
+## Per-Repository Configuration
+
+```bash
+GET /api/v1/repositories/{key}/age-gate
+```
+
+```bash
+curl -H "Authorization: Bearer $ADMIN_TOKEN" \
+  "https://artifacts.example.com/api/v1/repositories/npm-proxy/age-gate"
+```
+
+```json
+{
+  "repository_key": "npm-proxy",
+  "enabled": true,
+  "min_age_days": 7,
+  "mode": "upstream_publish_time"
+}
+```
+
+```bash
+curl -X PUT "https://artifacts.example.com/api/v1/repositories/npm-proxy/age-gate" \
+  -H "Authorization: Bearer $ADMIN_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "enabled": true,
+    "min_age_days": 14,
+    "mode": "upstream_publish_time"
+  }'
+```
+
+`min_age_days` accepts `0` through `3650`. `0` is a valid, deliberate setting: it enables the gate with no delay, so explicit rejections still block and the review queue stays under admin control, which simply setting `enabled: false` does not provide (a disabled gate stops honoring rejections too). Both endpoints are admin-only, applies only to remote (proxy) repositories, and `mode` may be omitted on an update to keep the repository's current mode unchanged.
+
+Enabling the gate on a format/mode combination this server can't enforce is rejected outright rather than silently accepted: for example, `PUT` with `mode: "upstream_publish_time"` on a Go repository returns `400 Bad Request`, since Go has no trustworthy publish-time resolver. Disabling the gate (`enabled: false`) is always allowed regardless of format or mode.
+
+## Admin Review Queue
+
+When a version doesn't meet the age threshold, it's blocked and a review row is created (or an existing one's request count is bumped) so an admin can look at it.
+
+### Listing and Inspecting Reviews
+
+```bash
+curl -H "Authorization: Bearer $ADMIN_TOKEN" \
+  "https://artifacts.example.com/api/v1/admin/age-gate/reviews?repository_key=npm-proxy&status=pending&page=1&per_page=20"
+```
+
+`status` accepts a comma-separated list (e.g. `approved,rejected`) to fetch multiple states in one page.
+
+```json
+{
+  "items": [
+    {
+      "id": "b2c1a0d8-1234-4a5b-9c3d-abcdef012345",
+      "repository_key": "npm-proxy",
+      "package_name": "left-pad",
+      "package_version": "1.3.0",
+      "upstream_published_at": "2026-08-10T04:12:00Z",
+      "status": "pending",
+      "requested_at": "2026-08-10T09:03:11Z",
+      "reviewed_by": null,
+      "reviewed_at": null,
+      "review_reason": null,
+      "request_count": 4,
+      "last_requested_at": "2026-08-12T22:14:53Z"
+    }
+  ],
+  "pagination": { "page": 1, "per_page": 20, "total": 1, "total_pages": 1 }
+}
+```
+
+```bash
+GET /api/v1/admin/age-gate/reviews/{id}
+```
+
+### Approve, Reject, and Reopen
+
+```bash
+curl -X POST "https://artifacts.example.com/api/v1/admin/age-gate/reviews/$REVIEW_ID/approve" \
+  -H "Authorization: Bearer $ADMIN_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"reason": "verified with upstream maintainer, safe to allow early"}'
+```
+
+Reject blocks the version outright, independent of age: a rejection holds even once the version would otherwise cross the age threshold, until an admin reopens it.
+
+```bash
+curl -X POST "https://artifacts.example.com/api/v1/admin/age-gate/reviews/$REVIEW_ID/reject" \
+  -H "Authorization: Bearer $ADMIN_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"reason": "confirmed malicious postinstall script"}'
+```
+
+Reviews aren't terminal: any decided review can be reopened back to `pending` from any state, letting the gate reconsider it, which is also how you undo a rejection:
+
+```bash
+curl -X POST "https://artifacts.example.com/api/v1/admin/age-gate/reviews/$REVIEW_ID/reopen" \
+  -H "Authorization: Bearer $ADMIN_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"reason": "re-reviewing after upstream retraction"}'
+```
+
+`reason` is optional on all three actions. A transition to the state a review is already in (e.g. approving an already-approved review) is rejected as a no-op. All five review endpoints, plus both repository config endpoints, are admin-only.
+
+## Auto-Approval and the Review Queue
+
+A version that meets the age threshold is served immediately from its timestamp, whether or not its review row has been formally flipped to `approved`. A background sweep runs every 5 minutes and does the corresponding bookkeeping: it finds every `pending` review whose recorded basis has now aged past its repository's threshold (matched under the repository's *current* policy identity, so a stale basis from before a mode switch or upstream repoint is never auto-approved) and flips it to `approved` with `reviewed_by: null`, distinguishing it from a manual decision.
+
+That distinction matters because an automatic approval is never sticky: it's re-derived on every access. If an admin later raises `min_age_days`, switches modes, or repoints the upstream, a previously auto-approved version that no longer meets the recomputed threshold is voided back to `pending` and blocks again. A **manual** approval, by contrast, holds under the current policy identity even if the threshold is later raised, unless the identity itself changes (a mode switch or repoint), in which case it's also reset. A rejection always blocks regardless of age or policy changes, until explicitly reopened.
+
+## See Also
+
+- [Package Curation](/docs/security/curation): rule-based staging evaluation for upstream packages, including RPM-specific curated snapshots
+- [Security Policies](/docs/security/policies): CVE and license enforcement on artifacts already in the registry
+- [Remote & Virtual Repositories](/docs/advanced/remote-virtual): proxy repository configuration

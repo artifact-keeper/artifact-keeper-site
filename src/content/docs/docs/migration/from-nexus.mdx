@@ -201,6 +201,28 @@ If a migration is interrupted (network failure, server restart), restarting it w
 
 For large Nexus instances, you may want to increase `concurrent_transfers` and decrease `throttle_delay_ms`, but be mindful of Nexus server load.
 
+### Renaming Repositories During Import
+
+If your target repository naming convention differs from your Nexus source (for example, consolidating a team-prefixed name into a shared one), set `repo_mappings` in the migration config: a map of source repository name to target key. Repositories not listed keep their source name.
+
+```bash
+curl -X POST https://registry.example.com/api/v1/migrations \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "source_connection_id": "'$CONNECTION_ID'",
+    "job_type": "full",
+    "config": {
+      "include_repos": ["network-team-python", "npm-hosted"],
+      "repo_mappings": {
+        "network-team-python": "network-pypi"
+      }
+    }
+  }'
+```
+
+Target keys are validated the same way as a hand-created repository key, and two source repositories may not map onto the same target.
+
 ## Nexus Repository Types
 
 Artifact Keeper maps Nexus repository types as follows:

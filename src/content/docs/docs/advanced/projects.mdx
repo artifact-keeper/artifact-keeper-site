@@ -1,0 +1,131 @@
+---
+title: "Projects"
+description: "Group repositories and grant access to all of them at once"
+---
+
+A project is a metadata grouping of repositories. Assigning a repository to a project lets you grant access once, at the project level, instead of repeating the same grant on every repository a team owns.
+
+:::note
+Projects are **admin-only** in this phase: every project endpoint requires an administrator, and there is no project-admin role yet that would let a team self-manage its own project's membership. That's planned for a later phase.
+:::
+
+## Grouping and Permission Inheritance
+
+A project has no storage or format of its own. It's a row that repositories can point at via `project_id`, and a target that [permission grants](/docs/security/policies#repository-access-control-rbac) can be written against.
+
+Grants live in the same underlying permissions store used for direct repository grants, just with `target_type: "project"` instead of `target_type: "repository"`. A grant on a project is inherited by every repository whose `project_id` points at that project: if `alice` is granted `read` and `write` on project `payments`, she gets `read` and `write` on every repository currently assigned to `payments`, with no per-repository grant needed. Reassign a repository to a different project (or unassign it) and it immediately picks up that project's grants instead, or none.
+
+A repository with no project assigned is unaffected by any project's grants; a grant on project B conveys nothing on a repository assigned to project A. Project-level grants only ever widen access on `repository`-type targets; they have no effect on other permission target types.
+
+## Creating and Managing Projects
+
+### Create
+
+```bash
+curl -X POST "https://artifacts.example.com/api/v1/projects" \
+  -H "Authorization: Bearer $ADMIN_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "key": "payments",
+    "name": "Payments",
+    "description": "Payments team repositories",
+    "quota_bytes": 107374182400
+  }'
+```
+
+`key` must be 1-128 characters of letters, digits, `.`, `_`, and `-`, cannot start with a dot or hyphen, and cannot contain consecutive dots (the same shape rule repository keys use). `name` is required; `description` and `quota_bytes` are optional. A duplicate `key` returns `409 Conflict`.
+
+:::note
+`quota_bytes` is stored but **not enforced** in this phase. Quota enforcement is planned for a later phase; setting it today has no effect on uploads.
+:::
+
+```json
+{
+  "id": "aa11bb22-cc33-dd44-ee55-ff6677889900",
+  "key": "payments",
+  "name": "Payments",
+  "description": "Payments team repositories",
+  "quota_bytes": 107374182400,
+  "created_at": "2026-08-13T09:00:00Z",
+  "updated_at": "2026-08-13T09:00:00Z"
+}
+```
+
+### List, Get, Update
+
+```bash
+curl -H "Authorization: Bearer $ADMIN_TOKEN" "https://artifacts.example.com/api/v1/projects"
+```
+
+```bash
+curl -H "Authorization: Bearer $ADMIN_TOKEN" "https://artifacts.example.com/api/v1/projects/$PROJECT_ID"
+```
+
+Updates use COALESCE semantics: only the fields you include are changed, everything else keeps its current value.
+
+```bash
+curl -X PUT "https://artifacts.example.com/api/v1/projects/$PROJECT_ID" \
+  -H "Authorization: Bearer $ADMIN_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"description": "Payments and billing repositories"}'
+```
+
+### Delete
+
+```bash
+curl -X DELETE "https://artifacts.example.com/api/v1/projects/$PROJECT_ID" \
+  -H "Authorization: Bearer $ADMIN_TOKEN"
+```
+
+Deleting a project removes its membership grants and the project row in a single transaction. Repositories assigned to the project are **not** deleted; they're automatically unassigned (`project_id` set back to `NULL`) and immediately lose the project's inherited grants.
+
+## Members
+
+A project's members are the permission grants on it: a principal (`user` or `group`), and the actions they're granted on every repository in the project.
+
+### List Members
+
+```bash
+curl -H "Authorization: Bearer $ADMIN_TOKEN" \
+  "https://artifacts.example.com/api/v1/projects/$PROJECT_ID/members"
+```
+
+```json
+{
+  "items": [
+    { "principal_type": "user", "principal_id": "9a8b7c6d-5e4f-3a2b-1c0d-9e8f7a6b5c4d", "actions": ["read", "write"] },
+    { "principal_type": "group", "principal_id": "cc33dd44-ee55-ff66-7788-99aabbccddee", "actions": ["read"] }
+  ]
+}
+```
+
+### Add or Update a Member
+
+```bash
+curl -X POST "https://artifacts.example.com/api/v1/projects/$PROJECT_ID/members" \
+  -H "Authorization: Bearer $ADMIN_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "principal_type": "user",
+    "principal_id": "9a8b7c6d-5e4f-3a2b-1c0d-9e8f7a6b5c4d",
+    "actions": ["read", "write"]
+  }'
+```
+
+`principal_type` must be `user` or `group`; `actions` must be non-empty (an empty list is indistinguishable from "no grant" and is rejected). Posting again for the same principal upserts: the `actions` list is replaced, not merged. `principal_id` is validated against the principal store, so a `user`-typed grant naming a service-account id (or any other type mismatch) is rejected with `400 Bad Request` rather than silently creating a grant nothing can ever legitimately use.
+
+### Remove a Member
+
+```bash
+curl -X DELETE "https://artifacts.example.com/api/v1/projects/$PROJECT_ID/members" \
+  -H "Authorization: Bearer $ADMIN_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"principal_type": "user", "principal_id": "9a8b7c6d-5e4f-3a2b-1c0d-9e8f7a6b5c4d"}'
+```
+
+Removing a grant that doesn't exist returns `404 Not Found`. Every membership mutation invalidates the permission cache immediately, so revoked access takes effect on the next request rather than waiting out a cache TTL.
+
+## See Also
+
+- [Security Policies](/docs/security/policies): repository-level access control and RBAC enforcement that project grants are inherited into
+- [Remote & Virtual Repositories](/docs/advanced/remote-virtual): repository types and layout

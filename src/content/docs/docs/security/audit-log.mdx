@@ -96,7 +96,37 @@ Content-Type: application/json
 { "cleanup_audit_logs": true }
 ```
 
-Events older than the configured retention window are deleted. Increase `audit_retention_days` through the admin settings if your compliance program requires a longer trail, and export events on a schedule if you need retention beyond what you keep in the database.
+Events older than the configured retention window are deleted. Increase `audit_retention_days` through the admin settings if your compliance program requires a longer trail, and enable the structured export stream below if you need retention beyond what you keep in the database.
+
+## Exporting Audit Events
+
+Rather than a request/response export endpoint, Artifact Keeper can emit every recorded audit action as a self-contained NDJSON record on stdout, so it can be shipped to a SIEM by collecting stdout, without polling the admin API or reading Postgres directly.
+
+Enable it with:
+
+```bash
+AUDIT_STREAM=stdout
+```
+
+`AUDIT_STREAM` defaults to `off` (nothing emitted, no overhead). Pair it with `LOG_FORMAT=json` for a fully structured stdout; the two streams interleave, and audit lines are distinguished from diagnostics by a top-level `"category": "audit"` marker, never by parsing message text.
+
+Each emitted line is an instance of the committed schema at `backend/schemas/audit-event.v1.schema.json`, with a stable, versioned envelope:
+
+| Field | Type | Notes |
+|-------|------|-------|
+| `schema_version` | integer | `1`. Bumped only on a breaking change. |
+| `category` | string | Always `"audit"`. |
+| `event_id` | uuid | Equals the `audit_log` row id, the join key back to `GET /admin/audit`. |
+| `timestamp` | date-time | Emit time (UTC, RFC 3339); approximates the row's `created_at`. |
+| `action` | string | SCREAMING_SNAKE action name (`LOGIN`, `REPOSITORY_CREATED`, etc). |
+| `outcome` | enum | `success`, `failure`, or `denied`, derived from the action name. |
+| `actor` | object | `{ id, name, type }`. `type` is `system`, `user`, `anonymous`, or the reserved `service_account`. `name` is best-effort and `null` when not already known at emit time. |
+| `source_ip` | string \| null | Present when the emitter already captured one. |
+| `resource` | object | `{ type, id, name }` for the targeted resource. |
+| `correlation_id` | string | Same correlation id used to join request logs and traces. |
+| `details` | object \| null | Typed for representative event kinds, permissive otherwise. |
+
+See the full schema reference at `docs/audit-events.md` in the backend repository for field-by-field detail and the JSON Schema file itself.
 
 ## Admin Web UI
 

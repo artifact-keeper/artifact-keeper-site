@@ -1,0 +1,76 @@
+---
+title: What's new in 1.6.0
+description: Project grouping, scan/curation enforcement at download time, Maven cross-tenant isolation, and 24 security fixes in the 1.6.0 milestone
+---
+
+v1.6.0 is a security- and correctness-hardening release closing the 1.6.0 milestone: 24 security fixes, 9 features and enhancements, and 47 bug fixes, spanning multi-tenant isolation, supply-chain signing, ingestion/scan resource limits, native-client format fidelity across a dozen ecosystems, proxy/cache accounting, and SSO group mapping. It also folds in the cross-repository Maven flat-key attribution hardening and the npm replication-feed and webhook cluster-safety fixes carried over from the 1.5.x hotfix line.
+
+For the full commit-level changelog, see [the GitHub release notes](https://github.com/artifact-keeper/artifact-keeper/releases/tag/v1.6.0).
+
+## Headline changes
+
+- **Project grouping for repositories** ([#2483](https://github.com/artifact-keeper/artifact-keeper/issues/2483)). Repositories can now be organized under a project, with permission grants on the project inherited by every repository it contains, instead of having to be set repository by repository. See [Projects](/docs/advanced/projects/).
+- **Scan and curation policy is enforced, not just flagged** ([#2912](https://github.com/artifact-keeper/artifact-keeper/issues/2912)). An artifact that violates an enabled scan policy's `max_severity` threshold or `block_on_fail` is quarantined, blocking downloads across every format's download routes and Docker/OCI manifest pulls; a quarantine-period hold that expires without remediation converts into a permanent block. Curation block rules now gate PyPI proxy index and download requests on curation-enabled remote and virtual repositories, rejecting matching packages with a 403 and the rule reason instead of only auditing them. A new admin endpoint, `POST /api/v1/quarantine/{artifact_id}/quarantine`, lets an operator manually quarantine a flagged, clean, or held artifact. See [Vulnerability Scanning](/docs/security/scanning/), [Package Curation](/docs/security/curation/), and [Security Policies](/docs/security/policies/).
+- **Row-less Maven flat-key objects are attributed to their owning repository on shared cloud storage** ([#2574](https://github.com/artifact-keeper/artifact-keeper/issues/2574), [#2584](https://github.com/artifact-keeper/artifact-keeper/issues/2584)). GAV-grouped companion files (`.pom`, `.module`, `-sources.jar`), `maven-metadata.xml` rollups, and checksum sidecars on a shared S3/GCS/Azure namespace are now resolved to a single owning repository from live artifact rows, parent metadata, and a first-writer-wins claim, and every write is guarded so overwriting a key owned by a different repository is refused with 403. Filesystem backends, which already isolate each repository's key space, are unaffected. See [Maven](/docs/guides/maven/).
+- **npm virtual-repository scope policies cover tarball and direct-remote paths**, support glob patterns, and are configurable at repository-creation time and in the web UI, rather than only on the metadata paths of an existing Remote repository ([#2424](https://github.com/artifact-keeper/artifact-keeper/issues/2424)). See [npm](/docs/guides/npm/).
+- **Advanced Debian/APT repository support**, including DEB822-format sources, SSRF and integrity hardening on proxied repositories, per-distribution/component/architecture filtering, and `Release` metadata customization on hosted repositories ([#2407](https://github.com/artifact-keeper/artifact-keeper/issues/2407), [#2459](https://github.com/artifact-keeper/artifact-keeper/issues/2459), [#2460](https://github.com/artifact-keeper/artifact-keeper/issues/2460), [#2489](https://github.com/artifact-keeper/artifact-keeper/issues/2489)). See [System Packages](/docs/guides/system-packages/).
+- **Real deduplicated storage usage per repository and folder** ([#2056](https://github.com/artifact-keeper/artifact-keeper/issues/2056)) and **structured, versioned audit-log export for SIEM ingestion** ([#2413](https://github.com/artifact-keeper/artifact-keeper/issues/2413)). See [Audit Log](/docs/security/audit-log/).
+- **SAML assertion groups map to group memberships**, matching existing OIDC behavior, with a web UI toggle for the OIDC "map groups to groups" setting ([#2333](https://github.com/artifact-keeper/artifact-keeper/issues/2333), [#1879](https://github.com/artifact-keeper/artifact-keeper/issues/1879)).
+
+## Security
+
+- **Cross-repository authorization hardened** across the promotion-rules, approval, curation, signing, and quality routes ([#2443](https://github.com/artifact-keeper/artifact-keeper/issues/2443)), and **quality-check results can no longer be read across repository boundaries** ([#2437](https://github.com/artifact-keeper/artifact-keeper/issues/2437)).
+- **gRPC methods enforce token action scopes** instead of authorizing on admin status alone ([#2432](https://github.com/artifact-keeper/artifact-keeper/issues/2432)).
+- **The promotion "require signature" gate is now enforced** and honors key revocation ([#2535](https://github.com/artifact-keeper/artifact-keeper/issues/2535)); **signing-key rotation is atomic** so concurrent rotations can no longer orphan keys or leave the instance without an active signing key ([#2534](https://github.com/artifact-keeper/artifact-keeper/issues/2534)), and **rotating a registry signing key now requires authorization** ([#2513](https://github.com/artifact-keeper/artifact-keeper/issues/2513)).
+- **Upload-time and scan-time archive extraction are bounded**, closing a decompression-bomb surface at ingestion separately from scanning, with a concurrent-extraction cap so per-request budgets can't be multiplied across parallel uploads or scans ([#2556](https://github.com/artifact-keeper/artifact-keeper/issues/2556), [#2561](https://github.com/artifact-keeper/artifact-keeper/issues/2561), [#2514](https://github.com/artifact-keeper/artifact-keeper/issues/2514), [#2540](https://github.com/artifact-keeper/artifact-keeper/issues/2540)).
+- **Reading and modifying plugin configuration now requires authorization**, and plugin callback SSRF guards are hardened ahead of enabling webhook/validator dispatch ([#2512](https://github.com/artifact-keeper/artifact-keeper/issues/2512), [#2536](https://github.com/artifact-keeper/artifact-keeper/issues/2536)).
+- **npm scope-policy filtering fails closed** on a database error or corrupt config, covers the legacy `/-/all` and `/-/by-user` response shapes, and scrubs package names out of kept keys' values instead of passing unrecognized shapes through ([#2726](https://github.com/artifact-keeper/artifact-keeper/issues/2726), [#2542](https://github.com/artifact-keeper/artifact-keeper/issues/2542), [#2551](https://github.com/artifact-keeper/artifact-keeper/issues/2551), [#2594](https://github.com/artifact-keeper/artifact-keeper/issues/2594)).
+- **Storage stats no longer expose a cross-tenant deduplication existence oracle** via shared-bytes accounting on cloud backends ([#2560](https://github.com/artifact-keeper/artifact-keeper/issues/2560)).
+- **Debian's proxy filter fails closed** when it cannot be loaded, and encoded `%2f`/`%5c` path separators are rejected across the Debian proxy filter and proxy paths as defense in depth ([#2672](https://github.com/artifact-keeper/artifact-keeper/issues/2672), [#2562](https://github.com/artifact-keeper/artifact-keeper/issues/2562)).
+- **Scan scheduling applies per-user/tenant fairness** so a single tenant can't monopolize the scan queue ([#2555](https://github.com/artifact-keeper/artifact-keeper/issues/2555)), and **remote-instance proxying no longer buffers request and response bodies unbounded** ([#2515](https://github.com/artifact-keeper/artifact-keeper/issues/2515)).
+
+## Fixed
+
+**Native format fidelity**
+
+- Alpine's APKINDEX is now consumable by real `apk` clients, and index-signing failures fail the request instead of silently serving an unsigned index ([#2633](https://github.com/artifact-keeper/artifact-keeper/issues/2633), [#2660](https://github.com/artifact-keeper/artifact-keeper/issues/2660)).
+- RubyGems' specs index is served in the Marshal format `gem`/Bundler expect ([#2630](https://github.com/artifact-keeper/artifact-keeper/issues/2630)); conda's token-authenticated channels no longer 401 on repodata and downloads ([#2629](https://github.com/artifact-keeper/artifact-keeper/issues/2629)).
+- `dotnet nuget push --api-key` works, and the NuGet registration leaf no longer advertises a download URL that 404s ([#2642](https://github.com/artifact-keeper/artifact-keeper/issues/2642), [#2656](https://github.com/artifact-keeper/artifact-keeper/issues/2656)).
+- Hex hosted repositories serve the signed registry format `mix deps.get` requires instead of JSON ([#2641](https://github.com/artifact-keeper/artifact-keeper/issues/2641)); CocoaPods hosted repositories serve a CDN layout so `pod repo add-cdn` and `pod install` work ([#2638](https://github.com/artifact-keeper/artifact-keeper/issues/2638)).
+- Terraform hosted providers are usable by real clients, and Helm remote/proxy repositories serve provenance so `helm pull --verify` works against them ([#2647](https://github.com/artifact-keeper/artifact-keeper/issues/2647), [#2653](https://github.com/artifact-keeper/artifact-keeper/issues/2653)).
+- RPM hosted repositories no longer 404, and repodata signing now produces a verification chain `dnf` accepts ([#2580](https://github.com/artifact-keeper/artifact-keeper/issues/2580), [#2636](https://github.com/artifact-keeper/artifact-keeper/issues/2636)).
+- Git LFS file locking works instead of returning 500 on every lock request ([#2627](https://github.com/artifact-keeper/artifact-keeper/issues/2627)).
+
+**Storage & proxy cache**
+
+- Invalid `STORAGE_BACKEND` values now fail startup instead of silently falling back to filesystem and disabling cross-tenant guards ([#2669](https://github.com/artifact-keeper/artifact-keeper/issues/2669)); Azure deployments no longer silently lose all remote/proxy repositories, and mixed-backend deployments no longer 404 their own objects ([#2670](https://github.com/artifact-keeper/artifact-keeper/issues/2670), [#2671](https://github.com/artifact-keeper/artifact-keeper/issues/2671)).
+- Docker repository storage usage now includes OCI layer blobs instead of showing kilobytes for gigabyte-sized repositories, and per-repository storage usage now includes proxy-cached storage ([#2625](https://github.com/artifact-keeper/artifact-keeper/issues/2625), [#2218](https://github.com/artifact-keeper/artifact-keeper/issues/2218)).
+- Proxy-cached artifacts are now cataloged in the database, fixing storage accounting, download tracking, and cache visibility, and proxy-cache downloads are counted correctly on first serve ([#2270](https://github.com/artifact-keeper/artifact-keeper/issues/2270), [#2537](https://github.com/artifact-keeper/artifact-keeper/issues/2537)).
+- Maven/Ivy downloads on S3 use presigned-URL redirects instead of streaming through the backend ([#1945](https://github.com/artifact-keeper/artifact-keeper/issues/1945)).
+
+**Identity & migration**
+
+- SSO-synced group membership can be made immutable, blocking manual member edits on externally sourced groups ([#2874](https://github.com/artifact-keeper/artifact-keeper/issues/2874)), and service-account-typed private-repo permission grants are honored instead of silently ignored ([#2433](https://github.com/artifact-keeper/artifact-keeper/issues/2433)).
+- In-place upgrade from 1.5.x boots cleanly: a startup migration-ledger reconciliation resolves the schema-history divergence between the 1.5.x hotfix line and 1.6.0 automatically, with no operator action required ([#2686](https://github.com/artifact-keeper/artifact-keeper/issues/2686)).
+
+## Upgrade path
+
+1. **Pull the new images**:
+   ```bash
+   docker pull ghcr.io/artifact-keeper/artifact-keeper-backend:1.6.0
+   docker pull ghcr.io/artifact-keeper/artifact-keeper-web:1.6.0
+   ```
+2. **Run migrations.** The startup migration-ledger reconciliation for the 1.5.x/1.6.0 divergence ([#2686](https://github.com/artifact-keeper/artifact-keeper/issues/2686)) runs automatically; no manual step is required.
+3. **Review scan and curation enforcement** ([#2912](https://github.com/artifact-keeper/artifact-keeper/issues/2912)) before upgrading a repository with an enabled scan policy or curation rules: artifacts that previously only triggered a flag or an audit entry can now be quarantined or blocked outright.
+4. **Verify `STORAGE_BACKEND`** is set to a recognized value; an unrecognized value now fails startup rather than silently falling back to filesystem ([#2669](https://github.com/artifact-keeper/artifact-keeper/issues/2669)).
+5. **Helm / Docker Compose**: bump to the v1.6.0-compatible chart or compose file and apply.
+
+The web UI, CLI, and native clients work unchanged against a 1.6.0 backend. SDKs published to npm, Maven, PyPI, crates.io, and SPM are tagged `1.6.0`.
+
+## Support window
+
+- **1.6.x**: active. Bug fixes, security patches, and feature work all land here.
+- **1.5.x**: maintenance only. Security backports until the next minor ships.
+- **&lt;= 1.4.x**: end of life. Upgrade required.
+
+See [Support Policy](/docs/getting-started/support-policy/) for the full version-support matrix.

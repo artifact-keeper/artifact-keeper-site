@@ -80,6 +80,8 @@ export default defineConfig({
             { label: 'Health Scores', slug: 'docs/security/health-scores' },
             { label: 'Quality Gates', slug: 'docs/security/quality-gates' },
             { label: 'Security Policies', slug: 'docs/security/policies' },
+            { label: 'Package Curation', slug: 'docs/security/curation' },
+            { label: 'Age Gate', slug: 'docs/security/age-gate' },
             { label: 'Audit Log', slug: 'docs/security/audit-log' },
             { label: 'CVE Blast Radius', slug: 'docs/security/blast-radius' },
             { label: 'Artifact Signing', slug: 'docs/security/signing' },
@@ -99,6 +101,7 @@ export default defineConfig({
           items: [
             { label: 'Remote & Virtual Repos', slug: 'docs/advanced/remote-virtual' },
             { label: 'Authentication & RBAC', slug: 'docs/advanced/auth' },
+            { label: 'Projects', slug: 'docs/advanced/projects' },
             { label: 'Staging & Promotion', slug: 'docs/advanced/staging-promotion' },
             { label: 'Storage Backends', slug: 'docs/advanced/storage' },
             { label: 'Peer Replication', slug: 'docs/advanced/edge-nodes' },
@@ -149,6 +152,15 @@ export default defineConfig({
         {
           label: 'Release Notes',
           items: [
+            { label: 'v1.7.3', slug: 'docs/release-notes/v1-7-3' },
+            { label: 'v1.7.2', slug: 'docs/release-notes/v1-7-2' },
+            { label: 'v1.7.1', slug: 'docs/release-notes/v1-7-1' },
+            { label: 'v1.7.0', slug: 'docs/release-notes/v1-7-0' },
+            { label: 'v1.6.4', slug: 'docs/release-notes/v1-6-4' },
+            { label: 'v1.6.3', slug: 'docs/release-notes/v1-6-3' },
+            { label: 'v1.6.2', slug: 'docs/release-notes/v1-6-2' },
+            { label: 'v1.6.1', slug: 'docs/release-notes/v1-6-1' },
+            { label: 'v1.6.0', slug: 'docs/release-notes/v1-6-0' },
             { label: 'v1.5.1', slug: 'docs/release-notes/v1-5-1' },
             { label: 'v1.5.0', slug: 'docs/release-notes/v1-5-0' },
             { label: 'v1.4.2', slug: 'docs/release-notes/v1-4-2' },

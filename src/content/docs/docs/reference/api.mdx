@@ -47,9 +47,23 @@ Authenticate and receive access/refresh tokens.
   "access_token": "eyJhbGc...",
   "refresh_token": "eyJhbGc...",
   "expires_in": 900,
-  "token_type": "Bearer"
+  "token_type": "Bearer",
+  "must_change_password": false
 }
 ```
+
+`must_change_password` is `true` when the account must set a new password before doing anything else (for example after an admin-forced reset). Clients should route to a password-change flow rather than using the tokens for other calls.
+
+**TOTP flow:** when the account has TOTP enabled, this endpoint does not return real tokens on the first call. It returns a pending challenge instead, with `access_token`, `refresh_token`, `must_change_password`, and `token_type` omitted:
+
+```json
+{
+  "totp_required": true,
+  "totp_token": "eyJhbGc..."
+}
+```
+
+Exchange `totp_token` together with the current TOTP code via `POST /auth/totp/verify` to receive the real tokens (same response shape as this endpoint).
 
 ### POST /auth/refresh
 
@@ -123,29 +137,41 @@ List all repositories.
 
 **Query Parameters:**
 - `page` (number): Page number (default: 1)
-- `limit` (number): Items per page (default: 20)
+- `per_page` (number): Items per page
+- `q` (string): Search by key/name
+- `type` (string, alias `repo_type`): Filter by repository type (hosted, remote, virtual)
 - `format` (string): Filter by format (docker, maven, npm, etc.)
+- `project` (uuid): Filter to repositories assigned to this project
 
 **Response:**
 
 ```json
 {
-  "repositories": [
+  "items": [
     {
       "id": "repo-123",
+      "key": "my-docker-repo",
       "name": "my-docker-repo",
       "format": "docker",
+      "repo_type": "hosted",
       "description": "Production Docker images",
+      "is_public": false,
+      "allow_anonymous_access": false,
+      "storage_used_bytes": 5368709120,
       "created_at": "2026-01-15T10:00:00Z",
-      "artifact_count": 142,
-      "size_bytes": 5368709120
+      "updated_at": "2026-02-01T12:00:00Z"
     }
   ],
-  "total": 10,
-  "page": 1,
-  "limit": 20
+  "pagination": {
+    "page": 1,
+    "per_page": 20,
+    "total": 10,
+    "total_pages": 1
+  }
 }
 ```
+
+There is no `artifact_count` or `size_bytes` field; storage usage is reported as `storage_used_bytes`.
 
 ### POST /repositories
 
@@ -390,21 +416,41 @@ List all versions of a package.
 
 List users (admin only).
 
+**Query Parameters:**
+- `search` (string): Filter by username/email
+- `is_active` (boolean): Filter by active status
+- `is_admin` (boolean): Filter by admin status
+- `page` (number): Page number
+- `per_page` (number): Items per page
+
 **Response:**
 
 ```json
 {
-  "users": [
+  "items": [
     {
       "id": "user-789",
       "username": "alice",
       "email": "alice@example.com",
-      "role": "user",
+      "display_name": "Alice",
+      "auth_provider": "local",
+      "is_active": true,
+      "is_admin": false,
+      "must_change_password": false,
+      "last_login_at": "2026-02-01T09:00:00Z",
       "created_at": "2026-01-01T00:00:00Z"
     }
-  ]
+  ],
+  "pagination": {
+    "page": 1,
+    "per_page": 20,
+    "total": 1,
+    "total_pages": 1
+  }
 }
 ```
+
+There is no string `role` field; admin status is the boolean `is_admin`.
 
 ### POST /users
 
@@ -417,11 +463,34 @@ Create user (admin only).
   "username": "bob",
   "email": "bob@example.com",
   "password": "secure-password",
-  "role": "user"
+  "display_name": "Bob",
+  "is_admin": false
 }
 ```
 
-**Response:** `201 Created`
+`password` is optional; when omitted, a password is auto-generated.
+
+**Response:**
+
+```json
+{
+  "user": {
+    "id": "user-890",
+    "username": "bob",
+    "email": "bob@example.com",
+    "display_name": "Bob",
+    "auth_provider": "local",
+    "is_active": true,
+    "is_admin": false,
+    "must_change_password": true,
+    "last_login_at": null,
+    "created_at": "2026-02-01T12:00:00Z"
+  },
+  "generated_password": "Xk7#mPq2Rn9!vLc4"
+}
+```
+
+`generated_password` is present only when `password` was omitted from the request.
 
 ### GET /users/me
 
@@ -527,6 +596,128 @@ Add users to group.
 
 ---
 
+## Project Endpoints
+
+Projects are a metadata grouping of repositories: a project owns zero or more repositories (`repositories.project_id`), and a permission grant on a project is inherited by every repository assigned to it. All project endpoints are admin-only.
+
+### GET /projects
+
+List projects (admin only).
+
+**Response:**
+
+```json
+{
+  "items": [
+    {
+      "id": "project-123",
+      "key": "payments",
+      "name": "Payments",
+      "description": "Payments team repositories",
+      "quota_bytes": null,
+      "created_at": "2026-01-01T00:00:00Z",
+      "updated_at": "2026-01-01T00:00:00Z"
+    }
+  ]
+}
+```
+
+`quota_bytes` is stored but not yet enforced.
+
+### POST /projects
+
+Create a project (admin only).
+
+**Request:**
+
+```json
+{
+  "key": "payments",
+  "name": "Payments",
+  "description": "Payments team repositories",
+  "quota_bytes": null
+}
+```
+
+`key` must be 1-128 characters of letters, digits, `.`, `_`, or `-`, must not start with a dot or hyphen, and must not contain consecutive dots.
+
+**Response:** the created project object (same shape as one `items` entry above).
+
+**Errors:** `409` when the project key already exists.
+
+### GET /projects/:id
+
+Get project details (admin only).
+
+### PUT /projects/:id
+
+Update a project (admin only).
+
+**Request:**
+
+```json
+{
+  "name": "Payments",
+  "description": "Updated description",
+  "quota_bytes": 107374182400
+}
+```
+
+All fields are optional.
+
+### DELETE /projects/:id
+
+Delete a project (admin only).
+
+### GET /projects/:id/members
+
+List membership grants on a project (admin only).
+
+**Response:**
+
+```json
+{
+  "items": [
+    {
+      "principal_type": "group",
+      "principal_id": "group-456",
+      "actions": ["read", "write"]
+    }
+  ]
+}
+```
+
+### POST /projects/:id/members
+
+Grant a user or group access to every repository in the project (admin only).
+
+**Request:**
+
+```json
+{
+  "principal_type": "group",
+  "principal_id": "group-456",
+  "actions": ["read", "write"]
+}
+```
+
+`principal_type` is `user` or `group`. `actions` must be non-empty.
+
+### DELETE /projects/:id/members
+
+Revoke a membership grant (admin only).
+
+**Request:**
+
+```json
+{
+  "principal_type": "group",
+  "principal_id": "group-456"
+}
+```
+
+---
+
 ## Permission Endpoints
 
 ### GET /permissions
@@ -563,36 +754,45 @@ List security scans.
 
 ```json
 {
-  "scans": [
+  "items": [
     {
       "id": "scan-123",
       "artifact_id": "artifact-456",
-      "scanner": "trivy",
+      "repository_id": "repo-123",
+      "scan_type": "trivy",
       "status": "completed",
-      "vulnerabilities": {
-        "critical": 0,
-        "high": 2,
-        "medium": 5,
-        "low": 12
-      },
-      "scanned_at": "2026-02-01T12:30:00Z"
+      "findings_count": 19,
+      "critical_count": 0,
+      "high_count": 2,
+      "medium_count": 5,
+      "low_count": 12,
+      "info_count": 0,
+      "started_at": "2026-02-01T12:29:00Z",
+      "completed_at": "2026-02-01T12:30:00Z",
+      "created_at": "2026-02-01T12:28:00Z"
     }
-  ]
+  ],
+  "total": 1
 }
 ```
 
-### POST /security/scans
+Severity counts are flat fields (`critical_count`, `high_count`, `medium_count`, `low_count`, `info_count`), not a nested `vulnerabilities` object. There is no top-level `scanned_at`; use `started_at`/`completed_at`/`created_at`.
 
-Trigger security scan.
+### POST /security/scan
+
+Trigger a security scan. Note the path is singular (`/security/scan`, not `/security/scans`).
 
 **Request:**
 
 ```json
 {
   "artifact_id": "artifact-456",
-  "scanner": "trivy"
+  "repository_id": "repo-123",
+  "bypass_dedup": false
 }
 ```
+
+`artifact_id` and `repository_id` are both optional (target either one artifact or every artifact in a repository). `bypass_dedup` skips the hash-based dedup short-circuit and is admin-only; non-admin callers get `403` if they set it.
 
 ### GET /security/scans/:id
 
@@ -721,13 +921,19 @@ Get system statistics (admin only).
 
 ```json
 {
-  "repositories": 25,
-  "artifacts": 1523,
-  "total_size_bytes": 107374182400,
-  "users": 42,
-  "downloads_24h": 856
+  "total_repositories": 25,
+  "total_artifacts": 1523,
+  "total_storage_bytes": 107374182400,
+  "total_downloads": 8562,
+  "total_users": 42,
+  "active_peers": 2,
+  "pending_sync_tasks": 0,
+  "proxy_artifact_count": 314,
+  "proxy_storage_bytes": 10737418240
 }
 ```
+
+`total_storage_bytes` already includes proxy-cached and OCI layer/config blob bytes; `proxy_storage_bytes` is a breakdown of that total, not a separate figure to add on top.
 
 ### POST /admin/cleanup
 
