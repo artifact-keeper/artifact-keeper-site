@@ -129,6 +129,8 @@ curl -s http://localhost:30080/api/v1/repositories \
 
 ### Create Your First Repository
 
+The example below creates a **local** (hosted) repository for packages you publish. To proxy and cache packages from an upstream registry, create a **remote** repository. A **virtual** repository combines local and remote sources behind one URL. See [Proxy Caching: Remote & Virtual Repositories](/docs/advanced/remote-virtual) for setup examples.
+
 ```bash
 curl -X POST http://localhost:30080/api/v1/repositories \
   -H "Authorization: Bearer $TOKEN" \
