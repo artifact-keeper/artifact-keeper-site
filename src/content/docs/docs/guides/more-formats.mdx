@@ -293,6 +293,96 @@ publishPlugin {
 ./gradlew publishPlugin
 ```
 
+### JupyterLab Extensions
+
+Host JupyterLab extensions through the PyPI, npm, and conda repositories you
+already have. Prebuilt extensions are pip wheels, source extensions are npm
+packages, and classic notebook extensions (nbextensions) ship as either or as
+conda packages.
+
+**Endpoint Format:** `/pypi/{repo}`
+**Repository Key:** `jupyter` (alias of `pypi`, Artifact Keeper 1.10.0+) — or any existing `pypi`, `npm`, or `conda_native` repository
+
+**Prebuilt extensions:** any PyPI repository
+
+```bash
+pip install --index-url https://artifacts.example.com/pypi/main/simple/ jupyterlab-git
+```
+
+**Source extensions:** any npm repository. JupyterLab 4 rebuilds itself with
+its bundled Yarn 3, which does not read `.npmrc`; set the registry for the
+build instead:
+
+```bash
+export YARN_NPM_REGISTRY_SERVER=https://artifacts.example.com/npm/main/
+jupyter labextension install @myorg/my-extension   # deprecated in JupyterLab 4, requires Node.js
+```
+
+Prefer publishing extensions as prebuilt wheels to a PyPI repository; the
+`.npmrc` `registry=` line only affects `npm`/`yarn` 1 clients that fetch the
+package directly.
+
+**Classic nbextensions:** the same PyPI or npm repository, or a conda repository
+
+```bash
+conda install -c https://artifacts.example.com/conda/main jupyter_contrib_nbextensions
+```
+
+See the [PyPI](/docs/guides/pypi), [npm](/docs/guides/npm), and
+[Conda](/docs/guides/more-languages#conda) guides for authentication and
+remote/virtual setup.
+
+#### Extension Manager Sidebar
+
+JupyterLab 4's Extension Manager talks to two PyPI APIs beyond the Simple index:
+the legacy JSON API (`/pypi/{name}/json`) for metadata and XML-RPC `browse` for
+discovery. Artifact Keeper serves both on the PyPI handler, so one line in
+`jupyter_lab_config.py` points the sidebar at your repository:
+
+```python
+c.PyPIExtensionManager.base_url = "https://artifacts.example.com/pypi/main/pypi"
+```
+
+Installs started from the sidebar run `pip`, so keep pip's `index-url` pointed
+at the same repository:
+
+```ini
+# pip.conf
+[global]
+index-url = https://artifacts.example.com/pypi/main/simple/
+```
+
+:::note
+The Extension Manager sidebar requires **Artifact Keeper 1.10.0 or later**,
+which adds the legacy PyPI JSON API and XML-RPC `browse` to the PyPI handler
+([artifact-keeper#3783](https://github.com/artifact-keeper/artifact-keeper/issues/3783)).
+The `jupyter` repository key also arrives in 1.10.0
+([artifact-keeper#3784](https://github.com/artifact-keeper/artifact-keeper/issues/3784));
+on earlier versions, use a `pypi` repository. `pip`, `npm`, and `conda`
+installs work on any version.
+:::
+
+Hosted repositories answer `browse` from stored package metadata (the
+`Framework :: Jupyter :: JupyterLab :: Extensions :: Prebuilt` classifier); a
+virtual repository answers with the union of its hosted members — remote
+members contribute nothing to the catalogue. Only uploads made on 1.10.0 or
+later store classifiers; re-upload older wheels to list them in the sidebar.
+
+Remote repositories do not answer `browse` at all: the call returns an XML-RPC
+fault (`-32001`) rather than being forwarded to the upstream, and JupyterLab
+shows it as a generic "Error searching for extensions". The reason is in the
+XML-RPC response and the server log. Point `base_url` at a hosted repository,
+or at a virtual repository that has at least one hosted member; installs from a
+remote still work through `pip`, only the sidebar catalogue does not.
+
+The JSON views the sidebar reads apply the same listing-time gates as
+`/simple/`: [curation](/docs/security/curation/) block rules, the
+[age gate](/docs/security/age-gate/) on a remote member, and PEP 708 local-first
+isolation on a virtual repository, so the sidebar never offers a version whose
+download would be refused. Installs run `pip`, so [quarantine and scan
+policies](/docs/security/scanning/) apply to the download exactly as for any
+other `pip install`.
+
 ## Git LFS
 
 Store large files using Git Large File Storage protocol.

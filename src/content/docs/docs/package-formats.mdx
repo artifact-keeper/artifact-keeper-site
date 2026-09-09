@@ -13,7 +13,7 @@ This page is a quick reference index. Click through to the detailed guide pages 
 
 ## Complete Format Reference
 
-**37 native formats** with full wire-protocol support, plus **15 aliases** for alternative clients that share an underlying protocol. Custom formats can be added at any time via [WASM plugins](/docs/advanced/plugins/).
+**37 native formats** with full wire-protocol support, plus **16 aliases** for alternative clients that share an underlying protocol. Custom formats can be added at any time via [WASM plugins](/docs/advanced/plugins/).
 
 | # | Format | Key | Category | Native Clients |
 |---|--------|-----|----------|----------------|
@@ -155,6 +155,8 @@ Debian, RPM, Alpine, and Conda repositories support GPG/RSA signing for reposito
 | **VS Code** | `vscode` | VS Code, Cursor, Windsurf, Kiro | [More Formats](/docs/guides/more-formats/) |
 | **JetBrains** | `jetbrains` | IntelliJ, PyCharm, WebStorm, etc. | [More Formats](/docs/guides/more-formats/) |
 
+**JupyterLab Extensions** (`jupyter`, from 1.10.0) is an [alias](#format-aliases) of PyPI rather than a separate format: prebuilt extensions are PyPI wheels, source extensions are npm packages, and nbextensions ship through either or Conda. See [JupyterLab Extensions](/docs/guides/more-formats/#jupyterlab-extensions) for the one-line Extension Manager configuration.
+
 ---
 
 ## Other Formats
@@ -182,7 +184,9 @@ Many package managers share underlying protocols. These aliases automatically re
 | `poetry` | pypi | `helm_oci` | docker |
 | `conda` | pypi | `chocolatey` | nuget |
 | `powershell` | nuget | `opentofu` | terraform |
-| `lxc` | incus | | |
+| `lxc` | incus | `jupyter` | pypi |
+
+The `jupyter` alias ("JupyterLab Extensions" in the repository format dropdown) is served by the PyPI handler and is available from Artifact Keeper 1.10.0. See [JupyterLab Extensions](/docs/guides/more-formats/#jupyterlab-extensions).
 
 ---
 
