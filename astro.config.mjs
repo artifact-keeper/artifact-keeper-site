@@ -108,6 +108,7 @@ export default defineConfig({
             { label: 'WASM Plugins', slug: 'docs/advanced/plugins' },
             { label: 'Artifact Versioning', slug: 'docs/advanced/versioning' },
             { label: 'Lifecycle Policies', slug: 'docs/advanced/lifecycle' },
+            { label: 'Image Builder', slug: 'docs/advanced/image-builder' },
             { label: 'Webhooks', items: [
               { label: 'Overview', slug: 'docs/advanced/webhooks' },
               { label: 'Receiver: Python', slug: 'docs/advanced/webhook-receivers/python' },
