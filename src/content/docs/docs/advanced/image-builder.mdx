@@ -1,9 +1,9 @@
 ---
 title: "Image Builder"
-description: "Build container images inside Artifact Keeper from a structured spec — no Dockerfiles — with BuildKit, provenance attestations and the same scanning every pushed image gets."
+description: "Build container images inside Artifact Keeper from a structured spec — distro-aware package groups, two-stage builds, an admin-gated Dockerfile mode — with BuildKit, provenance attestations and the same scanning every pushed image gets."
 ---
 
-The image builder lets a user compose a container image from an approved base image plus packages, environment variables and labels, and have Artifact Keeper build it and push it back into a Docker repository. Nobody writes a Dockerfile: the server renders one deterministically from the spec, BuildKit builds it, and the exact rendered Containerfile rides inside the image as a signed provenance attestation, where the **Image** inspector shows it.
+The image builder lets a user compose a container image from an approved base image plus packages, environment variables and labels, and have Artifact Keeper build it and push it back into a Docker repository. Nobody has to write a Dockerfile: the server renders one deterministically from the spec, BuildKit builds it, and the exact rendered Containerfile rides inside the image as a provenance attestation, where the **Image** inspector shows it. For the cases the form cannot express, an administrator can enable a Dockerfile mode that is checked against the same base-image policy.
 
 It exists for the case a registry is uniquely placed to serve: the base images are already mirrored here, the package proxies are here, the scanner is here, and the result lands here. A build never has to leave the registry's trust boundary.
 
@@ -15,10 +15,36 @@ Shipped in the backend and web as an opt-in feature. It is **off** until an admi
 
 On any container-image repository (`docker`, `podman`, `buildx`, `oras`) the repository page gains:
 
-- **A Build tab** showing whether builds are enabled here and under what policy, the builds so far, and a **New image** wizard. The wizard is a form — base image, pip / conda / apt packages, environment, labels, user, working directory — with the Containerfile the server would build rendered live on the right. That preview is the server's dry run, so the validation you see is the one the build will apply.
+- **A Build tab** showing whether builds are enabled here and under what policy, the builds so far, and a **New image** wizard. The wizard is a form — base image, ordered **package groups** each with its own package manager, environment, labels, user, working directory — with the Containerfile the server would build rendered live on the right. That preview is the server's dry run, so the validation you see is the one the build will apply.
 - **An Image tab** on every manifest's detail dialog: platforms, size, the container config (entrypoint, command, user, working dir, ports, env, labels), the layers with their share of the image, and a **Dockerfile view**. For images the builder produced, that view is the actual Containerfile, read from the provenance attestation. For any other image it is the build history reconstructed as instructions with the layer size each step produced.
 
 A finished build's detail shows its log, its Containerfile and the resulting image; **Rebuild with changes** reopens the wizard from the spec.
+
+### Package groups
+
+A spec installs packages in **groups**, rendered in the order given. Each group names the package manager to use, so the same form works for a Debian-based Ray image, a Red Hat UBI image or Alpine:
+
+| Manager | Base images it fits | Rendered as |
+|---|---|---|
+| `apt` | Debian, Ubuntu, `python:*`, `rayproject/ray` | `apt-get update && apt-get install -y --no-install-recommends …` then the list cleanup |
+| `dnf` | UBI, Fedora, RHEL, Rocky, Alma | `dnf install -y … && dnf clean all` |
+| `microdnf` | `ubi-minimal`, `ubi-micro` | `microdnf install -y … && microdnf clean all` |
+| `yum` | CentOS 7, Amazon Linux 2 | `yum install -y … && yum clean all` |
+| `apk` | Alpine | `apk add --no-cache …` |
+| `pip` | any image with Python | `pip install --no-cache-dir …`, pinned to `AK_IMAGE_BUILD_PIP_INDEX_URL` when set |
+| `conda` | any image with conda | `conda install -y [-c channel…] … && conda clean -afy` |
+
+The wizard's manager dropdown lists only the managers the instance supports and, when you add a group, suggests the system manager the base image most likely carries (UBI → `dnf`/`microdnf`, Alpine → `apk`, Debian, Ubuntu, `python` and Ray → `apt`). A wrong guess is harmless: the build fails at that step with the manager's own error in the log. Each manager has its own package grammar, so a value that is not a plain package name, version pin or channel is refused before anything renders.
+
+System package groups (`apt`, `dnf`, `microdnf`, `yum`, `apk`) run as `root`, so a spec that has one must set `user` to the account the image should run as afterwards; the renderer switches to `root` for those steps and back to that user at the end.
+
+### Two-stage builds
+
+With **Two-stage build** on (the wizard's default), the `pip` groups install in a separate builder stage into a fixed directory, and the final stage copies only that directory in and exports `PYTHONPATH` and `PATH` for it. Pip's caches, downloaded wheels and any compiler toolchain the base carries stay in the builder stage and never reach the pushed image. System and conda groups always install in the final stage because they change the OS layer itself.
+
+### Dockerfile mode
+
+When the instance sets `AK_IMAGE_BUILD_ALLOW_DOCKERFILE=true`, the wizard offers a **Dockerfile** switch that replaces the form with a text area. The Dockerfile is sent as `spec.dockerfile`; the server checks that every `FROM` (stage aliases and `scratch` aside) sits under the base-image allowlist, appends its spec label so provenance stays complete, and otherwise builds it as written. This is the escape hatch for anything the structured spec cannot express — multi-stage compiles, `COPY --from` of a vendored tool, non-standard package managers. It is off by default because it removes the grammar checks: with it on, the scan gate and the base-image allowlist are the review.
 
 ## How it works
 
@@ -32,7 +58,7 @@ A finished build's detail shows its log, its Containerfile and the resulting ima
         image_builds table                     /v2/<repo>/<image>:<tag>  (this registry)
 ```
 
-1. **Spec in, Containerfile out.** `POST …/image-builds/render` validates the spec and returns the Containerfile the server would build. Every field is checked against a strict grammar (package specifiers, env names, label keys, user, path) so nothing a user types can become a shell metacharacter in a `RUN` line. The base image must match the administrator's allowlist. Raw `RUN` lines are refused unless the instance allows them.
+1. **Spec in, Containerfile out.** `POST …/image-builds/render` validates the spec and returns the Containerfile the server would build. Every field is checked against a strict grammar (per-manager package specifiers, env names, label keys, user, path) so nothing a user types can become a shell metacharacter in a `RUN` line. The base image must match the administrator's allowlist. Raw `RUN` lines and whole Dockerfiles are refused unless the instance allows them.
 2. **Queue.** `POST …/image-builds` records the build (`queued`) and returns `202`. Builds run detached from the request; a per-instance semaphore bounds how many run at once and a wall-clock timeout stops runaways.
 3. **Build.** The backend runs `buildctl` against the configured `buildkitd`, sending the Containerfile as the build context and asking for `attest:provenance=mode=max`, which embeds the Containerfile in a SLSA provenance attestation.
 4. **Push as the user.** BuildKit pushes the result back into this registry. The credential is a short-lived API token minted for the requesting user and revoked when the build ends, so repository permissions apply to the push exactly as they would to `docker push`.
@@ -156,6 +182,7 @@ The feature is configured entirely through environment variables on the backend 
 | `AK_IMAGE_BUILD_BASE_ALLOWLIST` | Comma-separated base image prefixes a spec may build on; empty allows any | empty |
 | `AK_IMAGE_BUILD_ADMIN_ONLY` | `true` restricts building to administrators; `false` lets any user with write access on the repository build into it | `true` |
 | `AK_IMAGE_BUILD_ALLOW_RUN` | Let a spec carry raw `RUN` lines | `false` |
+| `AK_IMAGE_BUILD_ALLOW_DOCKERFILE` | Let a spec carry a whole Dockerfile (every `FROM` still checked against the allowlist) | `false` |
 | `AK_IMAGE_BUILD_PIP_INDEX_URL` | A PyPI index every generated `pip install` is pinned to — point it at this instance's PyPI proxy so package downloads never leave the registry | unset |
 | `AK_IMAGE_BUILD_TIMEOUT_SECS` | Wall clock per build | `1800` |
 | `AK_IMAGE_BUILD_MAX_CONCURRENT` | Builds this backend drives at once | `2` |
@@ -175,7 +202,7 @@ artifact-keeper:
 
 ### 3. Check it
 
-`GET /api/v1/repositories/{key}/image-builds/settings` reports `enabled`, whether this repository can receive builds (local container repositories only), the policy, and `caller_may_build` for the signed-in user. The Build tab shows the same.
+`GET /api/v1/repositories/{key}/image-builds/settings` reports `enabled`, whether this repository can receive builds (local container repositories only), the policy (`base_allowlist`, `allow_run`, `allow_dockerfile`, `supported_package_managers`, `admin_only`), and `caller_may_build` for the signed-in user. The Build tab shows the same.
 
 ## Who may build
 
@@ -193,7 +220,7 @@ A build executes the thing being built. The design accepts that and confines it.
 **What a build can do**
 
 - Fetch the base image (from the allowlist) and any packages the Containerfile installs.
-- Run the package managers' install steps, and raw `RUN` lines only when the instance allows them.
+- Run the package managers' install steps, and raw `RUN` lines or a whole Dockerfile only when the instance allows them.
 - Push one image to one repository, as the requesting user.
 
 **How that is confined**
@@ -203,7 +230,8 @@ A build executes the thing being built. The design accepts that and confines it.
 | Shell or Dockerfile injection through spec fields | Every field is validated against a strict grammar before rendering; values are quoted; the Containerfile is rendered by the server, never accepted from the client. |
 | Pulling an unvetted or malicious base | `AK_IMAGE_BUILD_BASE_ALLOWLIST`; point it at repositories in this registry (mirrors, curated images) so base images are scanned and quarantine-gated like everything else. |
 | Supply-chain pulls during `pip install` | `AK_IMAGE_BUILD_PIP_INDEX_URL` pins installs to this instance's PyPI proxy; a NetworkPolicy on the daemon can deny other egress. |
-| Arbitrary code in the build | Raw `RUN` is off by default. The daemon is rootless, in its own namespace, with resource limits and a wall-clock timeout. |
+| Arbitrary code in the build | Raw `RUN` and Dockerfile mode are off by default. The daemon is rootless, in its own namespace, with resource limits and a wall-clock timeout. |
+| Build tooling and caches shipped in the result | Two-stage builds keep pip's caches, wheels and any compiler in the builder stage; only the installed packages are copied into the final image. |
 | Pushing where the user may not | The push credential is a short-lived API token minted for the requesting user and revoked afterwards; the registry's own authorization decides. |
 | Anyone in the cluster driving the daemon | The daemon's gRPC port is unauthenticated, so the NetworkPolicy above admits only the backend. Treat reachability of `buildkitd:1234` as equivalent to "may run a build". |
 | Tampering with what was built | `mode=max` provenance embeds the Containerfile and build parameters in an attestation pushed with the image; the Image tab reads it back. The image is scanned on push and subject to quarantine and quality gates. |
@@ -211,7 +239,7 @@ A build executes the thing being built. The design accepts that and confines it.
 
 **What it does not do yet**
 
-- No per-repository or per-group enablement beyond the admin-only switch.
+- No per-repository or per-group enablement beyond the admin-only switch; `AK_IMAGE_BUILD_ALLOW_DOCKERFILE` is likewise instance-wide.
 - Provenance is attested but not signed with a key you control; cosign signing of built images is a follow-up.
 - The daemon's egress is open unless you add an egress NetworkPolicy. Do so once your base images and package index live in this registry.
 - Node architecture is not surfaced: a wheel built for AVX2 will fail at run time on an older CPU. Pick packages accordingly (for example `polars-lts-cpu` rather than `polars`).
@@ -236,8 +264,11 @@ All paths are relative to `/api/v1/repositories/{key}`. A spec looks like:
   "tag": "2.56.0-genomics",
   "spec": {
     "base_image": "rayproject/ray:2.56.0",
-    "pip": ["scanpy==1.10.2", "polars-lts-cpu==1.9.0"],
-    "apt": ["libgomp1"],
+    "packages": [
+      { "manager": "apt", "packages": ["libgomp1"] },
+      { "manager": "pip", "packages": ["scanpy==1.10.2", "polars-lts-cpu==1.9.0"] }
+    ],
+    "multistage": true,
     "env": { "OMP_NUM_THREADS": "1" },
     "labels": { "org.opencontainers.image.title": "Ray with the genomics stack" },
     "user": "ray",
@@ -246,7 +277,7 @@ All paths are relative to `/api/v1/repositories/{key}`. A spec looks like:
 }
 ```
 
-`apt` packages install as root, so a spec that lists them must set `user` to the account the image should run as afterwards.
+System package groups install as root, so a spec that has one must set `user` to the account the image should run as afterwards. The older shorthand fields `apt`, `conda`, `conda_channels` and `pip` are still accepted and fold into groups in that order. In Dockerfile mode the spec is just `{ "dockerfile": "FROM …" }`; the same `POST …/render` dry run reports whether it passes the base-image check.
 
 ## Using the result elsewhere
 
