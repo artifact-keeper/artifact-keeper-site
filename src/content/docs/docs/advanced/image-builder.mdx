@@ -34,7 +34,7 @@ A spec installs packages in **groups**, rendered in the order given. Each group 
 | `pip` | any image with Python | `pip install --no-cache-dir …`, pinned to `AK_IMAGE_BUILD_PIP_INDEX_URL` when set |
 | `conda` | any image with conda | `conda install -y [-c channel…] … && conda clean -afy` |
 
-The wizard's manager dropdown lists only the managers the instance supports and, when you add a group, suggests the system manager the base image most likely carries (UBI → `dnf`/`microdnf`, Alpine → `apk`, Debian, Ubuntu, `python` and Ray → `apt`). A wrong guess is harmless: the build fails at that step with the manager's own error in the log. Each manager has its own package grammar, so a value that is not a plain package name, version pin or channel is refused before anything renders.
+The wizard narrows the manager dropdown to what fits the base image. When the base is stored in this registry (a local repository, or a remote repository's cache), the server reads the image's **own build history and labels** — the newest layer that ran `apt-get`, `dnf`, `microdnf`, `yum` or `apk`, or a Red Hat component label — and the dropdown offers that system manager plus `pip` and `conda`; the badge under the base field also shows the platform, the user the image runs as, and whether pip or conda are present. For a base that is not stored here the wizard guesses from the name (UBI → `dnf`/`microdnf`, Alpine → `apk`, Debian, Ubuntu, `python` and Ray → `apt`); *show all managers* lifts the filter either way. A wrong guess is harmless: the build fails at that step with the manager's own error in the log. Pointing the base allowlist at repositories in this registry therefore buys both the scan gate on base images and the accurate detection. Each manager has its own package grammar, so a value that is not a plain package name, version pin or channel is refused before anything renders.
 
 System package groups (`apt`, `dnf`, `microdnf`, `yum`, `apk`) run as `root`, so a spec that has one must set `user` to the account the image should run as afterwards; the renderer switches to `root` for those steps and back to that user at the end.
 
@@ -249,6 +249,7 @@ A build executes the thing being built. The design accepts that and confines it.
 | Method and path | Purpose |
 |---|---|
 | `GET /image-builds/settings` | Availability and policy for this repository and caller |
+| `GET /image-builds/base-info?image=` | What this registry knows about a base image: platform, user, pip/conda, system package manager from its history; `found: false` when not stored here |
 | `POST /image-builds/render` | Validate a spec; return the Containerfile and warnings (dry run) |
 | `POST /image-builds` | Queue a build; `202` with the record |
 | `GET /image-builds` | Builds, newest first |
