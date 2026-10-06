@@ -534,13 +534,21 @@ curl -X POST \
 
 ## Generic
 
-Store any file type with custom metadata using the generic storage endpoint.
+Store any file type at an arbitrary path through the repository REST API.
 
-**Endpoint Format:** `/generic/{repo}`
+**Upload:** `PUT /api/v1/repositories/{key}/artifacts/{path}` (raw request body)
+**Download:** `GET /api/v1/repositories/{key}/download/{path}`
+**Metadata:** `GET /api/v1/repositories/{key}/artifacts/{path}`
 **Repository Key:** `generic`
 
-:::tip
-Enable [artifact versioning](/docs/advanced/versioning) on a `generic` repository to append an immutable revision on every re-upload to a path (instead of overwriting), with a `?version=<rev|label>` selector for retrieving any prior revision.
+Uploads need a token or basic auth with the `write:artifacts` scope. Downloads are anonymous on public repositories and need `read:artifacts` otherwise.
+
+:::caution[Paths are write-once]
+Uploading to a path that already holds an artifact returns **HTTP 409** (`Artifact version already exists and is immutable`); nothing is overwritten. To replace a file, delete it first with `DELETE /api/v1/repositories/{key}/artifacts/{path}`, which needs the `delete:artifacts` scope (a token with only `read:artifacts,write:artifacts` gets 403). Alternatively, enable [artifact versioning](/docs/advanced/versioning) on the repository (`versioning_enabled`): each upload to a path then appends an immutable revision, with a `?version=<rev|label>` selector for retrieving any prior revision.
+:::
+
+:::note
+The backend also serves read-only downloads at `GET /general/{key}/{path}`, but the stock Docker Compose Caddyfile in 1.10.x does not route `/general/`, so behind it requests to that path reach the web UI instead. Use the `/api/v1/repositories/{key}/download/{path}` route unless you expose the backend directly.
 :::
 
 ### Upload Examples
@@ -548,19 +556,22 @@ Enable [artifact versioning](/docs/advanced/versioning) on a `generic` repositor
 Upload files via curl:
 
 ```bash
-# Upload single file
-curl -X POST \
+# Upload a file (raw body, not multipart)
+curl -fsS -X PUT \
   -H "Authorization: Bearer $TOKEN" \
-  -F "file=@build-output.tar.gz" \
-  https://artifacts.example.com/generic/main/builds/v1.0.0/output.tar.gz
+  -H "Content-Type: application/gzip" \
+  --data-binary @build-output.tar.gz \
+  https://artifacts.example.com/api/v1/repositories/main/artifacts/builds/v1.0.0/output.tar.gz
 
-# Upload with custom metadata
-curl -X POST \
-  -H "Authorization: Bearer $TOKEN" \
-  -F "file=@docs.zip" \
-  -F "metadata={\"type\":\"documentation\",\"version\":\"1.0.0\",\"commit\":\"abc123\"}" \
-  https://artifacts.example.com/generic/main/docs/v1.0.0/docs.zip
+# Same with basic auth (an API token works as the password)
+curl -fsS -u "username:$TOKEN" -T docs.zip \
+  -H "Content-Type: application/zip" \
+  https://artifacts.example.com/api/v1/repositories/main/artifacts/docs/v1.0.0/docs.zip
 ```
+
+Set `Content-Type` explicitly. The stored content type is whatever the client sent, and it is returned on download; `curl --data-binary` without `-H "Content-Type: ..."` sends, stores and later serves `application/x-www-form-urlencoded`.
+
+A multipart form is also accepted: `POST` to the same `/api/v1/repositories/{key}/artifacts/{path}` URL with the file in a form field that has a file name (for example `-F "file=@docs.zip"`).
 
 Python example:
 
@@ -569,19 +580,16 @@ import requests
 
 # Upload file
 with open("artifact.bin", "rb") as f:
-    response = requests.post(
-        "https://artifacts.example.com/generic/main/artifacts/v1.0.0/artifact.bin",
-        headers={"Authorization": f"Bearer {token}"},
-        files={"file": f},
-        data={
-            "metadata": json.dumps({
-                "build_id": "12345",
-                "platform": "linux-x64",
-                "checksum": "sha256:abc123...",
-            })
+    response = requests.put(
+        "https://artifacts.example.com/api/v1/repositories/main/artifacts/artifacts/v1.0.0/artifact.bin",
+        headers={
+            "Authorization": f"Bearer {token}",
+            "Content-Type": "application/octet-stream",
         },
+        data=f,
     )
 
+response.raise_for_status()  # 409 if the path already exists
 print(response.json())
 ```
 
@@ -590,14 +598,14 @@ print(response.json())
 Download files via curl:
 
 ```bash
-# Download file
-curl -H "Authorization: Bearer $TOKEN" \
-  https://artifacts.example.com/generic/main/builds/v1.0.0/output.tar.gz \
+# Download file (omit the Authorization header for public repositories)
+curl -fsS -H "Authorization: Bearer $TOKEN" \
+  https://artifacts.example.com/api/v1/repositories/main/download/builds/v1.0.0/output.tar.gz \
   -o output.tar.gz
 
-# Download with metadata
-curl -H "Authorization: Bearer $TOKEN" \
-  https://artifacts.example.com/generic/main/builds/v1.0.0/output.tar.gz?metadata=true
+# Artifact metadata (size, checksum, content type, ...)
+curl -fsS -H "Authorization: Bearer $TOKEN" \
+  https://artifacts.example.com/api/v1/repositories/main/artifacts/builds/v1.0.0/output.tar.gz
 ```
 
 Python example:
@@ -605,24 +613,26 @@ Python example:
 ```python
 import requests
 
+base = "https://artifacts.example.com/api/v1/repositories/main"
+
 # Download file
 response = requests.get(
-    "https://artifacts.example.com/generic/main/artifacts/v1.0.0/artifact.bin",
+    f"{base}/download/artifacts/v1.0.0/artifact.bin",
     headers={"Authorization": f"Bearer {token}"},
 )
+response.raise_for_status()
 
 with open("artifact.bin", "wb") as f:
     f.write(response.content)
 
 # Get metadata
 response = requests.get(
-    "https://artifacts.example.com/generic/main/artifacts/v1.0.0/artifact.bin",
+    f"{base}/artifacts/artifacts/v1.0.0/artifact.bin",
     headers={"Authorization": f"Bearer {token}"},
-    params={"metadata": "true"},
 )
 
 metadata = response.json()
-print(f"Build ID: {metadata['build_id']}")
+print(f"SHA-256: {metadata['checksum_sha256']}")
 ```
 
 ### Use Cases
@@ -630,44 +640,48 @@ print(f"Build ID: {metadata['build_id']}")
 **Build Outputs:**
 ```bash
 # Store compiled binaries
-curl -X POST \
+curl -fsS -X PUT \
   -H "Authorization: Bearer $TOKEN" \
-  -F "file=@app-linux-x64" \
-  https://artifacts.example.com/generic/main/releases/v1.0.0/linux/app
+  -H "Content-Type: application/octet-stream" \
+  --data-binary @app-linux-x64 \
+  https://artifacts.example.com/api/v1/repositories/main/artifacts/releases/v1.0.0/linux/app
 
 # Store build artifacts
-curl -X POST \
+curl -fsS -X PUT \
   -H "Authorization: Bearer $TOKEN" \
-  -F "file=@build-artifacts.zip" \
-  https://artifacts.example.com/generic/main/builds/${BUILD_ID}/artifacts.zip
+  -H "Content-Type: application/zip" \
+  --data-binary @build-artifacts.zip \
+  https://artifacts.example.com/api/v1/repositories/main/artifacts/builds/${BUILD_ID}/artifacts.zip
 ```
 
 **Documentation Bundles:**
 ```bash
 # Upload generated docs
-curl -X POST \
+curl -fsS -X PUT \
   -H "Authorization: Bearer $TOKEN" \
-  -F "file=@docs-bundle.tar.gz" \
-  https://artifacts.example.com/generic/main/docs/v1.0.0/bundle.tar.gz
+  -H "Content-Type: application/gzip" \
+  --data-binary @docs-bundle.tar.gz \
+  https://artifacts.example.com/api/v1/repositories/main/artifacts/docs/v1.0.0/bundle.tar.gz
 ```
 
 **Proprietary Formats:**
 ```bash
 # Store custom file formats
-curl -X POST \
+curl -fsS -X PUT \
   -H "Authorization: Bearer $TOKEN" \
-  -F "file=@project.proprietary" \
-  -F "metadata={\"type\":\"project\",\"tool\":\"CustomTool\",\"version\":\"3.0\"}" \
-  https://artifacts.example.com/generic/main/projects/project-1/data.proprietary
+  -H "Content-Type: application/octet-stream" \
+  --data-binary @project.proprietary \
+  https://artifacts.example.com/api/v1/repositories/main/artifacts/projects/project-1/data.proprietary
 ```
 
 **Configuration Files:**
 ```bash
 # Versioned configuration
-curl -X POST \
+curl -fsS -X PUT \
   -H "Authorization: Bearer $TOKEN" \
-  -F "file=@app-config.yaml" \
-  https://artifacts.example.com/generic/main/configs/prod/v2/config.yaml
+  -H "Content-Type: application/yaml" \
+  --data-binary @app-config.yaml \
+  https://artifacts.example.com/api/v1/repositories/main/artifacts/configs/prod/v2/config.yaml
 ```
 
 ## CI/CD Integration
@@ -693,10 +707,11 @@ jobs:
 
       - name: Upload to Generic Storage
         run: |
-          curl -X POST \
+          curl -fsS -X PUT \
             -H "Authorization: Bearer ${{ secrets.ARTIFACT_KEEPER_TOKEN }}" \
-            -F "file=@dist/output.tar.gz" \
-            https://artifacts.example.com/generic/main/releases/${{ github.ref_name }}/output.tar.gz
+            -H "Content-Type: application/gzip" \
+            --data-binary @dist/output.tar.gz \
+            https://artifacts.example.com/api/v1/repositories/main/artifacts/releases/${{ github.ref_name }}/output.tar.gz
 
       - name: Upload ML Model
         run: |
