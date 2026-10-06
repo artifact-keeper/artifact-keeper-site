@@ -13,7 +13,8 @@ Get Artifact Keeper up and running in minutes using Docker Compose.
 
 ## Prerequisites
 
-- Docker and Docker Compose (or Podman with `podman-compose`) installed
+- Docker and Docker Compose (or Podman with `podman compose` / `podman-compose`) installed
+- `openssl` (to generate secrets)
 
 :::tip[Quickstart Installer]
 For a fully automated setup, use the [quickstart installer](/docs/getting-started/quickstart-installer) instead. It generates secure credentials, downloads all files, and starts the stack with a single command:
@@ -25,7 +26,7 @@ curl -fsSL https://get.artifactkeeper.com | bash
 
 ## Quick Start
 
-1. **Download and start**:
+1. **Download the compose files**:
 
 ```bash
 mkdir artifact-keeper && cd artifact-keeper
@@ -35,49 +36,76 @@ curl -fsSLo docker/Caddyfile https://raw.githubusercontent.com/artifact-keeper/a
 curl -fsSLo docker/init-db.sql https://raw.githubusercontent.com/artifact-keeper/artifact-keeper/main/docker/init-db.sql
 curl -fsSLo docker/init-pg-ssl.sh https://raw.githubusercontent.com/artifact-keeper/artifact-keeper/main/docker/init-pg-ssl.sh
 curl -fsSLo docker/init-dtrack.sh https://raw.githubusercontent.com/artifact-keeper/artifact-keeper/main/docker/init-dtrack.sh
+```
+
+2. **Generate secrets**:
+
+The backend refuses to start without a strong `JWT_SECRET` and a valid `AK_WEBHOOK_SECRET_KEY` (32 bytes, base64 encoded). Do not rely on the placeholder values in `docker-compose.yml`; generate your own and put them in a `.env` file next to it, which Docker Compose reads automatically:
+
+```bash
+cat > .env <<EOT
+JWT_SECRET=$(openssl rand -base64 48)
+AK_WEBHOOK_SECRET_KEY=$(openssl rand -base64 32)
+ADMIN_PASSWORD=$(openssl rand -base64 24)
+EOT
+chmod 600 .env
+```
+
+`ADMIN_PASSWORD` is optional. When it is set, the `admin` account is created with that password and the first-time setup lock is skipped. Leave it out to have a random password generated on first boot instead (see step 4). Read it back with `grep ADMIN_PASSWORD .env`.
+
+:::caution
+If the backend container keeps restarting and the login page never accepts a password, check `docker compose logs backend`. Errors such as `JWT_SECRET is unsuitable` or `AK_WEBHOOK_SECRET_KEY is set but invalid` mean the `.env` file is missing or was not picked up.
+:::
+
+3. **Start the stack**:
+
+```bash
 docker compose up -d
 ```
 
 :::note[Using Podman?]
-Replace `docker compose` with `podman-compose`. Podman 4.4+ with podman-compose 1.0+ is supported. If running rootless Podman on RHEL/Fedora, enable linger so containers persist after logout:
+Replace `docker compose` with `podman compose` (Podman 5 using docker-compose as the provider over the Podman socket runs the unmodified compose file, rootless) or `podman-compose` (Podman 4.4+ with podman-compose 1.0+). If running rootless Podman on RHEL/Fedora, enable linger so containers persist after logout:
 ```bash
 sudo loginctl enable-linger $USER
 ```
+With `short-name-mode = "enforcing"` in `registries.conf`, unqualified images such as `postgres`, `alpine` and `caddy` are resolved against local images first, so an unrelated local image with the same short name can be used. Pull them with fully qualified names (for example `docker.io/library/postgres:18-alpine`) if in doubt.
 :::
 
 This starts the full stack:
 - **Backend** — Rust API server with 45+ format handlers
 - **Web UI** — Next.js frontend
-- **Caddy** — Reverse proxy (HTTP on port 30080, HTTPS on port 30443)
-- **PostgreSQL 16** — Metadata storage
-- **OpenSearch**, full-text search (v2.19.1)
-- **Trivy** — Vulnerability scanning
+- **Caddy** — Reverse proxy (HTTP on port 30080, HTTPS on port 30443). The backend's own port 8080 is not published; all API and package traffic goes through Caddy.
+- **PostgreSQL 18** — Metadata storage (data volume mounted at `/var/lib/postgresql`, as PostgreSQL 18 images expect)
+- **OpenSearch**, full-text search (v2.19.6)
+- **Trivy** and **OpenSCAP** — Vulnerability and compliance scanning (optional; if you remove either service, also unset `TRIVY_URL` / `OPENSCAP_URL` on the backend)
 
 :::note[Docker Hub alternative]
 If your organization blocks `ghcr.io`, all Artifact Keeper images are also available on Docker Hub under `artifactkeeper/`. Replace `ghcr.io/artifact-keeper/artifact-keeper-backend` with `artifactkeeper/backend` (and similarly for web, openscap). See the [Docker Compose deployment guide](/docs/deployment/docker#alternative-registry-docker-hub) for details.
 :::
 
-2. **Access the UI**:
+4. **Access the UI**:
 
 Open [http://localhost:30080](http://localhost:30080) in your browser.
 
-3. **Complete first-time setup**:
+5. **Complete first-time setup**:
 
-On first boot, you'll see the setup screen with instructions to retrieve the generated admin password:
+If you set `ADMIN_PASSWORD` in step 2, log in with username `admin` and that password, and skip to step 6.
+
+Otherwise, on first boot you'll see the setup screen with instructions to retrieve the generated admin password:
 
 ![First-time setup screen](./first-time-setup.png)
 
 Run the command shown in the banner to get your password, then log in with username `admin`.
 
 :::tip
-To skip the setup lock entirely, set `ADMIN_PASSWORD=yourpass` in your `.env` file before starting.
+To skip the setup lock entirely, set `ADMIN_PASSWORD` in your `.env` file before the first start (see step 2).
 :::
 
 <details>
 <summary>**CLI alternative** (for automation or headless setups)</summary>
 
 ```bash
-# Get the generated password
+# Get the generated password (only when ADMIN_PASSWORD was not set)
 docker exec artifact-keeper-backend cat /data/storage/admin.password && echo
 
 # Login with the generated password
@@ -89,7 +117,7 @@ TOKEN=$(curl -s http://localhost:30080/api/v1/auth/login \
 USER_ID=$(curl -s http://localhost:30080/api/v1/auth/me \
   -H "Authorization: Bearer $TOKEN" | jq -r '.id')
 
-# Change password (this unlocks the API)
+# Change password (this unlocks the API; not needed when ADMIN_PASSWORD was set)
 curl -X POST "http://localhost:30080/api/v1/users/$USER_ID/password" \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
@@ -98,7 +126,7 @@ curl -X POST "http://localhost:30080/api/v1/users/$USER_ID/password" \
 
 </details>
 
-4. **Secure your admin account**:
+6. **Secure your admin account**:
 
 After changing your password, enable Two-Factor Authentication (2FA) for the admin account. Navigate to **My Profile → Security** and click **Enable Two-Factor Authentication**.
 
@@ -108,7 +136,7 @@ After changing your password, enable Two-Factor Authentication (2FA) for the adm
 Always enable 2FA on the admin account. This protects against credential theft and is required for production deployments.
 :::
 
-5. **Verify everything works**:
+7. **Verify everything works**:
 
 ```bash
 # Quick liveness check
@@ -135,11 +163,14 @@ curl -X POST http://localhost:30080/api/v1/repositories \
   -H "Content-Type: application/json" \
   -d '{
     "key": "my-maven-repo",
+    "name": "My Maven Repo",
     "format": "maven",
     "repo_type": "local",
     "description": "My first Maven repository"
   }'
 ```
+
+`key`, `name`, `format` and `repo_type` are required. Repositories are **private** by default, so anonymous clients get an authentication error. To allow anonymous reads, add `"is_public": true` (alias `allow_anonymous_access`). There is no `visibility` field: unknown fields are silently ignored, so a misspelled field produces a private repository without an error. `is_public` has no effect while guest access is disabled server-wide.
 
 Or use the Web UI: navigate to **Repositories** and click **Create Repository**.
 
