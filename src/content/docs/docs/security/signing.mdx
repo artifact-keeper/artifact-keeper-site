@@ -87,6 +87,95 @@ cosign verify \
   localhost:8080/my-app:1.0.0
 ```
 
+### Verifying with Podman, Skopeo, bootc and Anaconda
+
+`cosign verify` and the containers/image library (used by Podman, Skopeo, CRI-O, bootc and Anaconda's `ostreecontainer`) look for signatures in different places:
+
+| Client | Reads |
+|--------|-------|
+| `cosign verify` (cosign 3 defaults) | Sigstore bundle attached through the OCI referrers API, or the legacy `.sig` tag |
+| Podman, Skopeo, CRI-O, bootc, Anaconda (containers/image) | Only the legacy sigstore attachment: a `sha256-<digest>.sig` tag next to the image |
+
+With its defaults, cosign 3 writes the new Sigstore bundle format and attaches it with the referrers API (and expects Rekor/TUF). Artifact Keeper stores and serves that correctly, but containers/image cannot see it: `cosign verify` succeeds while `podman pull` under a `sigstoreSigned` policy fails with `A signature was required, but no signature exists`. To produce signatures both kinds of client can verify, use one of the following.
+
+**cosign, legacy attachment format:**
+
+```bash
+# cosign does not read Podman's auth file: log in with cosign
+# (or point DOCKER_CONFIG at a directory containing config.json)
+cosign login registry.example.com:30080 -u username -p "$TOKEN"
+
+cosign sign --yes --key cosign.key \
+  --tlog-upload=false --new-bundle-format=false --use-signing-config=false \
+  registry.example.com:30080/oci-bootc/rocky-edge@sha256:<digest>
+```
+
+Add `--allow-http-registry --allow-insecure-registry` when the registry is served over plain HTTP (for example port 30080 of the stock compose stack). cosign prints a deprecation warning for `--new-bundle-format`; pin the cosign version you sign with so that a later release does not silently change the format.
+
+**Podman, signing while pushing:**
+
+```bash
+podman push --sign-by-sigstore-private-key cosign.key \
+  registry.example.com:30080/oci-bootc/rocky-edge:10
+```
+
+Podman writes the signature as a sigstore attachment only when the `registries.d` entry below is present on the pushing host as well.
+
+#### Client configuration
+
+containers/image only reads (and writes) sigstore attachments for registries that enable them in `registries.d`, for example `/etc/containers/registries.d/artifact-keeper.yaml`:
+
+```yaml
+docker:
+  registry.example.com:30080/oci-bootc:
+    use-sigstore-attachments: true
+```
+
+Then require a signature in `/etc/containers/policy.json`:
+
+```json
+{
+  "default": [{ "type": "insecureAcceptAnything" }],
+  "transports": {
+    "docker": {
+      "registry.example.com:30080/oci-bootc/rocky-edge": [
+        {
+          "type": "sigstoreSigned",
+          "keyPath": "/etc/pki/containers/edge-cosign.pub",
+          "signedIdentity": { "type": "matchRepository" }
+        }
+      ]
+    }
+  }
+}
+```
+
+Podman, Skopeo, bootc and Anaconda read the same `policy.json` and `registries.d` on the host.
+
+#### `signedIdentity` and registry host names
+
+A signature records the image name the signer used. cosign records the repository without a tag (for example `"docker-reference": "localhost:30080/oci-bootc/rocky-edge"`), so:
+
+- The default `signedIdentity` (`matchRepoDigestOrExact`) rejects a pull by tag. Use `matchRepository` when every client reaches the registry under the same name as the signer.
+- When clients reach the registry under a different host name than the signer used (for example the signer pushed to `localhost:30080` and nodes pull from `10.0.2.2:30080` or `registry.internal:30080`), the names differ and verification fails. Pin the signed name with `exactRepository`:
+
+```json
+"10.0.2.2:30080/oci-bootc/rocky-edge": [
+  {
+    "type": "sigstoreSigned",
+    "keyPath": "/etc/pki/containers/edge-cosign.pub",
+    "signedIdentity": {
+      "type": "exactRepository",
+      "dockerRepository": "localhost:30080/oci-bootc/rocky-edge"
+    }
+  }
+]
+```
+
+To map a whole namespace, use `remapIdentity` (`"prefix": "10.0.2.2:30080/oci-bootc", "signedPrefix": "localhost:30080/oci-bootc"`).
+
+Signatures are attached to the manifest digest, so promoting an image by re-tagging it within the same repository (for example `skopeo copy docker://.../rocky-edge:10.2-4 docker://.../rocky-edge:10`) needs no re-signing.
+
 ## GPG Signing
 
 ### Generate GPG Key
@@ -197,150 +286,98 @@ abuild-sign package.apk
 
 ## Signing Key Management
 
-Artifact Keeper provides an API for managing signing keys.
+Artifact Keeper generates and stores repository signing keys server-side and uses them to sign repository metadata on the fly. All signing endpoints require an administrator.
 
 ### API Endpoints
 
 ```
-POST   /api/v1/signing/keys          # Upload signing key
-GET    /api/v1/signing/keys          # List keys
-GET    /api/v1/signing/keys/{id}     # Get key details
-DELETE /api/v1/signing/keys/{id}     # Delete key
-POST   /api/v1/signing/verify        # Verify signature
+GET    /api/v1/signing/keys                          # List keys (optional ?repository_id=<uuid>)
+POST   /api/v1/signing/keys                          # Generate a new key
+GET    /api/v1/signing/keys/{key_id}                 # Get key details
+DELETE /api/v1/signing/keys/{key_id}                 # Delete key
+POST   /api/v1/signing/keys/{key_id}/revoke          # Revoke key
+POST   /api/v1/signing/keys/{key_id}/rotate          # Rotate key
+GET    /api/v1/signing/keys/{key_id}/public          # Public key
+GET    /api/v1/signing/repositories/{repo_id}/config # Repository signing config
+POST   /api/v1/signing/repositories/{repo_id}/config # Update repository signing config
+GET    /api/v1/signing/repositories/{repo_id}/public-key # Repository's public key
+POST   /api/v1/signing/artifacts/{artifact_id}/sign  # Sign one artifact (promotion attestation)
 ```
 
-### Upload Signing Key
+There is no signature-verification endpoint and no key upload: `POST /api/v1/signing/keys` generates the key pair on the server. `{repo_id}` is the repository **UUID** (the `id` field of `GET /api/v1/repositories/{key}`), not its key.
+
+### Generate a Key
 
 ```bash
 POST /api/v1/signing/keys
 Content-Type: application/json
 
 {
-  "name": "production-signing-key",
-  "type": "gpg",
-  "public_key": "-----BEGIN PGP PUBLIC KEY BLOCK-----\n...",
-  "repositories": ["production/*"],
-  "metadata": {
-    "owner": "security-team",
-    "environment": "production"
-  }
+  "name": "rpm-stable repodata",
+  "key_type": "gpg",
+  "algorithm": "rsa4096",
+  "repository_id": "<repository uuid>",
+  "uid_name": "Artifact Keeper rpm-stable",
+  "uid_email": "rpm-stable@example.com"
 }
 ```
 
-### List Signing Keys
+`key_type` is one of `gpg`, `rsa` or `ed25519` (default `rsa`); `algorithm` defaults to `rsa4096`. RPM and Debian metadata signatures are OpenPGP signatures and need a `gpg` key; Alpine `APKINDEX` signatures use an `rsa` key. The response contains the key's `id`, `fingerprint`, `key_id` and `public_key_pem`. `GET /api/v1/signing/keys` returns `{"keys": [...], "total": n}`.
+
+### Enable Metadata Signing for a Repository
 
 ```bash
-GET /api/v1/signing/keys
-
-# Response
-{
-  "keys": [
-    {
-      "id": "key-123",
-      "name": "production-signing-key",
-      "type": "gpg",
-      "fingerprint": "1234 5678 90AB CDEF",
-      "repositories": ["production/*"],
-      "created_at": "2024-01-15T10:00:00Z",
-      "expires_at": "2025-01-15T10:00:00Z"
-    }
-  ]
-}
-```
-
-### Verify Signature via API
-
-```bash
-POST /api/v1/signing/verify
+POST /api/v1/signing/repositories/<repository uuid>/config
 Content-Type: application/json
 
 {
-  "artifact": {
-    "name": "my-app",
-    "version": "1.0.0",
-    "repository": "production/apps"
-  },
-  "signature_type": "cosign"
-}
-
-# Response
-{
-  "valid": true,
-  "signer": {
-    "identity": "ci-system@example.com",
-    "key_id": "key-123",
-    "timestamp": "2024-01-15T10:30:00Z"
-  },
-  "certificate": {
-    "subject": "ci-system@example.com",
-    "issuer": "https://accounts.google.com",
-    "valid_from": "2024-01-15T10:00:00Z",
-    "valid_to": "2024-01-15T11:00:00Z"
-  }
+  "signing_key_id": "<key id>",
+  "sign_metadata": true
 }
 ```
 
-## Repository Signing Policies
+The config also accepts `sign_packages` and `require_signatures` flags.
 
-Enforce signing requirements per repository.
+Once metadata signing is on, the repository serves signed metadata:
 
-### Configure Signing Policy
+| Format | Signature | Public key |
+|--------|-----------|------------|
+| RPM | `/rpm/<key>/repodata/repomd.xml.asc` | `/rpm/<key>/repodata/repomd.xml.key` |
+| Debian | `/debian/<key>/dists/<dist>/InRelease`, `Release.gpg` | `/debian/<key>/gpg-key.asc` |
+| Alpine | signed `APKINDEX.tar.gz` | `/alpine/<key>/<branch>/keys/artifact-keeper.rsa.pub` |
 
-```yaml
-# signing-policy.yaml
-name: "require-signatures"
-description: "Require signed artifacts for production"
-repositories:
-  - "production/*"
-  - "stable/*"
+For RPM, `dnf` verifies the metadata signature with `repo_gpgcheck=1`:
 
-rules:
-  - name: "require-cosign-signature"
-    artifact_types: ["docker", "oci"]
-    signature_type: "cosign"
-    required: true
-    key_requirements:
-      - type: "keyless"
-        certificate_identity: "*@example.com"
-        certificate_oidc_issuer: "https://accounts.google.com"
-
-  - name: "require-gpg-signature"
-    artifact_types: ["rpm", "deb", "apk"]
-    signature_type: "gpg"
-    required: true
-    trusted_keys:
-      - "key-123"
-      - "key-456"
+```ini
+[artifact-keeper]
+name=Artifact Keeper Repository
+baseurl=https://registry.example.com/rpm/stable
+enabled=1
+repo_gpgcheck=1
+gpgkey=https://registry.example.com/rpm/stable/repodata/repomd.xml.key
 ```
 
-Apply policy:
+Remote (proxy) RPM repositories pass the upstream `repomd.xml.asc` through unchanged; configure clients with the upstream's key for those.
+
+### Signature Expiry and Mirrors
+
+OpenPGP repository-metadata signatures (Debian `InRelease` / `Release.gpg`, RPM `repomd.xml.asc`) carry an expiration time set by `SIGNATURE_EXPIRY_SECONDS`:
+
+- Default `604800` (7 days). Values are clamped to the range `7200` to `31536000`; `0` disables the expiry.
+- The registry re-signs metadata on request, so clients fetching directly always receive a signature well inside its validity window.
+- A downstream mirror or air-gapped export that copies the signature once fails verification after the window has passed (`apt` itself does not enforce signature expiry, but `gpgv`, `debmirror` and other mirror tooling do). Refresh mirrors more often than the window, or raise `SIGNATURE_EXPIRY_SECONDS`.
+
+See the [environment variable reference](/docs/reference/environment/).
+
+## Promotion Signature Requirements
+
+Promotion rules can require a signature (`require_signature`). An artifact satisfies it only after an administrator signs its content with the repository's active key:
 
 ```bash
-POST /api/v1/signing/policies
-Content-Type: application/json
-
-{
-  "name": "require-signatures",
-  "repositories": ["production/*"],
-  "rules": [...]
-}
+POST /api/v1/signing/artifacts/{artifact_id}/sign
 ```
 
-### Enforcement
-
-When signing is required:
-
-```bash
-# Unsigned artifact upload fails
-docker push localhost:8080/production/app:1.0.0
-Error: Signature required for repository "production/app"
-Please sign the artifact before pushing
-
-# Signed artifact succeeds
-cosign sign --key cosign.key localhost:8080/production/app:1.0.0
-docker push localhost:8080/production/app:1.0.0
-Success: Artifact uploaded and signature verified
-```
+Proxy-cached artifacts from remote repositories cannot be signed this way and therefore do not pass a `require_signature` gate.
 
 ## Integration with CI/CD
 
