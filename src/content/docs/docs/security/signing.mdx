@@ -334,13 +334,13 @@ When signing is required:
 
 ```bash
 # Unsigned artifact upload fails
-docker push localhost:30080/production/app:1.0.0
+docker push localhost:8080/production/app:1.0.0
 Error: Signature required for repository "production/app"
 Please sign the artifact before pushing
 
 # Signed artifact succeeds
-cosign sign --key cosign.key localhost:30080/production/app:1.0.0
-docker push localhost:30080/production/app:1.0.0
+cosign sign --key cosign.key localhost:8080/production/app:1.0.0
+docker push localhost:8080/production/app:1.0.0
 Success: Artifact uploaded and signature verified
 ```
 
