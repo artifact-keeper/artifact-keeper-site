@@ -59,32 +59,34 @@ cosign generate-key-pair
 
 ### Sign Container Image
 
+Image references include the key of the Docker repository that holds the image (`<host>/<repository-key>/<image>:<tag>`); the examples use a repository named `docker-local` behind the stock Docker Compose stack on port 30080. See the [Docker guide](/docs/guides/docker) for details.
+
 ```bash
 # Push image to registry
-docker push localhost:8080/my-app:1.0.0
+docker push localhost:30080/docker-local/my-app:1.0.0
 
 # Sign the image
-cosign sign --key cosign.key localhost:8080/my-app:1.0.0
+cosign sign --key cosign.key localhost:30080/docker-local/my-app:1.0.0
 ```
 
 With keyless signing (Sigstore):
 
 ```bash
 # Sign using OIDC identity
-cosign sign localhost:8080/my-app:1.0.0
+cosign sign localhost:30080/docker-local/my-app:1.0.0
 ```
 
 ### Verify Signature
 
 ```bash
 # Verify with public key
-cosign verify --key cosign.pub localhost:8080/my-app:1.0.0
+cosign verify --key cosign.pub localhost:30080/docker-local/my-app:1.0.0
 
 # Verify keyless signature
 cosign verify \
   --certificate-identity=user@example.com \
   --certificate-oidc-issuer=https://accounts.google.com \
-  localhost:8080/my-app:1.0.0
+  localhost:30080/docker-local/my-app:1.0.0
 ```
 
 ## GPG Signing
@@ -332,13 +334,13 @@ When signing is required:
 
 ```bash
 # Unsigned artifact upload fails
-docker push localhost:8080/production/app:1.0.0
+docker push localhost:30080/production/app:1.0.0
 Error: Signature required for repository "production/app"
 Please sign the artifact before pushing
 
 # Signed artifact succeeds
-cosign sign --key cosign.key localhost:8080/production/app:1.0.0
-docker push localhost:8080/production/app:1.0.0
+cosign sign --key cosign.key localhost:30080/production/app:1.0.0
+docker push localhost:30080/production/app:1.0.0
 Success: Artifact uploaded and signature verified
 ```
 
@@ -373,12 +375,12 @@ jobs:
 
       - name: Build image
         run: |
-          docker build -t registry.example.com/my-app:${{ github.sha }} .
-          docker push registry.example.com/my-app:${{ github.sha }}
+          docker build -t registry.example.com/docker-local/my-app:${{ github.sha }} .
+          docker push registry.example.com/docker-local/my-app:${{ github.sha }}
 
       - name: Sign image (keyless)
         run: |
-          cosign sign --yes registry.example.com/my-app:${{ github.sha }}
+          cosign sign --yes registry.example.com/docker-local/my-app:${{ github.sha }}
 ```
 
 ### With Private Keys
@@ -390,7 +392,7 @@ jobs:
     COSIGN_PASSWORD: ${{ secrets.COSIGN_PASSWORD }}
   run: |
     echo "$COSIGN_KEY" > cosign.key
-    cosign sign --key cosign.key registry.example.com/my-app:${{ github.sha }}
+    cosign sign --key cosign.key registry.example.com/docker-local/my-app:${{ github.sha }}
 ```
 
 ### Maven PGP Signing
@@ -453,18 +455,18 @@ Signatures are logged to Rekor:
 ```bash
 # Sign and log
 cosign sign --rekor-url https://rekor.sigstore.dev \
-  localhost:8080/my-app:1.0.0
+  localhost:30080/docker-local/my-app:1.0.0
 
 # Verify with transparency log
 cosign verify --rekor-url https://rekor.sigstore.dev \
-  localhost:8080/my-app:1.0.0
+  localhost:30080/docker-local/my-app:1.0.0
 ```
 
 ### Search Transparency Logs
 
 ```bash
 # Search for signatures
-rekor-cli search --artifact localhost:8080/my-app:1.0.0
+rekor-cli search --artifact localhost:30080/docker-local/my-app:1.0.0
 
 # Get log entry
 rekor-cli get --uuid <uuid>
@@ -485,15 +487,15 @@ Signatures can be stored as:
 Cosign stores signatures as OCI artifacts:
 
 ```
-registry.example.com/my-app:1.0.0
-registry.example.com/my-app:sha256-<digest>.sig
+registry.example.com/docker-local/my-app:1.0.0
+registry.example.com/docker-local/my-app:sha256-<digest>.sig
 ```
 
 View signatures:
 
 ```bash
 # List signatures
-cosign tree localhost:8080/my-app:1.0.0
+cosign tree localhost:30080/docker-local/my-app:1.0.0
 ```
 
 ## Attestations
@@ -507,7 +509,7 @@ Sign and verify attestations about artifacts:
 cosign attest --key cosign.key \
   --predicate provenance.json \
   --type slsaprovenance \
-  localhost:8080/my-app:1.0.0
+  localhost:30080/docker-local/my-app:1.0.0
 ```
 
 ### Verify Attestation
@@ -516,7 +518,7 @@ cosign attest --key cosign.key \
 # Verify attestation
 cosign verify-attestation --key cosign.pub \
   --type slsaprovenance \
-  localhost:8080/my-app:1.0.0
+  localhost:30080/docker-local/my-app:1.0.0
 ```
 
 ### Attestation Types
@@ -569,19 +571,19 @@ cosign verify-attestation --key cosign.pub \
 Check signature exists:
 
 ```bash
-cosign tree localhost:8080/my-app:1.0.0
+cosign tree localhost:30080/docker-local/my-app:1.0.0
 ```
 
 Verify with correct key:
 
 ```bash
-cosign verify --key cosign.pub localhost:8080/my-app:1.0.0
+cosign verify --key cosign.pub localhost:30080/docker-local/my-app:1.0.0
 ```
 
 Check certificate details:
 
 ```bash
-cosign verify localhost:8080/my-app:1.0.0 --insecure-ignore-tlog
+cosign verify localhost:30080/docker-local/my-app:1.0.0 --insecure-ignore-tlog
 ```
 
 ### Key Issues
@@ -604,7 +606,7 @@ chmod 600 cosign.key
 For keyless signing, verify OIDC token:
 
 ```bash
-cosign sign --verbose localhost:8080/my-app:1.0.0
+cosign sign --verbose localhost:30080/docker-local/my-app:1.0.0
 ```
 
 ## See Also
