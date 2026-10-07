@@ -3,7 +3,19 @@ title: "System Packages Guide"
 description: "Using Artifact Keeper for Debian, RPM, Alpine, and OPKG packages"
 ---
 
-Artifact Keeper provides native repository support for major Linux package formats including Debian/APT, RPM/YUM/DNF, Alpine/APK, and OPKG.
+Artifact Keeper provides native repository support for major Linux package formats including Debian/APT, RPM/YUM/DNF, and Alpine/APK.
+
+:::note[Ports and authentication]
+The examples use `localhost:30080`, the HTTP port Caddy serves in the stock Docker Compose stack from the [Quickstart](/docs/getting-started/quickstart). Use `:8080` only if you expose the backend directly. Uploads use HTTP basic auth; an API token works as the password (`-u username:$TOKEN`). The token needs the `write:artifacts` scope.
+:::
+
+:::caution[Package files are write-once]
+Each package file name can be uploaded to a repository once. Uploading the same file name again returns **HTTP 409 Conflict** and the stored file is kept, even if the new bytes differ. To ship a change, bump the version or release (for example `-1` to `-2` for RPM, `-r0` to `-r1` for Alpine) rather than re-uploading. Rebuilt packages are generally not byte-identical (rpmbuild output, for instance, is not reproducible by default), so a rebuilt "same" package is a different file.
+:::
+
+:::note[The `ak` CLI]
+The `ak` CLI has no format-aware publish command. `ak artifact push <repo> <file>` uploads through the generic artifact API (`PUT /api/v1/repositories/{key}/artifacts/{path}`), not through the Debian, RPM or Alpine routes below, so use the native routes shown in each section to publish system packages.
+:::
 
 ## Debian / APT
 
@@ -12,7 +24,7 @@ Artifact Keeper provides a full Debian package repository compatible with `apt`,
 ### Endpoint
 
 ```
-http://localhost:8080/debian/{repo}
+http://localhost:30080/debian/{repo}
 ```
 
 ### Repository Key
@@ -27,7 +39,7 @@ Add the Artifact Keeper repository to your APT sources:
 
 ```bash
 # Add repository to sources.list.d
-echo "deb [trusted=yes] http://localhost:8080/debian/stable main" | \
+echo "deb [trusted=yes] http://localhost:30080/debian/stable main" | \
   sudo tee /etc/apt/sources.list.d/artifact-keeper.list
 
 # Update package index
@@ -40,11 +52,11 @@ For signed repositories, import the GPG key from `GET /debian/{repo_key}/gpg-key
 
 ```bash
 # Download and add GPG key
-curl -fsSL http://localhost:8080/debian/stable/gpg-key.asc | \
+curl -fsSL http://localhost:30080/debian/stable/gpg-key.asc | \
   sudo gpg --dearmor -o /etc/apt/trusted.gpg.d/artifact-keeper.gpg
 
 # Configure with signed repository (legacy sources.list format)
-echo "deb [signed-by=/etc/apt/trusted.gpg.d/artifact-keeper.gpg] http://localhost:8080/debian/stable main" | \
+echo "deb [signed-by=/etc/apt/trusted.gpg.d/artifact-keeper.gpg] http://localhost:30080/debian/stable main" | \
   sudo tee /etc/apt/sources.list.d/artifact-keeper.list
 
 sudo apt update
@@ -56,12 +68,12 @@ Modern APT (2.4+) prefers the DEB822 `.sources` format over `sources.list` entri
 
 ```bash
 # Fetch the key once, keyring is referenced by path
-curl -fsSL http://localhost:8080/debian/stable/gpg-key.asc | \
+curl -fsSL http://localhost:30080/debian/stable/gpg-key.asc | \
   sudo gpg --dearmor -o /usr/share/keyrings/artifact-keeper.gpg
 
 sudo tee /etc/apt/sources.list.d/artifact-keeper.sources <<'EOF'
 Types: deb
-URIs: http://localhost:8080/debian/stable
+URIs: http://localhost:30080/debian/stable
 Suites: main
 Components: main
 Signed-By: /usr/share/keyrings/artifact-keeper.gpg
@@ -86,7 +98,7 @@ The `Release` file's `Origin`, `Label`, `Version`, and `Description` fields are 
 Set them via the repository update endpoint:
 
 ```bash
-curl -X PUT http://localhost:8080/api/v1/repositories/stable \
+curl -X PUT http://localhost:30080/api/v1/repositories/stable \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
@@ -99,17 +111,21 @@ curl -X PUT http://localhost:8080/api/v1/repositories/stable \
 
 ### Publishing Packages
 
-Upload `.deb` packages to your repository:
+Upload `.deb` packages with the native Debian routes. The file name must follow `{name}_{version}_{arch}.deb` and match the package's control data.
 
 ```bash
-# Using curl
-curl -u username:password -X POST \
-  -F "file=@mypackage_1.0.0_amd64.deb" \
-  http://localhost:8080/api/artifacts/debian/stable
+# PUT into the pool: /debian/<repo-key>/pool/<component>/<path>/<file>
+curl -u "username:$TOKEN" -T mypackage_1.0.0_amd64.deb \
+  http://localhost:30080/debian/stable/pool/main/m/mypackage/mypackage_1.0.0_amd64.deb
 
-# Using the Artifact Keeper CLI
-ak publish debian/stable mypackage_1.0.0_amd64.deb
+# Or POST the raw body (not multipart) to /upload; the file name comes from
+# X-Filename or Content-Disposition, and the package goes into the main component
+curl -u "username:$TOKEN" -X POST --data-binary @mypackage_1.0.0_amd64.deb \
+  -H 'X-Filename: mypackage_1.0.0_amd64.deb' \
+  http://localhost:30080/debian/stable/upload
 ```
+
+The server updates the repository indices after the upload. Uploading the same file name again returns HTTP 409.
 
 ### Installing Packages
 
@@ -135,11 +151,11 @@ Support multiple Debian distributions:
 
 ```bash
 # Ubuntu focal
-echo "deb [trusted=yes] http://localhost:8080/debian/ubuntu-focal main" | \
+echo "deb [trusted=yes] http://localhost:30080/debian/ubuntu-focal main" | \
   sudo tee /etc/apt/sources.list.d/artifact-keeper.list
 
 # Debian bullseye
-echo "deb [trusted=yes] http://localhost:8080/debian/debian-bullseye main" | \
+echo "deb [trusted=yes] http://localhost:30080/debian/debian-bullseye main" | \
   sudo tee /etc/apt/sources.list.d/artifact-keeper.list
 ```
 
@@ -165,7 +181,7 @@ link-local addresses stay blocked regardless.
 ### Endpoint
 
 ```
-http://localhost:8080/rpm/{repo}
+http://localhost:30080/rpm/{repo}
 ```
 
 ### Repository Key
@@ -183,13 +199,13 @@ Create a repository configuration file:
 sudo tee /etc/yum.repos.d/artifact-keeper.repo <<EOF
 [artifact-keeper]
 name=Artifact Keeper Repository
-baseurl=http://localhost:8080/rpm/stable
+baseurl=http://localhost:30080/rpm/stable
 enabled=1
 gpgcheck=0
 EOF
 
 # For Zypper (openSUSE)
-sudo zypper addrepo http://localhost:8080/rpm/stable artifact-keeper
+sudo zypper addrepo http://localhost:30080/rpm/stable artifact-keeper
 ```
 
 ### GPG Key Import
@@ -198,32 +214,36 @@ For signed repositories:
 
 ```bash
 # Import GPG key
-sudo rpm --import http://localhost:8080/rpm/stable/repodata/repomd.xml.key
+sudo rpm --import http://localhost:30080/rpm/stable/repodata/repomd.xml.key
 
 # Enable GPG checking
 sudo tee /etc/yum.repos.d/artifact-keeper.repo <<EOF
 [artifact-keeper]
 name=Artifact Keeper Repository
-baseurl=http://localhost:8080/rpm/stable
+baseurl=http://localhost:30080/rpm/stable
 enabled=1
 gpgcheck=1
-gpgkey=http://localhost:8080/rpm/stable/repodata/repomd.xml.key
+gpgkey=http://localhost:30080/rpm/stable/repodata/repomd.xml.key
 EOF
 ```
 
 ### Publishing Packages
 
-Upload `.rpm` packages to your repository:
+Upload `.rpm` packages with the native RPM routes. The file name must follow `{name}-{version}-{release}.{arch}.rpm`.
 
 ```bash
-# Using curl
-curl -u username:password -X POST \
-  -F "file=@mypackage-1.0.0-1.x86_64.rpm" \
-  http://localhost:8080/api/artifacts/rpm/stable
+# PUT the file; the name in the URL becomes the package file name
+curl -u "username:$TOKEN" -T mypackage-1.0.0-1.x86_64.rpm \
+  http://localhost:30080/rpm/stable/packages/mypackage-1.0.0-1.x86_64.rpm
 
-# Using the Artifact Keeper CLI
-ak publish rpm/stable mypackage-1.0.0-1.x86_64.rpm
+# Or POST the raw body (not multipart); the file name comes from
+# Content-Disposition (or X-Package-Filename)
+curl -u "username:$TOKEN" -X POST --data-binary @mypackage-1.0.0-1.x86_64.rpm \
+  -H 'Content-Disposition: attachment; filename="mypackage-1.0.0-1.x86_64.rpm"' \
+  http://localhost:30080/rpm/stable/upload
 ```
+
+A successful upload returns HTTP 201 with the parsed package metadata (`name`, `version`, `release`, `arch`, `sha256`, `size`). The server regenerates `repodata/` right after the upload, so no `createrepo_c` step is needed. Uploading the same file name again returns HTTP 409.
 
 ### Installing Packages
 
@@ -268,7 +288,7 @@ Artifact Keeper provides Alpine package repository support for `apk`.
 ### Endpoint
 
 ```
-http://localhost:8080/alpine/{repo}
+http://localhost:30080/alpine/{repo}
 ```
 
 ### Repository Key
@@ -282,8 +302,8 @@ alpine
 Add the repository to your APK configuration:
 
 ```bash
-# Add repository (unsigned)
-echo "http://localhost:8080/alpine/v3.18/main" | \
+# Add repository (unsigned): /alpine/<repo-key>/<branch>/<repository>
+echo "http://localhost:30080/alpine/alpine-local/v3.18/main" | \
   sudo tee -a /etc/apk/repositories
 
 # Update package index
@@ -296,11 +316,11 @@ For signed repositories, import the public key:
 
 ```bash
 # Download public key
-curl -fsSL http://localhost:8080/alpine/v3.18/key.rsa.pub \
+curl -fsSL http://localhost:30080/alpine/alpine-local/v3.18/keys/artifact-keeper.rsa.pub \
   -o /etc/apk/keys/artifact-keeper.rsa.pub
 
 # Add signed repository
-echo "http://localhost:8080/alpine/v3.18/main" | \
+echo "http://localhost:30080/alpine/alpine-local/v3.18/main" | \
   sudo tee -a /etc/apk/repositories
 
 sudo apk update
@@ -308,17 +328,22 @@ sudo apk update
 
 ### Publishing Packages
 
-Upload `.apk` packages:
+Upload `.apk` packages with the native Alpine routes. Packages are stored per branch, repository and architecture, matching the path `apk` reads the index from:
 
 ```bash
-# Using curl
-curl -u username:password -X POST \
-  -F "file=@mypackage-1.0.0-r0.apk" \
-  http://localhost:8080/api/artifacts/alpine/v3.18/main
+# PUT to /alpine/<repo-key>/<branch>/<repository>/<arch>/<file>
+curl -u "username:$TOKEN" -T mypackage-1.0.0-r0.apk \
+  http://localhost:30080/alpine/alpine-local/v3.18/main/x86_64/mypackage-1.0.0-r0.apk
 
-# Using the Artifact Keeper CLI
-ak publish alpine/v3.18/main mypackage-1.0.0-r0.apk
+# Or POST the raw body (not multipart) to /upload; branch, repository and arch
+# come from headers and default to edge, main and x86_64
+curl -u "username:$TOKEN" -X POST --data-binary @mypackage-1.0.0-r0.apk \
+  -H 'Content-Disposition: attachment; filename="mypackage-1.0.0-r0.apk"' \
+  -H 'X-Alpine-Branch: v3.18' -H 'X-Alpine-Repository: main' -H 'X-Alpine-Arch: x86_64' \
+  http://localhost:30080/alpine/alpine-local/upload
 ```
+
+Uploading the same file name again returns HTTP 409.
 
 ### Installing Packages
 
@@ -344,90 +369,17 @@ Support multiple Alpine versions:
 
 ```bash
 # Alpine 3.18
-echo "http://localhost:8080/alpine/v3.18/main" | \
+echo "http://localhost:30080/alpine/alpine-local/v3.18/main" | \
   sudo tee -a /etc/apk/repositories
 
 # Alpine 3.19
-echo "http://localhost:8080/alpine/v3.19/main" | \
+echo "http://localhost:30080/alpine/alpine-local/v3.19/main" | \
   sudo tee -a /etc/apk/repositories
 ```
 
 ## OPKG
 
-Artifact Keeper provides OPKG package repository support for OpenWrt and embedded Linux systems.
-
-### Endpoint
-
-```
-http://localhost:8080/opkg/{repo}
-```
-
-### Repository Key
-
-```
-opkg
-```
-
-### Configuration
-
-Add the repository to your OPKG configuration:
-
-```bash
-# Add to custom feeds
-echo "src/gz artifact_keeper http://localhost:8080/opkg/stable" | \
-  sudo tee -a /etc/opkg/customfeeds.conf
-
-# Update package lists
-opkg update
-```
-
-### Publishing Packages
-
-Upload `.ipk` packages:
-
-```bash
-# Using curl
-curl -u username:password -X POST \
-  -F "file=@mypackage_1.0.0_mips.ipk" \
-  http://localhost:8080/api/artifacts/opkg/stable
-
-# Using the Artifact Keeper CLI
-ak publish opkg/stable mypackage_1.0.0_mips.ipk
-```
-
-### Installing Packages
-
-Install packages using OPKG:
-
-```bash
-# Install package
-opkg install mypackage
-
-# Install specific version
-opkg install mypackage_1.0.0
-
-# Search for packages
-opkg find mypackage
-
-# Show package information
-opkg info mypackage
-```
-
-### Architecture-Specific Feeds
-
-Organize packages by architecture:
-
-```bash
-# MIPS architecture
-echo "src/gz artifact_keeper_mips http://localhost:8080/opkg/mips" | \
-  sudo tee -a /etc/opkg/customfeeds.conf
-
-# ARM architecture
-echo "src/gz artifact_keeper_arm http://localhost:8080/opkg/arm" | \
-  sudo tee -a /etc/opkg/customfeeds.conf
-
-opkg update
-```
+An `opkg` repository format exists, but there is currently no native OPKG feed endpoint: the server does not serve `/opkg/...` URLs or generate a `Packages` index, so `opkg update` cannot use an Artifact Keeper repository as a feed. To store `.ipk` files, use a [Generic repository](/docs/guides/more-formats/) and the generic artifact API, and generate the feed index with your build tooling.
 
 ## Repository Signing
 
@@ -464,10 +416,10 @@ jobs:
 
       - name: Publish to Artifact Keeper
         run: |
-          curl -u ${{ secrets.REGISTRY_USERNAME }}:${{ secrets.REGISTRY_PASSWORD }} \
-            -X POST \
-            -F "file=@mypackage_1.0.0_amd64.deb" \
-            https://registry.example.com/api/artifacts/debian/stable
+          curl -fsS -u ${{ secrets.REGISTRY_USERNAME }}:${{ secrets.REGISTRY_PASSWORD }} \
+            -X POST --data-binary @mypackage_1.0.0_amd64.deb \
+            -H 'X-Filename: mypackage_1.0.0_amd64.deb' \
+            https://registry.example.com/debian/stable/upload
 
   build-rpm:
     runs-on: ubuntu-latest
@@ -486,10 +438,10 @@ jobs:
 
       - name: Publish to Artifact Keeper
         run: |
-          curl -u ${{ secrets.REGISTRY_USERNAME }}:${{ secrets.REGISTRY_PASSWORD }} \
-            -X POST \
-            -F "file=@mypackage-1.0.0-1.x86_64.rpm" \
-            https://registry.example.com/api/artifacts/rpm/stable
+          for rpm in *.rpm; do
+            curl -fsS -u ${{ secrets.REGISTRY_USERNAME }}:${{ secrets.REGISTRY_PASSWORD }} \
+              -T "$rpm" "https://registry.example.com/rpm/stable/packages/$rpm"
+          done
 ```
 
 ### GitLab CI Example
@@ -510,15 +462,17 @@ publish:deb:
   stage: deploy
   script:
     - |
-      curl -u $REGISTRY_USERNAME:$REGISTRY_PASSWORD \
-        -X POST \
-        -F "file=@mypackage_1.0.0_amd64.deb" \
-        https://registry.example.com/api/artifacts/debian/stable
+      curl -fsS -u $REGISTRY_USERNAME:$REGISTRY_PASSWORD \
+        -X POST --data-binary @mypackage_1.0.0_amd64.deb \
+        -H 'X-Filename: mypackage_1.0.0_amd64.deb' \
+        https://registry.example.com/debian/stable/upload
   dependencies:
     - build:deb
   only:
     - main
 ```
+
+Because package files are write-once, a pipeline that re-runs on the same version gets HTTP 409 from the upload. Bump the package version or release for each build that should be published.
 
 ### Jenkins Pipeline Example
 
@@ -542,10 +496,10 @@ pipeline {
                     passwordVariable: 'PASSWORD'
                 )]) {
                     sh '''
-                        curl -u $USERNAME:$PASSWORD \
-                          -X POST \
-                          -F "file=@mypackage_1.0.0_amd64.deb" \
-                          https://registry.example.com/api/artifacts/debian/stable
+                        curl -fsS -u $USERNAME:$PASSWORD \
+                          -X POST --data-binary @mypackage_1.0.0_amd64.deb \
+                          -H 'X-Filename: mypackage_1.0.0_amd64.deb' \
+                          https://registry.example.com/debian/stable/upload
                     '''
                 }
             }
@@ -562,14 +516,13 @@ If packages are not visible after publishing:
 
 ```bash
 # Verify repository metadata was generated
-curl http://localhost:8080/debian/stable/Packages
-curl http://localhost:8080/rpm/stable/repodata/repomd.xml
-curl http://localhost:8080/alpine/v3.18/main/APKINDEX.tar.gz
-
-# Force metadata regeneration
-curl -u username:password -X POST \
-  http://localhost:8080/api/repositories/debian/stable/reindex
+curl http://localhost:30080/debian/stable/dists/main/Release
+curl http://localhost:30080/rpm/stable/repodata/repomd.xml
+curl -o /dev/null -w '%{http_code}\n' \
+  http://localhost:30080/alpine/alpine-local/v3.18/main/x86_64/APKINDEX.tar.gz
 ```
+
+Metadata is regenerated by the server on upload; there is no separate reindex step. If a package is missing, check that the upload returned HTTP 201 (not 409 for an existing file name, or 4xx for a file name that does not match the package metadata).
 
 ### GPG Verification Failures
 
@@ -608,7 +561,7 @@ If unable to reach the repository:
 
 ```bash
 # Test connectivity
-curl -I http://localhost:8080/debian/stable/
+curl -I http://localhost:30080/debian/stable/
 
 # Check DNS resolution
 nslookup registry.example.com
@@ -624,14 +577,14 @@ For authentication errors:
 
 ```bash
 # Verify credentials
-curl -u username:password http://localhost:8080/api/user/info
+curl -u username:password http://localhost:30080/api/v1/auth/me
 
-# Check repository permissions
-curl -u username:password http://localhost:8080/api/repositories
+# Check the repository exists and is visible to you
+curl -u username:password http://localhost:30080/api/v1/repositories/stable
 
 # Use token authentication
 curl -H "Authorization: Bearer $TOKEN" \
-  http://localhost:8080/api/artifacts/debian/stable
+  http://localhost:30080/api/v1/repositories/stable
 ```
 
 ## Best Practices
@@ -652,10 +605,6 @@ mypackage-1.0.0-2.el8.aarch64.rpm
 # Alpine: package-version-release.apk
 mypackage-1.0.0-r0.apk
 mypackage-1.0.0-r1.apk
-
-# OPKG: package_version_architecture.ipk
-mypackage_1.0.0_mips.ipk
-mypackage_1.0.0_arm.ipk
 ```
 
 ### Repository Organization
@@ -678,10 +627,6 @@ Organize repositories by distribution and version:
 # Alpine
 /alpine/v3.18
 /alpine/v3.19
-
-# OPKG
-/opkg/openwrt-22.03
-/opkg/openwrt-23.05
 ```
 
 ### Package Metadata
@@ -722,7 +667,7 @@ via `AK_SSRF_ALLOW_PRIVATE_CIDRS`.
 
 ```bash
 # RPM - cache from CentOS/EPEL
-curl -X POST http://localhost:8080/api/v1/repositories \
+curl -X POST http://localhost:30080/api/v1/repositories \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer $TOKEN" \
   -d '{
@@ -734,7 +679,7 @@ curl -X POST http://localhost:8080/api/v1/repositories \
   }'
 
 # Debian - cache from Ubuntu archive
-curl -X POST http://localhost:8080/api/v1/repositories \
+curl -X POST http://localhost:30080/api/v1/repositories \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer $TOKEN" \
   -d '{
@@ -746,7 +691,7 @@ curl -X POST http://localhost:8080/api/v1/repositories \
   }'
 
 # Alpine - cache from Alpine Linux
-curl -X POST http://localhost:8080/api/v1/repositories \
+curl -X POST http://localhost:30080/api/v1/repositories \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer $TOKEN" \
   -d '{
