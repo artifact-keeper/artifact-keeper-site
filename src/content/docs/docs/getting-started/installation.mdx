@@ -24,20 +24,27 @@ The included `docker-compose.yml` provides a complete setup:
 | **Backend** | `ghcr.io/artifact-keeper/artifact-keeper-backend` | `artifactkeeper/backend` | Rust API server (45+ format handlers) |
 | **Web UI** | `ghcr.io/artifact-keeper/artifact-keeper-web` | `artifactkeeper/web` | Next.js frontend |
 | **Caddy** | `caddy:2-alpine` | | Reverse proxy with automatic TLS |
-| **PostgreSQL** | `postgres:16-alpine` | | Metadata database |
-| **OpenSearch** | `opensearchproject/opensearch:2.19.1` | | Full-text search |
-| **Trivy** | `aquasec/trivy:latest` | | Vulnerability scanning |
+| **PostgreSQL** | `postgres:18-alpine` | | Metadata database (volume at `/var/lib/postgresql`) |
+| **OpenSearch** | `opensearchproject/opensearch:2.19.6` | | Full-text search |
+| **Trivy** | `ghcr.io/aquasecurity/trivy` | | Vulnerability scanning (optional) |
+| **OpenSCAP** | `ghcr.io/artifact-keeper/artifact-keeper-openscap` | `artifactkeeper/openscap` | Compliance scanning (optional) |
 
 > If your organization blocks ghcr.io, use the Docker Hub images instead. Same tags, same content.
 
 ```bash
 git clone https://github.com/artifact-keeper/artifact-keeper.git
 cd artifact-keeper
+# Generate secrets first; the backend refuses to start without them
+cat > .env <<EOT
+JWT_SECRET=$(openssl rand -base64 48)
+AK_WEBHOOK_SECRET_KEY=$(openssl rand -base64 32)
+EOT
+chmod 600 .env
 docker compose up -d
 ```
 
 **Default Ports**:
-- Web UI + API: `http://localhost:30080` (HTTP) / `https://localhost:30443` (HTTPS)
+- Web UI + API: `http://localhost:30080` (HTTP) / `https://localhost:30443` (HTTPS), served by Caddy. The backend's port 8080 is not published.
 - PostgreSQL: `localhost:30432`
 - OpenSearch: `localhost:9200`
 
@@ -48,8 +55,9 @@ docker compose up -d
 Create a `.env` file in the project root to override defaults:
 
 ```bash
-# Authentication
-JWT_SECRET=generate-a-secure-random-string-here
+# Authentication (required: the backend refuses to start with missing or weak values)
+JWT_SECRET=<output of: openssl rand -base64 48>
+AK_WEBHOOK_SECRET_KEY=<output of: openssl rand -base64 32>
 # ADMIN_PASSWORD=your-secure-password  # Set to skip first-boot setup lock
 
 # Logging
@@ -66,8 +74,9 @@ HTTPS_PORT=30443
 Generate secure secrets:
 
 ```bash
-openssl rand -base64 64   # JWT secret
-openssl rand -base64 32   # Admin password
+openssl rand -base64 48   # JWT_SECRET (at least 32 characters)
+openssl rand -base64 32   # AK_WEBHOOK_SECRET_KEY (must decode to exactly 32 bytes)
+openssl rand -base64 24   # ADMIN_PASSWORD
 ```
 
 ## From Source
