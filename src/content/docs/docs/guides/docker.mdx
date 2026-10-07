@@ -10,8 +10,14 @@ Artifact Keeper provides a fully compliant OCI Distribution Specification regist
 All Docker/OCI operations use the `/v2` endpoint, which implements the [OCI Distribution Specification](https://github.com/opencontainers/distribution-spec).
 
 ```
-http://localhost:8080/v2
+http://localhost:30080/v2
 ```
+
+The registry is path-based: every image lives under the key of the Artifact Keeper repository that holds it, as `<host>/<repository-key>/<image>:<tag>`. The examples on this page use a local Docker repository with the key `docker-local`, so an image is referenced as `localhost:30080/docker-local/myapp:1.0.0`. A reference without the repository key (for example `localhost:30080/myapp:latest`) fails with `repository not found`.
+
+:::note[Ports]
+The examples assume the stock Docker Compose stack from the [Quickstart](/docs/getting-started/quickstart), where Caddy serves the registry on port 30080 (HTTP) and 30443 (HTTPS). The backend's own port 8080 is not published there; use `:8080` only if you run the backend directly without a reverse proxy.
+:::
 
 ## Configuration
 
@@ -20,7 +26,7 @@ http://localhost:8080/v2
 Authenticate with your Artifact Keeper instance:
 
 ```bash
-docker login localhost:8080
+docker login localhost:30080
 ```
 
 Enter your Artifact Keeper username and password when prompted.
@@ -30,7 +36,7 @@ Enter your Artifact Keeper username and password when prompted.
 You can also authenticate using a token:
 
 ```bash
-echo $ARTIFACT_KEEPER_TOKEN | docker login localhost:8080 -u username --password-stdin
+echo $ARTIFACT_KEEPER_TOKEN | docker login localhost:30080 -u username --password-stdin
 ```
 
 ## Pushing Images
@@ -40,8 +46,8 @@ echo $ARTIFACT_KEEPER_TOKEN | docker login localhost:8080 -u username --password
 First, tag your image with the Artifact Keeper registry URL:
 
 ```bash
-docker tag myapp:latest localhost:8080/myapp:latest
-docker tag myapp:latest localhost:8080/myapp:1.0.0
+docker tag myapp:latest localhost:30080/docker-local/myapp:latest
+docker tag myapp:latest localhost:30080/docker-local/myapp:1.0.0
 ```
 
 ### Push to Registry
@@ -49,8 +55,8 @@ docker tag myapp:latest localhost:8080/myapp:1.0.0
 Push your tagged images:
 
 ```bash
-docker push localhost:8080/myapp:latest
-docker push localhost:8080/myapp:1.0.0
+docker push localhost:30080/docker-local/myapp:latest
+docker push localhost:30080/docker-local/myapp:1.0.0
 ```
 
 ## Pulling Images
@@ -58,8 +64,8 @@ docker push localhost:8080/myapp:1.0.0
 Pull images from your Artifact Keeper registry:
 
 ```bash
-docker pull localhost:8080/myapp:latest
-docker pull localhost:8080/myapp:1.0.0
+docker pull localhost:30080/docker-local/myapp:latest
+docker pull localhost:30080/docker-local/myapp:1.0.0
 ```
 
 ## Multi-Architecture Images
@@ -71,14 +77,14 @@ Artifact Keeper supports multi-architecture manifests for cross-platform contain
 ```bash
 # Build for multiple architectures
 docker buildx build --platform linux/amd64,linux/arm64 \
-  -t localhost:8080/myapp:1.0.0 \
+  -t localhost:30080/docker-local/myapp:1.0.0 \
   --push .
 ```
 
 ### Inspect Manifests
 
 ```bash
-docker manifest inspect localhost:8080/myapp:1.0.0
+docker manifest inspect localhost:30080/docker-local/myapp:1.0.0
 ```
 
 ## Tag Management
@@ -88,13 +94,13 @@ docker manifest inspect localhost:8080/myapp:1.0.0
 Use the OCI API to list all tags for an image:
 
 ```bash
-curl http://localhost:8080/v2/myapp/tags/list
+curl http://localhost:30080/v2/docker-local/myapp/tags/list
 ```
 
 Response:
 ```json
 {
-  "name": "myapp",
+  "name": "docker-local/myapp",
   "tags": ["latest", "1.0.0", "1.0.1"]
 }
 ```
@@ -105,23 +111,23 @@ Delete a specific tag:
 
 ```bash
 # Get the digest
-DIGEST=$(docker inspect --format='{{index .RepoDigests 0}}' localhost:8080/myapp:1.0.0 | cut -d@ -f2)
+DIGEST=$(docker inspect --format='{{index .RepoDigests 0}}' localhost:30080/docker-local/myapp:1.0.0 | cut -d@ -f2)
 
 # Delete by digest
-curl -X DELETE http://localhost:8080/v2/myapp/manifests/$DIGEST
+curl -X DELETE http://localhost:30080/v2/docker-local/myapp/manifests/$DIGEST
 ```
 
 ## Repository Namespacing
 
-Organize images using repository paths:
+Organize images using nested paths under the repository key:
 
 ```bash
 # Push to namespaced repository
-docker tag myapp:latest localhost:8080/team/project/myapp:latest
-docker push localhost:8080/team/project/myapp:latest
+docker tag myapp:latest localhost:30080/docker-local/team/project/myapp:latest
+docker push localhost:30080/docker-local/team/project/myapp:latest
 
 # Pull from namespaced repository
-docker pull localhost:8080/team/project/myapp:latest
+docker pull localhost:30080/docker-local/team/project/myapp:latest
 ```
 
 ## Best Practices
@@ -131,8 +137,8 @@ docker pull localhost:8080/team/project/myapp:latest
 Tag images with semantic versions for better tracking:
 
 ```bash
-docker tag myapp:latest localhost:8080/myapp:1.2.3
-docker push localhost:8080/myapp:1.2.3
+docker tag myapp:latest localhost:30080/docker-local/myapp:1.2.3
+docker push localhost:30080/docker-local/myapp:1.2.3
 ```
 
 ### Immutable Tags
@@ -141,10 +147,10 @@ Avoid overwriting existing tags. Use unique version tags for each build:
 
 ```bash
 # Good: unique version
-docker push localhost:8080/myapp:1.2.3-build.42
+docker push localhost:30080/docker-local/myapp:1.2.3-build.42
 
 # Avoid: reusing same tag
-docker push localhost:8080/myapp:latest  # overwrites previous latest
+docker push localhost:30080/docker-local/myapp:latest  # overwrites previous latest
 ```
 
 ### Layer Caching
@@ -177,8 +183,8 @@ jobs:
         with:
           push: true
           tags: |
-            registry.example.com/myapp:latest
-            registry.example.com/myapp:${{ github.sha }}
+            registry.example.com/docker-local/myapp:latest
+            registry.example.com/docker-local/myapp:${{ github.sha }}
 ```
 
 ### GitLab CI Example
@@ -192,8 +198,8 @@ build:
   before_script:
     - docker login -u $CI_REGISTRY_USER -p $CI_REGISTRY_PASSWORD registry.example.com
   script:
-    - docker build -t registry.example.com/myapp:$CI_COMMIT_SHA .
-    - docker push registry.example.com/myapp:$CI_COMMIT_SHA
+    - docker build -t registry.example.com/docker-local/myapp:$CI_COMMIT_SHA .
+    - docker push registry.example.com/docker-local/myapp:$CI_COMMIT_SHA
 ```
 
 ## Troubleshooting
@@ -204,8 +210,8 @@ If using self-signed certificates, configure Docker to trust them:
 
 ```bash
 # Add certificate to Docker
-sudo mkdir -p /etc/docker/certs.d/localhost:8080
-sudo cp ca.crt /etc/docker/certs.d/localhost:8080/ca.crt
+sudo mkdir -p /etc/docker/certs.d/localhost:30443
+sudo cp ca.crt /etc/docker/certs.d/localhost:30443/ca.crt
 sudo systemctl restart docker
 ```
 
@@ -214,7 +220,7 @@ Or use insecure registry (development only):
 ```json
 // /etc/docker/daemon.json
 {
-  "insecure-registries": ["localhost:8080"]
+  "insecure-registries": ["localhost:30080"]
 }
 ```
 
@@ -224,7 +230,7 @@ Verify credentials and token expiration:
 
 ```bash
 # Check authentication
-curl -u username:password http://localhost:8080/v2/
+curl -u username:password http://localhost:30080/v2/
 ```
 
 Expected response: `{}`
@@ -241,7 +247,7 @@ All images are stored by their SHA256 digest, ensuring integrity:
 
 ```bash
 # Pull by digest for reproducible builds
-docker pull localhost:8080/myapp@sha256:abc123...
+docker pull localhost:30080/docker-local/myapp@sha256:abc123...
 ```
 
 ### Garbage Collection
@@ -254,7 +260,7 @@ Configure rate limits per user or repository to prevent abuse:
 
 ```bash
 # Check rate limit headers
-curl -I http://localhost:8080/v2/myapp/manifests/latest
+curl -I http://localhost:30080/v2/docker-local/myapp/manifests/latest
 ```
 
 ## Remote & Virtual Repositories
@@ -266,7 +272,7 @@ Docker/OCI remote repositories support pull-through caching from upstream regist
 Create a remote repository pointing to Docker Hub:
 
 ```bash
-curl -X POST http://localhost:8080/api/v1/repositories \
+curl -X POST http://localhost:30080/api/v1/repositories \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
@@ -281,13 +287,27 @@ curl -X POST http://localhost:8080/api/v1/repositories \
 Then pull images through Artifact Keeper:
 
 ```bash
-docker login localhost:8080
-docker pull localhost:8080/dockerhub-remote/alpine:3.20
-docker pull localhost:8080/dockerhub-remote/nginx:latest
-docker pull localhost:8080/dockerhub-remote/myorg/myimage:v1.0
+docker login localhost:30080
+docker pull localhost:30080/dockerhub-remote/alpine:3.20
+docker pull localhost:30080/dockerhub-remote/nginx:latest
+docker pull localhost:30080/dockerhub-remote/myorg/myimage:v1.0
 ```
 
 Official Docker Hub images (like `alpine`, `nginx`, `ubuntu`) are automatically resolved under the `library/` namespace. Namespaced images work as-is.
+
+### Using a Remote as a containerd Mirror
+
+Mirror settings in containerd (`hosts.toml`) and in k3s/RKE2 (`registries.yaml`) are configured per registry host, so they point a whole upstream registry at a host. Because Artifact Keeper serves each repository under its key, the mirror must also rewrite the image path to add the repository key. For example, with a Docker Hub remote repository named `oci-dockerhub-proxy`, an RKE2/k3s `registries.yaml`:
+
+```yaml
+mirrors:
+  docker.io:
+    endpoint: ["http://registry.example.com:30080"]
+    rewrite:
+      "^(.*)$": "oci-dockerhub-proxy/$1"
+```
+
+With this, `docker.io/library/alpine:3.20` is fetched from `registry.example.com:30080/oci-dockerhub-proxy/library/alpine:3.20`. Without the rewrite, containerd requests `/v2/library/alpine/...`, which does not match any repository.
 
 ### Other Registries
 
@@ -295,7 +315,7 @@ Point the upstream URL to any OCI-compliant registry:
 
 ```bash
 # GitHub Container Registry
-curl -X POST http://localhost:8080/api/v1/repositories \
+curl -X POST http://localhost:30080/api/v1/repositories \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
@@ -312,7 +332,7 @@ curl -X POST http://localhost:8080/api/v1/repositories \
 Create a virtual repository to aggregate multiple Docker sources:
 
 ```bash
-curl -X POST http://localhost:8080/api/v1/repositories \
+curl -X POST http://localhost:30080/api/v1/repositories \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
@@ -323,12 +343,12 @@ curl -X POST http://localhost:8080/api/v1/repositories \
   }'
 
 # Add members
-curl -X POST http://localhost:8080/api/v1/repositories/docker-virtual/members \
+curl -X POST http://localhost:30080/api/v1/repositories/docker-virtual/members \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"member_key": "docker-local", "priority": 1}'
 
-curl -X POST http://localhost:8080/api/v1/repositories/docker-virtual/members \
+curl -X POST http://localhost:30080/api/v1/repositories/docker-virtual/members \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"member_key": "dockerhub-remote", "priority": 2}'
