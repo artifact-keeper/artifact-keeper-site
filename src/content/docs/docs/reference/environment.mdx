@@ -81,6 +81,12 @@ These settings apply to local users only. SSO users authenticate through their i
 | `QUARANTINE_ENABLED` | No | `false` | Hold newly uploaded artifacts in quarantine until security scanning completes or the hold period expires. Downloads return 409 while an artifact is quarantined. |
 | `QUARANTINE_DURATION_MINUTES` | No | `60` | Default quarantine hold period in minutes. Per-repository overrides are available via the `repository_config` table keys `quarantine_enabled` and `quarantine_duration_minutes`. |
 
+## Repository Metadata Signing
+
+| Variable | Required | Default | Description |
+|----------|----------|---------|-------------|
+| `SIGNATURE_EXPIRY_SECONDS` | No | `604800` | Validity window (seconds) stamped on OpenPGP repository-metadata signatures (Debian `InRelease` / `Release.gpg`, RPM `repomd.xml.asc`). The registry re-signs on request; mirrors that copy a signature once must refresh within this window. Clamped to 7200-31536000; `0` disables the expiry. See [Signing](/docs/security/signing/#signature-expiry-and-mirrors). |
+
 ## LDAP Integration
 
 | Variable | Required | Default | Description |
