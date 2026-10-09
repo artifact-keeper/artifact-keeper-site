@@ -400,10 +400,18 @@ Email delivery is disabled when `SMTP_HOST` is not set. Used for password expira
 |----------|----------|---------|-------------|
 | `SMTP_HOST` | No | - | SMTP server hostname. Email delivery is disabled when unset. |
 | `SMTP_PORT` | No | `587` | SMTP server port |
-| `SMTP_USERNAME` | No | - | SMTP username for authentication |
+| `SMTP_USERNAME` | No | - | SMTP username. With `SMTP_PASSWORD`, authenticates with AUTH PLAIN or LOGIN (NTLM and GSSAPI are not supported). Leave both unset to send without authenticating. |
 | `SMTP_PASSWORD` | No | - | SMTP password for authentication |
 | `SMTP_FROM_ADDRESS` | No | `noreply@artifact-keeper.local` | Default sender address |
-| `SMTP_TLS_MODE` | No | `starttls` | TLS mode: `starttls` (default), `tls`, or `none` |
+| `SMTP_TLS_MODE` | No | `starttls` | `starttls`: plaintext, then STARTTLS; fails if the server does not offer it. `starttls-opportunistic`: STARTTLS when the server offers it, otherwise unencrypted (like Forgejo's `smtp+starttls` and Nexus's "enable STARTTLS"); a STARTTLS that is offered but fails is still an error. `tls`: TLS from the first byte (SMTPS, usually port 465). `none`: plaintext only. |
+| `SMTP_TLS_CA_CERT` | No | - | Extra CA certificate(s) trusted for the SMTP server, as a PEM file path or the PEM text itself. Added to the system trust store. When unset, `CUSTOM_CA_CERT_PATH` applies to SMTP as well. |
+| `SMTP_TLS_SKIP_VERIFY` | No | `false` | `true` accepts any certificate and hostname from the SMTP server and logs a warning at startup. For testing only: it exposes the SMTP password to anyone on the network path. |
+
+Without any SMTP-specific setting, a private CA can also be trusted through OpenSSL's `SSL_CERT_FILE` (a PEM bundle that includes the CA; it replaces the system bundle, so include the public CAs you still need) or by mounting a bundle over `/etc/pki/ca-trust/extracted/pem/tls-ca-bundle.pem` in the UBI image.
+
+When the admin SMTP test (`POST /api/v1/admin/smtp/test`) fails, the response (HTTP 502) carries the server's reply, what the server advertised before and after STARTTLS, and a one-line hint. A delivery that gets no SMTP reply within 60 seconds fails instead of waiting indefinitely.
+
+For on-prem Microsoft Exchange: the default client connector offers `AUTH LOGIN` only after STARTTLS, so use `SMTP_TLS_MODE=starttls` with credentials. `535 5.7.3 Authentication unsuccessful` means the credentials were refused; check that SMTP AUTH is allowed for the mailbox and connector, and try the username as `DOMAIN\user` and as `user@domain`. For an anonymous relay connector without TLS, use `SMTP_TLS_MODE=starttls-opportunistic` (or `none`) and leave `SMTP_USERNAME` and `SMTP_PASSWORD` unset.
 
 ## gRPC
 
@@ -452,7 +460,7 @@ The enhanced search layer is powered by [OpenSearch](https://opensearch.org/). O
 | Variable | Required | Default | Description |
 |----------|----------|---------|-------------|
 | `ALLOW_HTTP_INTEGRATIONS` | No | `false` | Allow HTTP (non-TLS) connections for remote repository proxying, Artifactory migration, and Dependency-Track integration. Required when upstream services use plain HTTP, which is common in air-gapped or development environments. When `false`, all outbound connections to external services enforce HTTPS. |
-| `CUSTOM_CA_CERT_PATH` | No | - | Path to a PEM file containing one or more custom CA certificates. Used for HTTPS connections to internal services (Artifactory, Nexus, remote repositories) that use certificates signed by a private CA. Mount the cert file into the container and set this path (e.g., `/etc/ssl/certs/custom-ca.pem`). The file can contain multiple certificates for CA bundles. |
+| `CUSTOM_CA_CERT_PATH` | No | - | Path to a PEM file containing one or more custom CA certificates. Used for HTTPS connections to internal services (Artifactory, Nexus, remote repositories) and for the SMTP server (unless `SMTP_TLS_CA_CERT` is set) when they use certificates signed by a private CA. Mount the cert file into the container and set this path (e.g., `/etc/ssl/certs/custom-ca.pem`). The file can contain multiple certificates for CA bundles. |
 | `AK_ENFORCE_HTTPS` | No | `false` | Force the `Secure` flag on auth cookies (and treat requests as HTTPS) even when the direct connection is plain HTTP. Set to `true` when terminating TLS at a proxy. Ignored when `ENVIRONMENT=development`. |
 | `AK_EXTERNAL_URL` | No | - | The trusted public base URL of the deployment (e.g., `https://registry.example.com`). Used to build absolute callback/ACS URLs (SAML, OIDC) instead of trusting request headers, which closes a host-header spoofing vector. |
 | `AK_GUEST_ACCESS_ENABLED` | No | `true` | Allow unauthenticated read of public repositories. Set to `false` (or `0`) to require authentication for all access. |
