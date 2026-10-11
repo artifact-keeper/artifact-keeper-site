@@ -8,22 +8,26 @@ The quickstart installer detects your container runtime, generates secure creden
 ## Usage
 
 ```bash
-curl -fsSL https://get.artifactkeeper.com | bash
+curl -fsSL https://raw.githubusercontent.com/artifact-keeper/artifact-keeper/main/scripts/install.sh | bash
 ```
 
-This is equivalent to running the installer script directly from the repository:
+This is the same script as `scripts/install.sh` in the repository, so from a checkout you can run it directly:
 
 ```bash
 bash scripts/install.sh
 ```
 
+:::caution[Options go after the pipe]
+Set installer options on the `bash` side of the pipe: `curl -fsSL <url> | AK_HTTP_PORT=8080 bash`. Written in front of `curl` (`AK_HTTP_PORT=8080 curl ... | bash`), the variable is set for `curl` only and the installer never sees it, so it silently uses its defaults, including a generated admin password instead of the one you chose.
+:::
+
 ## What the Installer Does
 
-1. **Detects your container runtime**: Docker with Compose V2, Docker with docker-compose, Podman with podman-compose, or Podman with Compose. The installer will exit with an error if no supported runtime is found.
+1. **Detects your container runtime**: Docker with Compose V2, Docker with docker-compose, Podman with podman-compose, or Podman with Compose. A `docker` command that cannot reach a Docker daemon is skipped in favour of Podman when Podman is installed. The installer will exit with an error if no supported runtime is found.
 
-2. **Checks port availability**: Verifies that ports 80 and 443 (or your configured ports) are not already in use.
+2. **Checks port availability**: Verifies that ports 30080 and 30443 (or your configured ports) are not already in use. These are the compose file's own defaults; rootless Podman cannot publish ports below 1024.
 
-3. **Generates secure credentials**: Creates random values for `JWT_SECRET`, the search master key, the PostgreSQL password, and (if not provided) the admin password. Credentials are generated using `openssl rand` when available, falling back to `/dev/urandom`.
+3. **Generates secure credentials**: Creates random values for `JWT_SECRET`, `AK_WEBHOOK_SECRET_KEY` (32 bytes, base64) and, if not provided, the admin password. Credentials are generated using `openssl rand` when available, falling back to `/dev/urandom`.
 
 4. **Creates a project directory**: Defaults to `./artifact-keeper` in the current directory. The installer will not overwrite an existing installation.
 
@@ -44,13 +48,14 @@ The installer brings up the full stack:
 | **Backend** | Rust API server with 45+ format handlers |
 | **Web UI** | Next.js frontend |
 | **Caddy** | Reverse proxy (HTTP + HTTPS with automatic TLS) |
-| **PostgreSQL 16** | Metadata storage |
+| **PostgreSQL 18** | Metadata storage |
 | **OpenSearch** | Full-text search |
 | **Trivy** | Vulnerability scanning |
 | **OpenSCAP** | Compliance scanning |
-| **Dependency-Track** | SBOM analysis and vulnerability management |
 
-In minimal mode (`AK_MINIMAL=1`), the scanners (Trivy, OpenSCAP, Dependency-Track) are skipped to reduce resource usage.
+**Dependency-Track** (SBOM analysis and vulnerability management) is a heavy Java service and is not started by default. Install with `AK_DTRACK=1` to enable it: the installer then sets `DEPENDENCY_TRACK_ENABLED=true` together with `COMPOSE_PROFILES=dtrack`, so the backend integration and the service are switched on together.
+
+In minimal mode (`AK_MINIMAL=1`), only the core images (PostgreSQL, OpenSearch, backend, web, Caddy) are pre-pulled.
 
 ## Configuration Options
 
@@ -60,36 +65,37 @@ All options are set as environment variables before running the installer.
 |----------|---------|-------------|
 | `INSTALL_DIR` | `./artifact-keeper` | Directory where the project files are created |
 | `AK_VERSION` | `latest` | Version to install (omit the `v` prefix) |
-| `AK_HTTP_PORT` | `80` | HTTP port |
-| `AK_HTTPS_PORT` | `443` | HTTPS port |
-| `AK_ADMIN_PASSWORD` | auto-generated | Admin password. When omitted, a random 24-character password is generated and saved to `.env`. |
+| `AK_HTTP_PORT` | `30080` | HTTP port |
+| `AK_HTTPS_PORT` | `30443` | HTTPS port |
+| `AK_ADMIN_PASSWORD` | auto-generated | Admin password. When omitted, a random password is generated and saved to `.env` as `ADMIN_PASSWORD`. Used on the first start only, when the admin account is created. |
 | `AK_SKIP_START` | `0` | Set to `1` to generate files without starting the stack |
-| `AK_MINIMAL` | `0` | Set to `1` to skip scanners (lower resource usage) |
+| `AK_MINIMAL` | `0` | Set to `1` to pre-pull only the core images |
+| `AK_DTRACK` | `0` | Set to `1` to also run Dependency-Track |
 
 ### Examples
 
 Install with custom ports:
 
 ```bash
-AK_HTTP_PORT=8080 AK_HTTPS_PORT=8443 curl -fsSL https://get.artifactkeeper.com | bash
+curl -fsSL https://raw.githubusercontent.com/artifact-keeper/artifact-keeper/main/scripts/install.sh | AK_HTTP_PORT=8080 AK_HTTPS_PORT=8443 bash
 ```
 
 Install a specific version:
 
 ```bash
-AK_VERSION=1.1.0 curl -fsSL https://get.artifactkeeper.com | bash
+curl -fsSL https://raw.githubusercontent.com/artifact-keeper/artifact-keeper/main/scripts/install.sh | AK_VERSION=1.1.0 bash
 ```
 
 Install in minimal mode (no scanners):
 
 ```bash
-AK_MINIMAL=1 curl -fsSL https://get.artifactkeeper.com | bash
+curl -fsSL https://raw.githubusercontent.com/artifact-keeper/artifact-keeper/main/scripts/install.sh | AK_MINIMAL=1 bash
 ```
 
 Generate files without starting:
 
 ```bash
-AK_SKIP_START=1 curl -fsSL https://get.artifactkeeper.com | bash
+curl -fsSL https://raw.githubusercontent.com/artifact-keeper/artifact-keeper/main/scripts/install.sh | AK_SKIP_START=1 bash
 cd artifact-keeper
 # Review .env and docker-compose.yml, then:
 docker compose up -d
@@ -98,14 +104,14 @@ docker compose up -d
 Set a specific admin password:
 
 ```bash
-AK_ADMIN_PASSWORD=my-secure-password curl -fsSL https://get.artifactkeeper.com | bash
+curl -fsSL https://raw.githubusercontent.com/artifact-keeper/artifact-keeper/main/scripts/install.sh | AK_ADMIN_PASSWORD='my-secure-password' bash
 ```
 
 ## Requirements
 
 - **Container runtime**: Docker 20.10+ with Compose V2, or Podman 4+ with podman-compose
 - **RAM**: 2 GB minimum, 4 GB recommended with scanners enabled
-- **Ports**: 80 and 443 available (configurable via `AK_HTTP_PORT` and `AK_HTTPS_PORT`)
+- **Ports**: 30080 and 30443 available (configurable via `AK_HTTP_PORT` and `AK_HTTPS_PORT`)
 
 ## After Installation
 
@@ -114,12 +120,30 @@ Once the installer completes, it prints the connection details:
 ```
 ==> Artifact Keeper is running!
 
-  Web UI:    http://localhost:80
-  API:       http://localhost:80/api/v1
-  Swagger:   http://localhost:80/swagger-ui
+  Web UI:    http://localhost:30080
+  API:       http://localhost:30080/api/v1
+  Swagger:   http://localhost:30080/swagger-ui (set ENABLE_SWAGGER=true to serve it)
 
   Username:  admin
   Password:  <generated-password>
+```
+
+### Your admin password
+
+The password is printed once at the end of the install and saved as `ADMIN_PASSWORD` in the `.env` file in the install directory:
+
+```bash
+grep ADMIN_PASSWORD artifact-keeper/.env
+```
+
+Because the installer always sets `ADMIN_PASSWORD`, no `admin.password` file is written inside the container; the `.env` file is where to look.
+
+`ADMIN_PASSWORD` is applied **only on the first start**, when the `admin` account is created. Editing it in `.env` afterwards does not change the password (a restart never resets it), and the backend logs a warning that the value is being ignored. Change the password in the web UI (**My Profile**) instead. If the stack is a fresh evaluation and the password is lost, remove the volumes and start again, which creates the account with the current `ADMIN_PASSWORD`:
+
+```bash
+cd artifact-keeper
+docker compose down -v
+docker compose up -d
 ```
 
 ### Managing the Stack

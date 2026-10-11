@@ -20,7 +20,7 @@ Get Artifact Keeper up and running in minutes using Docker Compose.
 For a fully automated setup, use the [quickstart installer](/docs/getting-started/quickstart-installer) instead. It generates secure credentials, downloads all files, and starts the stack with a single command:
 
 ```bash
-curl -fsSL https://get.artifactkeeper.com | bash
+curl -fsSL https://raw.githubusercontent.com/artifact-keeper/artifact-keeper/main/scripts/install.sh | bash
 ```
 :::
 
@@ -51,10 +51,14 @@ EOT
 chmod 600 .env
 ```
 
-`ADMIN_PASSWORD` is optional. When it is set, the `admin` account is created with that password and the first-time setup lock is skipped. Leave it out to have a random password generated on first boot instead (see step 4). Read it back with `grep ADMIN_PASSWORD .env`.
+`ADMIN_PASSWORD` is optional. When it is set, the `admin` account is created with that password and the first-time setup lock is skipped. Leave it out to have a random password generated on first boot instead (see step 5). Read it back with `grep ADMIN_PASSWORD .env`.
+
+`ADMIN_PASSWORD` is applied only on the **first** start, when the `admin` account is created. Changing it in `.env` afterwards does not change the password, even after a restart; the backend logs a warning that it is ignored. Change the password in the web UI instead, or, on a fresh evaluation stack, run `docker compose down -v` and start again.
 
 :::caution
 If the backend container keeps restarting and the login page never accepts a password, check `docker compose logs backend`. Errors such as `JWT_SECRET is unsuitable` or `AK_WEBHOOK_SECRET_KEY is set but invalid` mean the `.env` file is missing or was not picked up.
+
+A backend stopped by the `AK_WEBHOOK_SECRET_KEY` error has already created the `admin` account. If you fix `.env` after such a start, the account exists with the password from that first attempt: log in with the `ADMIN_PASSWORD` that was in `.env` then (or, if none was set, the one in `/data/storage/admin.password`), or run `docker compose down -v` and start again.
 :::
 
 3. **Start the stack**:
