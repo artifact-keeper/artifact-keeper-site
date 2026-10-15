@@ -5,6 +5,8 @@ description: "Complete REST API reference for Artifact Keeper"
 
 Artifact Keeper provides a comprehensive REST API for managing artifacts, repositories, users, and system configuration.
 
+This page is a curated reference for the most used endpoints. The complete, versioned list of every route, with request and response schemas, is the backend's OpenAPI document. Set `ENABLE_SWAGGER=true` on the backend and it is served at `/api/v1/openapi.json`, with an interactive Swagger UI at `/swagger-ui`; both require authentication. The switch is off by default so that an unauthenticated map of the API is never exposed by accident.
+
 ## Base URL
 
 ```
@@ -210,20 +212,37 @@ Get repository details.
 }
 ```
 
-### PUT /repositories/:id
+### PATCH /repositories/:key
 
-Update repository settings.
+Update repository settings. The request is a partial update: every field is optional and an omitted field is left unchanged.
+
+**Auth:** requires `repository:admin` on the target repository (global admins bypass). Some fields, such as `promotion_only`, are global-admin only.
 
 **Request:**
 
 ```json
 {
+  "name": "Internal npm",
   "description": "Updated description",
-  "public": true
+  "visibility": "internal",
+  "quota_bytes": 10737418240
 }
 ```
 
-**Response:** `200 OK`
+Commonly used fields:
+
+- `name`, `description`, `key` (renames the repository)
+- `visibility`: `public`, `internal`, or `private`. This is the authoritative read-audience field; `is_public` and `allow_anonymous_access` are legacy aliases.
+- `quota_bytes`, `project_id`, `upstream_url` (Remote repositories; also used to rotate credentials embedded in the URL)
+- `promotion_only`, `release_repository_key` (staging flows), `versioning_enabled`
+- `quarantine_enabled`, `quarantine_duration_minutes`, `curation_enabled`, `curation_default_action` (`allow` or `review`)
+- Format-specific keys such as `npm_allowed_scopes`, `npm_allow_unscoped`, `pypi_upstream_index_path`, `index_upstream_url` (Cargo), `apt_origin`, `apt_label`, `repodata_depth` (RPM), `oci_trusted_bearer_realms`, `custom_user_agent`, `virtual_metadata_partial`
+
+The full field list is in the OpenAPI schema `UpdateRepositoryRequest`.
+
+**Response:** `200 OK` with the updated repository, in the same shape as `GET /repositories/:id`.
+
+**Errors:** `400` for an invalid value, `403` without repository admin, `404` when the key is unknown, `409` when a rename collides with an existing key, `422` when a field does not apply to the repository's format or type.
 
 ### DELETE /repositories/:id
 
@@ -301,11 +320,15 @@ Get artifact metadata.
 }
 ```
 
-### GET /artifacts/:id/download
+### GET /repositories/:key/download/:path
 
-Download artifact file.
+Download an artifact by its path within a repository. `HEAD` is supported and returns the same headers without a body. Accepts the `?version=` selector described under [Artifact Versioning Endpoints](#version-selector-versionrevisionlabel).
 
-**Response:** Binary file with appropriate Content-Type header.
+**Auth:** requires read access to the repository (anonymous on a public repository).
+
+**Response:** `200 OK` with the binary content and its Content-Type, or `302 Found` redirecting to a presigned URL when the storage backend is S3-compatible.
+
+**Errors:** `403` with `error: scan_on_proxy_route_required` when the file is a proxied package of a scan-on-proxy enforced format in a Remote or Virtual repository, which must be downloaded through the format's own route; `404` when the path is unknown; `503` when the repository's scan-on-proxy configuration cannot be read.
 
 ---
 
@@ -496,10 +519,6 @@ Create user (admin only).
 
 Get current user profile.
 
-### PUT /users/me
-
-Update current user profile.
-
 ### Canonical self-service aliases
 
 The following `/users/me/*` routes let the authenticated caller manage their own record, API tokens, and password without needing their user id. *(Added in v1.4.0.)*
@@ -556,6 +575,23 @@ Change the caller's own password. This route is rate-limited (password-change th
 ```
 
 `current_password` is required for non-admin callers.
+
+### PATCH /users/:id
+
+Update a user (admin only). Every field is optional.
+
+**Request:**
+
+```json
+{
+  "email": "alice@example.com",
+  "display_name": "Alice",
+  "is_active": true,
+  "is_admin": false
+}
+```
+
+**Response:** `200 OK` with the updated user record.
 
 ### DELETE /users/:id
 
@@ -868,13 +904,63 @@ Create webhook.
 }
 ```
 
-### PUT /webhooks/:id
+### GET /webhooks/:id
 
-Update webhook.
+Get one webhook.
 
 ### DELETE /webhooks/:id
 
 Delete webhook.
+
+### POST /webhooks/:id/enable
+
+Enable a webhook. `POST /webhooks/:id/disable` disables it. There is no update route: to change a webhook's URL or events, create a new one and delete the old one.
+
+### POST /webhooks/:id/rotate-secret
+
+Rotate the signing secret. The new secret is generated server-side and is **not** returned; the previous secret keeps verifying deliveries for 24 hours so receivers can roll over without dropped events.
+
+**Response:**
+
+```json
+{
+  "id": "wh-123",
+  "secret_digest": "a1b2c3d4",
+  "previous_secret_expires_at": "2026-10-16T12:00:00Z"
+}
+```
+
+**Errors:** `409` when a previous-secret overlap window is still active.
+
+### GET /webhooks/:id/deliveries
+
+List delivery attempts for a webhook, newest first.
+
+**Response:**
+
+```json
+{
+  "items": [
+    {
+      "id": "dl-1",
+      "webhook_id": "wh-123",
+      "event": "artifact.uploaded",
+      "payload": {},
+      "response_status": 500,
+      "response_body": "upstream error",
+      "success": false,
+      "attempts": 3,
+      "delivered_at": null,
+      "created_at": "2026-10-15T09:00:00Z"
+    }
+  ],
+  "total": 1
+}
+```
+
+### POST /webhooks/:id/deliveries/:delivery_id/redeliver
+
+Retry a failed delivery. Returns the new delivery record.
 
 ### POST /webhooks/:id/test
 
@@ -909,9 +995,44 @@ Restore from backup (admin only).
 
 Get system settings (admin only).
 
-### PUT /admin/settings
+### POST /admin/settings
 
-Update system settings (admin only).
+Update system settings (admin only). Send the full settings object as returned by `GET /admin/settings`.
+
+**Request:**
+
+```json
+{
+  "storage_backend": "s3",
+  "storage_path": "/data/storage",
+  "allow_anonymous_download": false,
+  "max_upload_size_bytes": 5368709120,
+  "retention_days": 90,
+  "audit_retention_days": 365,
+  "backup_retention_count": 7,
+  "edge_stale_threshold_minutes": 15
+}
+```
+
+`environment` is read-only and comes from the `ENVIRONMENT` configuration value.
+
+### GET /admin/settings/system
+
+Read the runtime settings (admin only): whether guest (anonymous) access is allowed right now, where that value comes from (`environment` or `database`), the value stored through this API, and whether a `PATCH` would change the effective value.
+
+### PATCH /admin/settings/system
+
+Change runtime settings without a restart (admin only). Takes effect on the next request on the replica that served it and within about five seconds on the others.
+
+**Request:**
+
+```json
+{
+  "guest_access_enabled": false
+}
+```
+
+When `AK_GUEST_ACCESS_ENABLED` is set explicitly it wins: the value is stored, `guest_access_editable` is `false`, and the stored value takes over once the environment variable is unset.
 
 ### GET /admin/stats
 
@@ -1229,22 +1350,26 @@ List signing keys.
 
 Generate signing key pair.
 
-### POST /signing/sign
+### POST /signing/artifacts/:artifact_id/sign
 
-Sign artifact.
+Sign one hosted artifact with its repository's active signing key and record the attestation that the promotion `require_signature` gate reads (admin only). There is no request body. Proxy-cached remote artifacts cannot be signed.
 
-**Request:**
+**Response:**
 
 ```json
 {
   "artifact_id": "artifact-456",
-  "key_id": "key-123"
+  "key_id": "key-123",
+  "algorithm": "rsa4096",
+  "signature_sha256": "9f86d08..."
 }
 ```
 
-### GET /signing/verify/:id
+**Errors:** `404` when the artifact does not exist or is not eligible, `409` when the repository has no active signing key or config.
 
-Verify artifact signature.
+### Key and repository signing routes
+
+`GET`/`DELETE /signing/keys/:key_id`, `POST /signing/keys/:key_id/revoke`, `POST /signing/keys/:key_id/rotate`, `GET /signing/keys/:key_id/public`, `GET`/`POST /signing/repositories/:repo_id/config` and `GET /signing/repositories/:repo_id/public-key` are described in [Signing Key Management](/docs/security/signing#signing-key-management). There is no signature-verification endpoint.
 
 ---
 
