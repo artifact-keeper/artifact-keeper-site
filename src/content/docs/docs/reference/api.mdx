@@ -273,6 +273,70 @@ Scope literals are lowercased, de-duplicated, and validated: each must start wit
 
 **Errors:** `400` when the repository is not a Remote npm repository, or when a scope literal is malformed.
 
+### GET /repositories/:key/allowlist
+
+Get the package allowlist of a Virtual conda repository. *(Added in v1.11.0.)*
+
+The allowlist restricts what the virtual's **Remote** members contribute. While it is enabled, a remote package the list does not admit is left out of the virtual's `repodata.json` (every encoding) and `channeldata.json`, and a download of it through the virtual answers `404` without contacting the upstream. Hosted (Local and Staging) members are never filtered. Merged index documents report how many remote records the list left out in an `X-AK-Allowlist-Dropped` header.
+
+**Auth:** requires `repository:admin` on the target repository (global admins bypass).
+
+**Response:**
+
+```json
+{
+  "repository_key": "conda-all",
+  "enabled": true,
+  "entries": [
+    { "name": "numpy", "version": ">=1.26,<3" },
+    { "name": "py*", "subdirs": ["noarch"] }
+  ],
+  "entry_count": 2
+}
+```
+
+`enabled` is `false` and `entries` is empty when no allowlist is configured. If the stored list can no longer be read (only possible after a direct database edit), the response carries an `error` field, `enabled` is `true` and nothing is admitted from remote members until a valid list is saved or the list is deleted.
+
+### PUT /repositories/:key/allowlist
+
+Replace the package allowlist of a Virtual conda repository. *(Added in v1.11.0.)*
+
+Each entry is `{ "name", "version", "subdirs" }`:
+
+- `name` (required): an exact conda package name, or a glob where `*` matches any run of characters and `?` one character. Matching is case-insensitive.
+- `version` (optional): a conda version spec evaluated with conda's own ordering, for example `2.2.3`, `2.2.*`, `>=2,<3`, `1.0|1.1`, `!=1.5`. A package whose version does not parse is not admitted by a version-constrained entry. Omitted means every version.
+- `subdirs` (optional): the platforms the entry applies to (`noarch`, `linux-64`, ...). Omitted or empty means every subdir.
+
+A package is admitted when any entry admits it. `enabled` is required: an enabled empty list admits nothing from remote members, and `enabled: false` keeps the entries but restores the unfiltered merge. Limits: 10,000 entries, names up to 128 bytes, version specs up to 256 bytes, 32 subdirs per entry. Changes apply to the next request. Every change is audited as `REPOSITORY_ALLOWLIST_CHANGED`.
+
+**Auth:** requires `repository:admin` on the target repository (global admins bypass).
+
+**Request:**
+
+```json
+{
+  "enabled": true,
+  "entries": [
+    { "name": "numpy", "version": ">=1.26,<3" },
+    { "name": "py*", "subdirs": ["noarch"] }
+  ]
+}
+```
+
+**Response:** `200 OK` with the same body shape as `GET /repositories/:key/allowlist`.
+
+**Errors:** `400` when the repository is not a Virtual conda repository, when an entry is invalid (the message names the entry by index), or when a limit is exceeded.
+
+### DELETE /repositories/:key/allowlist
+
+Remove the package allowlist of a Virtual conda repository, restoring the unfiltered merge. *(Added in v1.11.0.)*
+
+**Auth:** requires `repository:admin` on the target repository (global admins bypass).
+
+**Response:** `200 OK` with the same body shape as `GET /repositories/:key/allowlist` (`enabled: false`, no entries).
+
+**Errors:** `400` when the repository is not a Virtual conda repository.
+
 ---
 
 ## Artifact Endpoints
