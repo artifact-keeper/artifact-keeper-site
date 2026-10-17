@@ -142,6 +142,28 @@ curl -X POST https://registry.example.com/api/v1/permissions \
   }'
 ```
 
+### Virtual Repositories
+
+A grant on a virtual repository does not grant its members. Each member is a separate repository with its own permissions, and it is checked against the caller exactly as a direct read of that member would be. **To read through a virtual, the principal needs read on each member it should see; a grant on the virtual alone yields an empty channel.** The grant on the virtual is still needed, because it is what lets the caller reach the virtual's URL.
+
+```bash
+# Let group "developers" resolve through the Maven virtual "maven-all",
+# whose members are "maven-internal" (local) and "maven-central" (remote).
+# The group needs read on the virtual AND on every member it should see.
+for repo in maven-all maven-internal maven-central; do
+  REPO_ID=$(curl -s -H "Authorization: Bearer $ACCESS_TOKEN" \
+    "https://registry.example.com/api/v1/repositories/$repo" | jq -r .id)
+  curl -s -X POST https://registry.example.com/api/v1/permissions \
+    -H "Authorization: Bearer $ACCESS_TOKEN" \
+    -H "Content-Type: application/json" \
+    -d "{\"principal_type\": \"group\", \"principal_id\": \"$GROUP_ID\",
+         \"target_type\": \"repository\", \"target_id\": \"$REPO_ID\",
+         \"actions\": [\"read\"]}"
+done
+```
+
+With `read` on `maven-all` only, every artifact requested through `/maven/maven-all/...` answers 404. Since v1.11.2, `GET /api/v1/repositories/maven-all/members` and `/artifacts` add an `X-AK-Virtual-Members-Notice` header explaining why the result is empty. To narrow a virtual for one audience, grant that audience only the members it should see. To cover the virtual and all of its members with one rule, put them in one [project](/docs/advanced/projects) and grant the group on the project.
+
 ## Groups
 
 Organize users into groups for easier permission management:
