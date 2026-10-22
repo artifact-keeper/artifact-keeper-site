@@ -49,7 +49,8 @@ curl -H "Authorization: Bearer $ADMIN_TOKEN" \
   "repository_key": "npm-proxy",
   "enabled": true,
   "min_age_days": 7,
-  "mode": "upstream_publish_time"
+  "mode": "upstream_publish_time",
+  "instance_locked": true
 }
 ```
 
@@ -64,13 +65,45 @@ curl -X PUT "https://artifacts.example.com/api/v1/repositories/npm-proxy/age-gat
   }'
 ```
 
-`min_age_days` accepts `0` through `3650`. `0` is a valid, deliberate setting: it enables the gate with no delay, so explicit rejections still block and the review queue stays under admin control, which simply setting `enabled: false` does not provide (a disabled gate stops honoring rejections too). Both endpoints are admin-only, applies only to remote (proxy) repositories, and `mode` may be omitted on an update to keep the repository's current mode unchanged.
+`min_age_days` accepts `0` through `3650`. `0` is a valid, deliberate setting: it enables the gate with no delay, so explicit rejections still block and the review queue stays under admin control, which simply setting `enabled: false` does not provide (a disabled gate stops honoring rejections too). Both endpoints require the repository `admin` action or instance admin (see [Who Can Operate the Gate](#who-can-operate-the-gate)), the gate applies only to remote (proxy) repositories, and `mode` may be omitted on an update to keep the repository's current mode unchanged. `instance_locked` reports whether an instance administrator has locked the policy.
 
 Enabling the gate on a format/mode combination this server can't enforce is rejected outright rather than silently accepted: for example, `PUT` with `mode: "upstream_publish_time"` on a Go repository returns `400 Bad Request`, since Go has no trustworthy publish-time resolver. Disabling the gate (`enabled: false`) is always allowed regardless of format or mode.
 
+## Who Can Operate the Gate
+
+The gate is configured per repository, and a repository's own administrators can operate it: an instance administrator, or any principal holding the `admin` action on that repository. That action can be granted directly to a user or service account, through a group the principal belongs to, or inherited from the repository's project, and all three work the same way. Holding `write` (the ability to publish) is not enough. Admin held only through a role assignment, such as the `repository-owner` role a repository's creator receives, is not currently honoured for repository configuration.
+
+**A repository administrator can tighten what an instance administrator decided, but only an instance administrator can relax it or hand the policy back.**
+
+- **Policies.** An instance administrator's `PUT` locks the policy. Against a locked policy a repository administrator can still enable the gate or raise `min_age_days`, but cannot disable it, lower `min_age_days`, or change `mode`; those return `403`. To hand a policy to its team, an instance administrator sends `"instance_locked": false` with the policy. A repository administrator cannot set `instance_locked` at all.
+- **Reviews.** An instance administrator's approve or reject locks that review. A repository administrator can still reject it, but cannot approve or reopen it. An instance administrator's **reopen** releases the lock, since a reopened review is undecided.
+- The rule follows who is acting, not which URL they use: an instance administrator using the repository-scoped routes below is still an instance administrator.
+
+After upgrading, every policy and review decided before the upgrade is locked, because only instance administrators could make those decisions. A repository nobody has configured stays unlocked, and its own administrators can set and change its policy freely.
+
+```bash
+# Hand an existing policy to the repository's administrators
+curl -X PUT "https://artifacts.example.com/api/v1/repositories/npm-proxy/age-gate" \
+  -H "Authorization: Bearer $ADMIN_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"enabled": true, "min_age_days": 14, "instance_locked": false}'
+```
+
+Every change is attributable. Review decisions record who made them and at which tier; a policy change records the policy it replaced and a `relaxed` flag when it weakened the gate; and setting or releasing a lock emits its own audit event, `AGE_GATE_LOCK_SET` or `AGE_GATE_LOCK_RELEASED`. See [Audit Events](#audit-events).
+
 ## Admin Review Queue
 
-When a version doesn't meet the age threshold, it's blocked and a review row is created (or an existing one's request count is bumped) so an admin can look at it.
+When a version doesn't meet the age threshold, it's blocked and a review row is created (or an existing one's request count is bumped) so an admin can look at it. Instance administrators work from the instance-wide queue under `/api/v1/admin/age-gate`; a repository's administrators use the same operations scoped to their repository:
+
+```bash
+GET  /api/v1/repositories/{key}/age-gate/reviews
+GET  /api/v1/repositories/{key}/age-gate/reviews/{id}
+POST /api/v1/repositories/{key}/age-gate/reviews/{id}/approve
+POST /api/v1/repositories/{key}/age-gate/reviews/{id}/reject
+POST /api/v1/repositories/{key}/age-gate/reviews/{id}/reopen
+```
+
+The repository-scoped list always covers exactly `{key}`, and ignores a `repository_key` query parameter. A review that belongs to another repository answers `404`, so a repository administrator cannot see or act on other teams' reviews.
 
 ### Listing and Inspecting Reviews
 
@@ -93,6 +126,9 @@ curl -H "Authorization: Bearer $ADMIN_TOKEN" \
       "status": "pending",
       "requested_at": "2026-08-10T09:03:11Z",
       "reviewed_by": null,
+      "reviewed_by_username": null,
+      "reviewed_by_is_service_account": null,
+      "instance_locked": false,
       "reviewed_at": null,
       "review_reason": null,
       "request_count": 4,
@@ -134,13 +170,23 @@ curl -X POST "https://artifacts.example.com/api/v1/admin/age-gate/reviews/$REVIE
   -d '{"reason": "re-reviewing after upstream retraction"}'
 ```
 
-`reason` is optional on all three actions. A transition to the state a review is already in (e.g. approving an already-approved review) is rejected as a no-op. All five review endpoints, plus both repository config endpoints, are admin-only.
+`reason` is optional on all three actions. A transition to the state a review is already in (e.g. approving an already-approved review) is rejected as a no-op. The instance-wide review endpoints are instance-admin-only. The repository-scoped review endpoints and both repository config endpoints need the repository `admin` action, subject to the locks described in [Who Can Operate the Gate](#who-can-operate-the-gate). Once a review has been decided, `reviewed_by_username` and `reviewed_by_is_service_account` say who decided it, so a CI service account's approval is distinguishable from a person's.
 
 ## Auto-Approval and the Review Queue
 
 A version that meets the age threshold is served immediately from its timestamp, whether or not its review row has been formally flipped to `approved`. A background sweep runs every 5 minutes and does the corresponding bookkeeping: it finds every `pending` review whose recorded basis has now aged past its repository's threshold (matched under the repository's *current* policy identity, so a stale basis from before a mode switch or upstream repoint is never auto-approved) and flips it to `approved` with `reviewed_by: null`, distinguishing it from a manual decision.
 
 That distinction matters because an automatic approval is never sticky: it's re-derived on every access. If an admin later raises `min_age_days`, switches modes, or repoints the upstream, a previously auto-approved version that no longer meets the recomputed threshold is voided back to `pending` and blocks again. A **manual** approval, by contrast, holds under the current policy identity even if the threshold is later raised, unless the identity itself changes (a mode switch or repoint), in which case it's also reset. A rejection always blocks regardless of age or policy changes, until explicitly reopened.
+
+## Audit Events
+
+| Action | When |
+|---|---|
+| `AGE_GATE_APPROVED` / `AGE_GATE_REJECTED` / `AGE_GATE_REOPENED` | A review decision. `details.actor_tier` is `instance_admin` or `repository_admin`. |
+| `REPOSITORY_UPDATED` | A policy change. `details.age_gate_change` carries the replaced policy (`previous_enabled`, `previous_min_age_days`, `previous_mode`), `actor_tier`, and `relaxed: true` when the change weakened the gate. |
+| `AGE_GATE_LOCK_SET` / `AGE_GATE_LOCK_RELEASED` | An instance administrator locked or released a policy or review, with the actor, its tier, the repository and the policy or review at that moment. |
+
+Any relaxation by either tier can be identified from the log alone: a lock release, an approve or reopen, or a policy change with `relaxed: true`.
 
 ## See Also
 
