@@ -1,9 +1,11 @@
 ---
-title: "Remote & Virtual Repositories"
-description: "Set up pull-through caching with remote repositories and aggregate multiple sources with virtual repositories."
+title: "Proxy Caching: Remote & Virtual Repositories"
+description: "Proxy upstream package registries with remote repositories, host your own packages in local repositories, and combine both with virtual repositories."
 ---
 
-Artifact Keeper supports three repository types beyond standard hosted repositories:
+Artifact Keeper calls a repository that proxies an upstream registry a **remote repository**. If you are looking for a package proxy, registry mirror, or pull-through cache, create a remote repository. To publish your own packages, create a **local repository**.
+
+These three repository types cover hosting, proxying, and aggregation:
 
 | Type | Purpose |
 |------|---------|
@@ -12,6 +14,27 @@ Artifact Keeper supports three repository types beyond standard hosted repositor
 | **Virtual** | Aggregator — merges multiple local and remote repos behind a single URL |
 
 Remote and virtual repositories let you use Artifact Keeper as a transparent caching proxy in front of public registries like PyPI, npmjs.com, crates.io, Maven Central, and others.
+
+## Repository Types and Storage Backends
+
+Repository type controls how packages are served. A **storage backend** controls where Artifact Keeper stores their bytes, such as a filesystem or S3 bucket. A local repository can use cloud storage; “local” means hosted by Artifact Keeper, not necessarily stored on local disk.
+
+The terms **proxy cache** and **proxy-cache backend** refer to the cached upstream content and the storage implementation used to persist it. `proxy-cache/` is an internal storage namespace. It is not another repository type or a value to set for `STORAGE_BACKEND`. Configure proxying with `repo_type: "remote"` and `upstream_url`; configure storage separately.
+
+The proxy cache uses the instance's `STORAGE_BACKEND` configuration. The current proxy storage implementation supports `filesystem`, `s3`, and `gcs`. Azure Blob support for hosted artifacts does not currently extend to the proxy cache. See [Storage Backends](/docs/advanced/storage) for storage configuration.
+
+A package proxy is also distinct from a [reverse proxy](/docs/deployment/reverse-proxy), such as Nginx or Caddy, placed in front of Artifact Keeper for HTTPS and routing.
+
+## Choosing Where to Push and Pull
+
+For a setup with private packages and public dependencies:
+
+1. Publish your own packages to a **local** repository, such as `pypi-local`.
+2. Create a **remote** repository, such as `pypi-remote`, pointing at PyPI. Packages are fetched on demand; creating the repository does not download the entire upstream registry.
+3. Optionally combine both in a **virtual** repository, such as `pypi`, with the local member first.
+4. Configure clients to install from the virtual repository, while publishing directly to the local repository. If you only need an upstream cache, clients can install from the remote repository directly.
+
+For the PyPI example below, installations use `/pypi/pypi/simple/` and uploads target `/pypi/pypi-local/`. The first `pypi` is the package format route; the next segment is the repository key.
 
 ## Supported Formats
 
@@ -184,13 +207,13 @@ Once your repositories are set up, point your package manager at the virtual (or
 ### PyPI / pip
 
 ```bash
-pip install --index-url http://localhost:8080/pypi/simple my-package
+pip install --index-url http://localhost:8080/pypi/pypi/simple/ my-package
 ```
 
 ### npm
 
 ```bash
-npm config set registry http://localhost:8080/npm/
+npm config set registry http://localhost:8080/npm/npm-remote/
 npm install my-package
 ```
 
@@ -199,7 +222,7 @@ npm install my-package
 ```toml
 # .cargo/config.toml
 [registries.myregistry]
-index = "sparse+http://localhost:8080/cargo/pypi-remote/index/"
+index = "sparse+http://localhost:8080/cargo/cargo-remote/index/"
 ```
 
 ### Maven
@@ -263,7 +286,7 @@ curl -s -X POST "$AK_URL/api/v1/repositories/python/members" \
   -d '{"member_key":"pypi-cache","priority":2}'
 
 # 5. Configure pip to use it
-pip config set global.index-url "$AK_URL/python/simple"
+pip config set global.index-url "$AK_URL/pypi/python/simple/"
 pip config set global.trusted-host "$(echo $AK_URL | sed 's|https\?://||;s|:.*||')"
 
 # 6. Install packages — internal packages resolve first, public ones are cached
