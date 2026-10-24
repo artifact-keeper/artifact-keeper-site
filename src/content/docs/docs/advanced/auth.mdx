@@ -44,6 +44,21 @@ curl -X POST https://registry.example.com/api/v1/auth/refresh \
   -d '{"refresh_token": "eyJhbGc..."}'
 ```
 
+#### Signing Out
+
+```bash
+# End this session: its refresh token and its access token stop working
+curl -X POST https://registry.example.com/api/v1/auth/logout \
+  -H "Authorization: Bearer eyJhbGc..." \
+  -H "Content-Type: application/json" -d '{}'
+```
+
+Logout ends only the session that presents the token; the user's other logins keep working. The refresh token can also be sent in the body (`{"refresh_token": "..."}`), and the web UI's session cookies are cleared.
+
+From 1.12.0 the session's access token is refused after logout too, not only its refresh token. Refresh-token replay detection (a used refresh token presented again) ends the session's access tokens the same way. The replica that handled the logout refuses the access token at once; other replicas refuse it within `SESSION_REVOCATION_CACHE_TTL_SECS` seconds (default 5, see [Environment Variables](/docs/reference/environment#authentication)). Before 1.12.0 a signed-out access token stayed valid until it expired.
+
+A password change, an admin password reset and deactivation end every session of the user. API tokens are not sessions and are not affected by logout; revoke them explicitly.
+
 ### API Tokens
 
 API tokens provide programmatic access without username/password:
