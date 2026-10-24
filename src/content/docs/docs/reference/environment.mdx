@@ -42,6 +42,7 @@ Configure Artifact Keeper using environment variables. This page provides a comp
 | `JWT_EXPIRATION_SECS` | No | `86400` | Legacy JWT token expiration in seconds (24 hours). Prefer the two settings below. |
 | `JWT_ACCESS_TOKEN_EXPIRY_MINUTES` | No | `30` | Access token expiration in minutes |
 | `JWT_REFRESH_TOKEN_EXPIRY_DAYS` | No | `7` | Refresh token expiration in days |
+| `SESSION_REVOCATION_CACHE_TTL_SECS` | No | `5` | Since 1.12.0. How long, in seconds, each replica caches a "session still signed in" verdict. A signed-out access token is refused on every replica within this bound (at once on the replica that handled the logout). Each cache miss costs one indexed lookup; `0` looks up on every request. Values above `300` are clamped. |
 | `ADMIN_PASSWORD` | No | auto-generated | Admin password for first-time setup. If not set, a random password is generated and written to `{STORAGE_PATH}/admin.password` (default: `/data/storage/admin.password`). The API is locked until the admin changes this password. Set this env var to skip the setup lock entirely. |
 | `SKIP_ADMIN_PROVISIONING` | No | `false` | Skip built-in admin user creation on first boot. Use for SSO-only deployments where admin roles are assigned via OIDC/LDAP/SAML group mapping. |
 | `SSO_ENCRYPTION_KEY` | No | - | Encryption key for storing OIDC/LDAP/SAML client secrets in the database |
