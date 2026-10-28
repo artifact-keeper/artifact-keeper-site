@@ -327,9 +327,15 @@ Read by the **backend** process.
 | `METRICS_ENABLED` | No | `true` | Enable Prometheus metrics |
 | `METRICS_PATH` | No | `/metrics` | Metrics endpoint path |
 | `METRICS_PORT` | No | - | Port for an unauthenticated Prometheus metrics-only listener. When set, a second TCP listener serves only `GET /metrics` with no authentication. Intended for internal Prometheus scraping where the scraper cannot present credentials. Ensure this port is not reachable from untrusted networks. |
-| `OTEL_EXPORTER_OTLP_ENDPOINT` | No | - | OTLP endpoint for distributed tracing (e.g., `http://jaeger:4317`). When unset, tracing exports are disabled and logging is stdout-only. |
-| `OTEL_EXPORTER_OTLP_PROTOCOL` | No | `grpc` | Type of exporter for [OpenTelemetry](https://opentelemetry.io/docs/languages/sdk-configuration/otlp-exporter/) (either `grpc` or `http/protobuf`) |
-| `OTEL_SERVICE_NAME` | No | `artifact-keeper` | Service name reported in traces |
+| `OTEL_EXPORTER_OTLP_ENDPOINT` | No | - | OTLP endpoint (e.g., `http://jaeger:4317`). Setting it turns on OpenTelemetry export; when unset, or set to an empty value, nothing is exported and logging is stdout-only. With `http/protobuf`, give the full traces URL ending in `/v1/traces`. Only traces are exported by default; see `OTEL_LOGS_EXPORTER` and `OTEL_METRICS_EXPORTER`. |
+| `OTEL_EXPORTER_OTLP_PROTOCOL` | No | `grpc` | Type of exporter for [OpenTelemetry](https://opentelemetry.io/docs/languages/sdk-configuration/otlp-exporter/) (either `grpc` or `http/protobuf`). Logs and metrics use the same protocol as traces. |
+| `OTEL_SERVICE_NAME` | No | `artifact-keeper` | Service name reported on every exported signal |
+| `OTEL_TRACES_EXPORTER` | No | `otlp` | `none` stops span export while the endpoint is set. Only `otlp` and `none` are recognised; any other value keeps the default and logs a startup warning. |
+| `OTEL_LOGS_EXPORTER` | No | `none` | **Off by default.** `otlp` also exports the diagnostics log as OpenTelemetry log records (with `trace_id`/`span_id`) to the collector; stdout is unchanged. Leave it off when the endpoint is a traces-only backend such as Tempo or Jaeger. Since 1.12.0. |
+| `OTEL_METRICS_EXPORTER` | No | `none` | **Off by default.** `otlp` pushes the `/metrics` instruments as OTLP metrics every `OTEL_METRIC_EXPORT_INTERVAL` ms (default `60000`); `/metrics` is unchanged. Leave it off when the endpoint is a traces-only backend. Since 1.12.0. |
+| `OTEL_EXPORTER_OTLP_LOGS_ENDPOINT` | No | derived | Full URL for log records, used verbatim. Default: the shared endpoint with gRPC; with `http/protobuf`, the traces URL with `/v1/traces` replaced by `/v1/logs`. Since 1.12.0. |
+| `OTEL_EXPORTER_OTLP_METRICS_ENDPOINT` | No | derived | Full URL for metrics, used verbatim. Default: as above, with `/v1/metrics`. Since 1.12.0. |
+| `OTEL_RESOURCE_ATTRIBUTES` | No | - | Extra resource attributes (`k=v,...`). Every signal carries `service.instance.id`, taken from here when set, else `HOSTNAME`, else a random id per process. |
 | `AUDIT_LOG_ENABLED` | No | `true` | Enable audit logging |
 | `AUDIT_LOG_PATH` | No | `/var/log/artifact-keeper/audit.log` | Audit log file path |
 | `AUDIT_STREAM` | No | `off` | Emit every recorded audit action as a self-contained NDJSON record on stdout, so it can be shipped to a SIEM by collecting stdout without polling the admin API or reading Postgres. `off` emits nothing; `stdout` emits one NDJSON audit record per line, matching the published schema at `backend/schemas/audit-event.v1.schema.json`. Independent of `LOG_FORMAT`, though pairing with `LOG_FORMAT=json` gives fully structured stdout. See the [audit log export reference](/docs/security/audit-log/#exporting-audit-events) for the schema. |

@@ -14,11 +14,42 @@ Tracing is controlled entirely through environment variables. No code changes or
 | `OTEL_EXPORTER_OTLP_ENDPOINT` | No | _(unset)_ | OTLP collector endpoint (e.g., `http://jaeger:4317`). When unset, tracing exports are disabled. |
 | `OTEL_EXPORTER_OTLP_PROTOCOL` | No | `grpc` | Type of exporter for [OpenTelemetry](https://opentelemetry.io/docs/languages/sdk-configuration/otlp-exporter/) (either `grpc` or `http/protobuf`) |
 | `OTEL_SERVICE_NAME` | No | `artifact-keeper` | Service name that appears in traces. |
-| `RUST_LOG` | No | `info,sqlx::query=info` | Log and trace filter directive. The default includes `sqlx::query=info` which enables database query spans. |
+| `OTEL_TRACES_EXPORTER` | No | `otlp` | `none` stops span export. |
+| `OTEL_LOGS_EXPORTER` | No | `none` | `otlp` also exports log records. Off by default; see [Logs and metrics](#logs-and-metrics). |
+| `OTEL_METRICS_EXPORTER` | No | `none` | `otlp` also pushes metrics. Off by default; see [Logs and metrics](#logs-and-metrics). |
+| `OTEL_EXPORTER_OTLP_LOGS_ENDPOINT` | No | derived | Log endpoint, used verbatim. |
+| `OTEL_EXPORTER_OTLP_METRICS_ENDPOINT` | No | derived | Metric endpoint, used verbatim. |
+| `OTEL_RESOURCE_ATTRIBUTES` | No | _(unset)_ | Extra resource attributes (`k=v,...`), including `service.instance.id`. |
+| `DB_QUERY_SPANS` | No | `log` | Which SQL statements become database spans: `log` (those `RUST_LOG` lets through), `all`, or `off`. See [Database Queries](#database-queries). |
+| `RUST_LOG` | No | `info,sqlx::query=info` | Log and trace filter directive. |
 
 :::tip
-Setting `OTEL_EXPORTER_OTLP_ENDPOINT` is the only variable required to activate tracing. Leave it unset to keep tracing fully disabled with no runtime cost.
+Setting `OTEL_EXPORTER_OTLP_ENDPOINT` is the only variable required to activate tracing. Leave it unset (or empty) to keep tracing fully disabled with no runtime cost. With `OTEL_EXPORTER_OTLP_PROTOCOL=http/protobuf`, set it to the full traces URL, for example `http://collector:4318/v1/traces`.
 :::
+
+## Logs and Metrics
+
+Since 1.12.0 the backend can also export its diagnostics log as OpenTelemetry log records and its metrics as OTLP metrics, to the same collector and over the same protocol as its traces. **Both are off by default** and are turned on one at a time:
+
+```bash
+OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4317
+OTEL_LOGS_EXPORTER=otlp
+OTEL_METRICS_EXPORTER=otlp
+```
+
+:::caution
+Turn logs and metrics on only when `OTEL_EXPORTER_OTLP_ENDPOINT` points at a collector that accepts them, such as the OpenTelemetry Collector or Grafana Alloy. A traces-only backend used directly (Grafana Tempo, Jaeger) rejects log and metric exports. Leaving both variables unset keeps an existing traces-only setup working unchanged after an upgrade.
+:::
+
+The exporter variables follow the OpenTelemetry specification: `otlp` turns a signal on, `none` turns it off, and any other value keeps that signal's default and logs a startup warning. The startup line `OpenTelemetry tracing enabled` lists the exported signals in its `signals` field.
+
+**Endpoints.** With gRPC, logs and metrics go to the same endpoint as traces. With `http/protobuf`, the traces URL's trailing `/v1/traces` is replaced by `/v1/logs` or `/v1/metrics` (or the path is appended when the URL does not end in `/v1/traces`). To send a signal elsewhere, set `OTEL_EXPORTER_OTLP_LOGS_ENDPOINT` or `OTEL_EXPORTER_OTLP_METRICS_ENDPOINT` to its full URL.
+
+**Log records.** Every event `RUST_LOG` lets through to stdout is also exported, with its level, its fields as attributes, and the `trace_id`/`span_id` of the span it was emitted under, so a log line links to its trace. Stdout is not replaced: turn log export on only where the collector, not stdout collection, is your log pipeline, or each line is stored twice. SQL statement text is never exported.
+
+**Metrics.** The instruments behind `/metrics` are pushed with the same names and labels, cumulatively, every `OTEL_METRIC_EXPORT_INTERVAL` milliseconds (default `60000`). `/metrics` itself is unchanged, so Prometheus scraping keeps working. Every signal carries `service.name`, `service.version` and `service.instance.id` (from `OTEL_RESOURCE_ATTRIBUTES`, else `HOSTNAME`, else a random id per process), so the series of different replicas stay apart.
+
+**An unreachable collector** never blocks startup or requests: log records queue in a bounded buffer and are dropped when it is full, and metrics are pushed from a background thread. An endpoint that cannot be parsed turns that signal off with a message on stderr instead of stopping the backend.
 
 ## Quick Start with Jaeger
 
@@ -71,7 +102,13 @@ Every incoming HTTP request creates an `http_request` span containing:
 
 ### Database Queries
 
-SQLx automatically emits a span for every SQL query executed during a request. These spans include the query text and execution time. Database query spans are enabled by the `sqlx::query=info` filter level in `RUST_LOG`.
+SQL statements become `CLIENT` spans under the span they ran in, carrying the database system, the operation and the table (`db.system.name`, `db.operation.name`, `db.collection.name`) and the execution time, never the SQL text. `DB_QUERY_SPANS` decides which statements:
+
+| `DB_QUERY_SPANS` | Spans for |
+|---|---|
+| `log` (default) | The statements `RUST_LOG` lets through as `sqlx::query` events. Under the default filter that is the slow ones (over 1 s); `sqlx::query=debug` gives every statement but also prints each one on stdout. |
+| `all` | Every statement, while stdout and exported logs still follow `RUST_LOG`. A busy instance runs many statements per request, so pair it with a sampler (`OTEL_TRACES_SAMPLER`). |
+| `off` | None. |
 
 ### Nested Span Tree
 
@@ -79,9 +116,9 @@ Database query spans appear as children of the HTTP request span that triggered 
 
 ```
 http_request GET /api/v1/artifacts/search?q=openssl  [45ms]
-  sqlx::query SELECT * FROM artifacts WHERE ...       [12ms]
-  sqlx::query SELECT * FROM scan_results WHERE ...     [8ms]
-  sqlx::query SELECT * FROM artifact_tags WHERE ...    [3ms]
+  SELECT artifacts                                    [12ms]
+  SELECT scan_results                                  [8ms]
+  SELECT artifact_tags                                 [3ms]
 ```
 
 ## W3C Trace Context
@@ -140,9 +177,9 @@ Ensure your collector is reachable from the Artifact Keeper backend container. I
 
 ## Graceful Shutdown
 
-The OpenTelemetry tracer provider is wrapped in a guard (`OtelGuard`) that flushes all pending spans when the Artifact Keeper process shuts down. This ensures no trace data is lost during rolling deployments or container restarts.
+The OpenTelemetry providers are wrapped in a guard (`OtelGuard`) that flushes pending spans, and the log records and metrics when those are exported, when the Artifact Keeper process shuts down. This ensures no telemetry is lost during rolling deployments or container restarts.
 
-The flush happens automatically as part of the server's graceful shutdown sequence -- there is nothing to configure. If the process receives a `SIGTERM` (the standard signal used by Docker and Kubernetes), pending spans are exported to the collector before the process exits.
+The flush happens automatically as part of the server's graceful shutdown sequence, so there is nothing to configure. If the process receives a `SIGTERM` (the standard signal used by Docker and Kubernetes), the signals are flushed together, waiting at most about 5 seconds in all for the collector, well inside the 10 seconds a container runtime grants before it kills the process.
 
 ## Local Development
 
