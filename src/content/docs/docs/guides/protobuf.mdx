@@ -36,28 +36,50 @@ curl -X POST http://localhost:8080/api/v1/repositories \
 
 ### Configure buf CLI
 
-In your `buf.yaml`, point at your Artifact Keeper instance as the registry:
+`buf push` has no registry argument: the target is the first segment of the module's
+`name` in `buf.yaml`, and the `buf` CLI only prepends a scheme to it before appending
+the RPC path. The name is exactly three segments, `registry/owner/name`, so it cannot
+carry the `/proto/{repo_key}` prefix above.
+
+Give the repository a hostname of its own whose root maps onto its BSR path, as in the
+[Reverse Proxy](/docs/deployment/reverse-proxy/) guide:
+
+```nginx
+server {
+    server_name bsr.example.com;
+
+    location / {
+        # Trailing slash: the host root becomes this repository's BSR base path.
+        proxy_pass http://ak_backend/proto/protobuf-local/;
+    }
+}
+```
+
+Then name the module after that hostname:
 
 ```yaml
 version: v2
-name: buf.build/acme/payments
+modules:
+  - path: proto
+    name: bsr.example.com/acme/payments
 deps: []
 ```
 
-The `buf` CLI communicates using Connect RPC over HTTP. Set the `BUF_TOKEN` environment variable for authentication:
+The `buf` CLI communicates using Connect RPC over HTTP. Authenticate with `buf registry
+login`, which stores the token buf sends on each call:
 
 ```bash
-export BUF_TOKEN="your-api-token-or-password"
+buf registry login bsr.example.com --username YOUR_USERNAME --token-stdin <<< "YOUR_TOKEN"
 ```
 
 ## Publishing Modules
 
 ### Push with buf CLI
 
-Push a module to Artifact Keeper:
+Push a module to Artifact Keeper. `buf push` reads the destination from `buf.yaml`:
 
 ```bash
-buf push --registry http://localhost:8080/proto/protobuf-local
+buf push --create
 ```
 
 ### Push via Connect RPC (curl)
@@ -281,7 +303,7 @@ jobs:
         env:
           BUF_TOKEN: ${{ secrets.ARTIFACT_KEEPER_TOKEN }}
         run: |
-          buf push --registry ${{ vars.REGISTRY_URL }}/proto/protobuf-local
+          buf push --create
 ```
 
 ### GitLab CI
@@ -291,7 +313,7 @@ publish-protos:
   image: bufbuild/buf:latest
   stage: deploy
   script:
-    - buf push --registry ${REGISTRY_URL}/proto/protobuf-local
+    - buf push --create
   variables:
     BUF_TOKEN: ${ARTIFACT_KEEPER_TOKEN}
   only:
