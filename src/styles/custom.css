@@ -1,9 +1,9 @@
 /* Brand color palette — Starlight handles light/dark switching via bg mappings.
    "white" = lightest color, "black" = darkest color, grays in between. */
 :root {
-  --sl-color-accent-low: #331f00;
-  --sl-color-accent: #ff9900;
-  --sl-color-accent-high: #ffcc66;
+  --sl-color-accent-low: #06264b;
+  --sl-color-accent: #087cf4;
+  --sl-color-accent-high: #9ecbfb;
   --sl-color-white: #ffffff;
   --sl-color-gray-1: #eef1f5;
   --sl-color-gray-2: #b8c1cc;
@@ -15,7 +15,7 @@
 }
 
 :root[data-theme='light'] {
-  --sl-color-accent-low: #fff3e0;
-  --sl-color-accent: #e68a00;
-  --sl-color-accent-high: #994d00;
+  --sl-color-accent-low: #e8f2fe;
+  --sl-color-accent: #0668cc;
+  --sl-color-accent-high: #06264b;
 }

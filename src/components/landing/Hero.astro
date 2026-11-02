@@ -9,8 +9,12 @@ const badges = [
 ];
 ---
 
-<section class="bg-brand-dark text-white py-32 pt-40">
-  <div class="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
+<section
+  class="relative bg-brand-dark bg-cover bg-center text-white py-32 pt-40"
+  style="background-image: url('/hero-banner.png');"
+>
+  <div class="absolute inset-0 bg-brand-dark/80" aria-hidden="true"></div>
+  <div class="relative max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
     <!-- Headline -->
     <h1 class="text-3xl md:text-5xl font-bold leading-tight mb-6">
       The Open-Source Artifactory Alternative

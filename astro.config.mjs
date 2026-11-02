@@ -11,7 +11,7 @@ export default defineConfig({
       description: 'The open-source artifact registry. Documentation, guides, and API reference.',
       plugins: [starlightClientMermaid()],
       logo: {
-        src: './src/assets/logo.png',
+        src: './src/assets/logo.svg',
         replacesTitle: false,
       },
       favicon: '/favicon.png',
