@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1920" height="600" viewBox="0 0 1920 600" role="img" aria-labelledby="title desc">
+<title>Artifact Keeper hero background</title>
+<defs>
+      <linearGradient id="base" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#04284B"/><stop offset=".55" stop-color="#001B34"/><stop offset="1" stop-color="#03274A"/></linearGradient>
+      <linearGradient id="topWave" x1="0" y1="1" x2="1" y2="0"><stop stop-color="#073C6B"/><stop offset="1" stop-color="#009AE3"/></linearGradient>
+      <linearGradient id="softWave" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#063E70"/><stop offset=".65" stop-color="#043361"/><stop offset="1" stop-color="#06264B"/></linearGradient>
+      <linearGradient id="lowerWave" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#074D85"/><stop offset=".55" stop-color="#00528D"/><stop offset="1" stop-color="#052D55"/></linearGradient>
+      <linearGradient id="lowerEdge" x1="0" y1="1" x2="1" y2="0"><stop stop-color="#06335D"/><stop offset=".65" stop-color="#0075B9"/><stop offset="1" stop-color="#0097DA"/></linearGradient>
+    </defs>
+<rect width="1920" height="600" fill="url(#base)"/>
+<g transform="scale(1.2 1.0)">
+      <path d="M0 0 H610 C468 93 355 96 208 126 C109 147 44 184 0 219 Z" fill="url(#softWave)"/>
+      <path d="M0 0 H269 C187 48 78 78 0 147 Z" fill="url(#topWave)"/>
+      <path d="M648 600 C805 502 916 477 1080 514 C1273 558 1385 484 1600 331 V600 Z" fill="url(#lowerWave)"/>
+      <path d="M1182 600 C1359 565 1475 475 1600 425 V480 C1454 520 1374 578 1302 600 Z" fill="url(#lowerEdge)"/>
+    </g>
+</svg>
