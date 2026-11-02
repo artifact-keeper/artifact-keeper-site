@@ -26,27 +26,42 @@ Deploy Artifact Keeper on Kubernetes using the official Helm chart. The chart in
 ### 1. Add the chart
 
 ```bash
-git clone https://github.com/artifact-keeper/artifact-keeper-iac.git
-cd artifact-keeper-iac
+helm repo add artifact-keeper https://artifact-keeper.github.io/artifact-keeper-iac/
+helm repo update
 ```
 
 ### 2. Install with default values (dev)
 
 ```bash
-helm install ak helm/ \
+helm install ak artifact-keeper/artifact-keeper \
   --namespace artifact-keeper \
   --create-namespace
 ```
 
+The chart generates the JWT secret and the PostgreSQL password and keeps them across upgrades.
+
+:::note[Chart version]
+This needs a chart release that includes [artifact-keeper-iac#417](https://github.com/artifact-keeper/artifact-keeper-iac/pull/417). Older charts fail with `secrets.jwtSecret is required` until you add `--set secrets.jwtSecret=$(openssl rand -base64 48) --set postgres.auth.password=$(openssl rand -hex 16)`.
+:::
+
+:::caution[Argo CD, Flux and helm template]
+These tools render without access to the cluster, so each render generates new values, and a new PostgreSQL password stops matching the existing database. Set `secrets.jwtSecret` and `postgres.auth.password`, or use `secrets.existingSecret`. See [Generated credentials](https://github.com/artifact-keeper/artifact-keeper-iac/tree/main/charts/artifact-keeper#generated-credentials) in the chart README.
+:::
+
 ### 3. Install with production values
 
+The overlay files live in the chart's repository:
+
 ```bash
-helm install ak helm/ \
-  -f helm/values-production.yaml \
+git clone https://github.com/artifact-keeper/artifact-keeper-iac.git
+cd artifact-keeper-iac
+
+helm install ak charts/artifact-keeper/ \
+  -f charts/artifact-keeper/values-production.yaml \
   --namespace artifact-keeper \
   --create-namespace \
   --set ingress.host=registry.example.com \
-  --set secrets.jwtSecret=$(openssl rand -base64 64) \
+  --set secrets.jwtSecret=$(openssl rand -base64 48) \
   --set externalDatabase.host=your-rds-endpoint.amazonaws.com \
   --set externalDatabase.password=your-db-password
 ```
@@ -178,7 +193,7 @@ Artifact Keeper 1.2 replaces Meilisearch with OpenSearch as the search backend. 
 To pull images from Docker Hub instead of the default ghcr.io:
 
 ```bash
-helm install artifact-keeper ./helm \
+helm install artifact-keeper artifact-keeper/artifact-keeper \
   --set global.imageRegistry=docker.io/artifactkeeper \
   --set backend.image.repository=artifactkeeper/backend \
   --set web.image.repository=artifactkeeper/web
@@ -188,8 +203,8 @@ helm install artifact-keeper ./helm \
 
 ```bash
 # Upgrade with new values
-helm upgrade ak helm/ \
-  -f helm/values-production.yaml \
+helm upgrade ak charts/artifact-keeper/ \
+  -f charts/artifact-keeper/values-production.yaml \
   --namespace artifact-keeper
 
 # Check rollout status
