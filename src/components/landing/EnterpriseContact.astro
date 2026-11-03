@@ -9,13 +9,15 @@ interface Props {
   variant?: 'card' | 'inline';
   /** CSS height of the OpenTeams logo; OpenTeamsLogo's default when omitted. */
   logoHeight?: string;
+  /** Line under the logo; the generic enterprise line when omitted. */
+  text?: string;
 }
-const { variant = 'card', logoHeight } = Astro.props;
+const { variant = 'card', logoHeight, text = 'Enterprise support, migration and managed hosting.' } = Astro.props;
 const label = contacts.openteams.replace(/^https?:\/\//, '').replace(/\/$/, '');
 ---
 <div class:list={['ent', variant]}>
   <a class="ot-mark" href={contacts.openteams} target="_blank" rel="noopener"><OpenTeamsLogo height={logoHeight} /></a>
-  <p>Enterprise support, migration and managed hosting.</p>
+  <p>{text}</p>
   <a class="more" href={contacts.openteams} target="_blank" rel="noopener">{label} →</a>
   {contacts.enterprise && (
     <div class="mail">
