@@ -6,6 +6,10 @@ on:
   pull_request:
     branches: [main]
   workflow_dispatch:
+  # Daily, after artifact-keeper/stats publishes (06:17 UTC), so the Community
+  # chapter's build-time numbers refresh without a push.
+  schedule:
+    - cron: "47 6 * * *"
 
 permissions:
   contents: read
