@@ -6,14 +6,14 @@ export const release = { version: 'v1.11.10', date: '2026-10-29' };
 /**
  * Contact points.
  * - `support`: community and product contact (footer, Cloud fallback card, privacy page).
- * - `enterprise`: address for enterprise support and services. Not decided yet: while it is
+ * - `enterprise`: address for enterprise support and services (OpenTeams). While it is
  *   null, enterprise calls to action show only the OpenTeams link. Set it to a string to
  *   render the address (selectable text, copy button, mailto) next to that link.
  * - `openteams`: enterprise support, migration and managed hosting are delivered by OpenTeams.
  */
 export const contacts = {
   support: 'support@artifactkeeper.com',
-  enterprise: null as string | null,
+  enterprise: 'connect@openteams.com' as string | null,
   openteams: 'https://openteams.com/artifact-keeper/',
 };
 
