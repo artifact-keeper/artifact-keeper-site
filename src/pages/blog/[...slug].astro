@@ -1,0 +1,33 @@
+---
+import { render } from 'astro:content';
+import LandingLayout from '../../layouts/LandingLayout.astro';
+import Navbar from '../../components/landing/Navbar.astro';
+import Footer from '../../components/landing/Footer.astro';
+import PostMeta from '../../components/blog/PostMeta.astro';
+import { getPosts, type BlogPost } from '../../lib/blog';
+
+export async function getStaticPaths() {
+  const posts = await getPosts();
+  return posts.map((post) => ({ params: { slug: post.id }, props: { post } }));
+}
+
+const post = Astro.props.post as BlogPost;
+const { Content } = await render(post);
+---
+
+<LandingLayout title={`${post.data.title} | Artifact Keeper Blog`} description={post.data.description}>
+  <link slot="head" rel="alternate" type="application/rss+xml" title="Artifact Keeper Blog" href="/blog/rss.xml" />
+  <Navbar solid current="/blog/" />
+  <main id="top" class="page">
+    <article class="post wrap">
+      <a class="post-back" href="/blog/">All posts</a>
+      <h1>{post.data.title}</h1>
+      <p class="lead">{post.data.description}</p>
+      <PostMeta post={post} />
+      <div class="post-body">
+        <Content />
+      </div>
+    </article>
+  </main>
+  <Footer />
+</LandingLayout>

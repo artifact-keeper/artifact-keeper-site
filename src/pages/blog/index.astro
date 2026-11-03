@@ -1,0 +1,48 @@
+---
+import LandingLayout from '../../layouts/LandingLayout.astro';
+import Navbar from '../../components/landing/Navbar.astro';
+import Footer from '../../components/landing/Footer.astro';
+import PostMeta from '../../components/blog/PostMeta.astro';
+import { getPosts } from '../../lib/blog';
+
+const posts = await getPosts();
+---
+
+<LandingLayout
+  title="Blog | Artifact Keeper"
+  description="News, releases and walkthroughs from the Artifact Keeper project."
+>
+  <link slot="head" rel="alternate" type="application/rss+xml" title="Artifact Keeper Blog" href="/blog/rss.xml" />
+  <Navbar solid current="/blog/" />
+  <main id="top" class="page">
+    <div class="wrap">
+      <div class="chap-head">
+        <span class="eyebrow"><span class="pip"></span>Blog</span>
+        <h1 class="h2">News from the project.</h1>
+        <p class="lead">Releases and walkthroughs from the people building Artifact Keeper.</p>
+      </div>
+      {posts.length > 0 ? (
+        <ul class="post-list">
+          {posts.map((post) => (
+            <li class="card post-card">
+              <h2><a href={`/blog/${post.id}/`}>{post.data.title}</a></h2>
+              <p>{post.data.description}</p>
+              <PostMeta post={post} />
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <div class="card post-empty">
+          <h2>No posts yet.</h2>
+          <p>The first post is on its way. Until then, the release notes cover what changed in each version, and the feed will pick up new posts as they publish.</p>
+          <ul class="post-empty-links">
+            <li><a href="/docs/release-notes/v1-11-0/">Release notes</a></li>
+            <li><a href="/docs/">Documentation</a></li>
+            <li><a href="/blog/rss.xml">RSS feed</a></li>
+          </ul>
+        </div>
+      )}
+    </div>
+  </main>
+  <Footer />
+</LandingLayout>

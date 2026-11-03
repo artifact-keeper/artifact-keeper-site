@@ -1,0 +1,16 @@
+---
+import type { BlogPost } from '../../lib/blog';
+
+interface Props {
+  post: BlogPost;
+}
+const { date, author, tags, draft } = Astro.props.post.data;
+// Frontmatter dates are parsed as UTC midnight: format in UTC so the day cannot shift.
+const day = date.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric', timeZone: 'UTC' });
+---
+<div class="post-meta">
+  {draft && <span class="pill amber">draft</span>}
+  <time datetime={date.toISOString().slice(0, 10)}>{day}</time>
+  <span class="post-author">{author}</span>
+  {tags.length > 0 && <ul class="post-tags" aria-label="Tags">{tags.map((t) => <li class="tag">{t}</li>)}</ul>}
+</div>
