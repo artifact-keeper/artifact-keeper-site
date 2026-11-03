@@ -1,0 +1,172 @@
+---
+// Chapter 1: community adoption, from the public artifact-keeper/stats dataset.
+// Numbers are baked at build (src/data/stats.ts) and refreshed client-side when the
+// raw files are reachable. The dotted canvas globe (src/scripts/globe.ts, plain 2D canvas)
+// loads lazily; until then, and wherever the canvas cannot be used, a static SVG projection
+// stands in.
+import { stats, places } from '../../data/stats';
+import { STATS_GLOBE, STATS_REPO, countryName, fmtInt } from '../../lib/stats-model';
+
+const { metrics, countriesCount, peopleLocated, topCountries, updated } = stats;
+const tiles = [
+  { key: 'stars', label: 'GitHub stars', value: metrics.stars },
+  { key: 'dockerPulls', label: 'Docker Hub pulls', value: metrics.dockerPulls },
+  { key: 'contributors', label: 'Contributors', value: metrics.contributors },
+  { key: 'releaseDownloads', label: 'Release downloads', value: metrics.releaseDownloads },
+];
+const topPeople = topCountries[0]?.people || 1;
+const updatedIso = (() => {
+  const m = /^(\d{4}-\d{2}-\d{2}) (\d{2}:\d{2}) UTC$/.exec(updated);
+  return m ? `${m[1]}T${m[2]}Z` : undefined;
+})();
+
+// Static orthographic projection for the fallback (before the globe script runs, or
+// without canvas), centred on the Atlantic.
+const LAT0 = (28 * Math.PI) / 180, LON0 = (-15 * Math.PI) / 180;
+const project = (latDeg: number, lonDeg: number) => {
+  const la = (latDeg * Math.PI) / 180, lo = (lonDeg * Math.PI) / 180 - LON0;
+  const front = Math.sin(LAT0) * Math.sin(la) + Math.cos(LAT0) * Math.cos(la) * Math.cos(lo);
+  const x = Math.cos(la) * Math.sin(lo);
+  const y = Math.cos(LAT0) * Math.sin(la) - Math.sin(LAT0) * Math.cos(la) * Math.cos(lo);
+  return { x: +(x * 100).toFixed(1), y: +(-y * 100).toFixed(1), front: front > 0 };
+};
+const line = (pts: { x: number; y: number; front: boolean }[]) => {
+  let d = '', pen = false;
+  for (const p of pts) {
+    if (!p.front) { pen = false; continue; }
+    d += `${pen ? 'L' : 'M'}${p.x} ${p.y}`;
+    pen = true;
+  }
+  return d;
+};
+const range = (a: number, b: number, s: number) => Array.from({ length: Math.floor((b - a) / s) + 1 }, (_, i) => a + i * s);
+const graticule = [
+  ...range(-60, 60, 30).map((lat) => line(range(-180, 180, 5).map((lon) => project(lat, lon)))),
+  ...range(-180, 150, 30).map((lon) => line(range(-90, 90, 5).map((lat) => project(lat, lon)))),
+].filter(Boolean);
+const maxTotal = Math.max(1, ...places.map((p) => p.total));
+const dots = places
+  .map((p) => ({ ...project(p.lat, p.lon), r: +(1 + 3.2 * Math.sqrt(p.total / maxTotal)).toFixed(2) }))
+  .filter((p) => p.front);
+// Compact marker list for the globe script: [lat, lon, total, contributors].
+const placeData = JSON.stringify(places.map((p) => [p.lat, p.lon, p.total, p.contributors]));
+---
+<section class="band alt com" id="community" aria-labelledby="ch-community">
+  <div class="wrap">
+    <div class="chap-head">
+      <span class="eyebrow"><span class="pip"></span>Chapter 1 <span class="sep">·</span> Community</span>
+      <p class="kicker">Open source, used around the world.</p>
+      <h2 class="h2" id="ch-community">Running in <span data-com="countries">{countriesCount}</span> countries.</h2>
+      <p class="lead">Stars, forks and contributions on GitHub, placed wherever people list a public location: <strong><span data-com="people">{fmtInt(peopleLocated)}</span> people</strong> so far.</p>
+    </div>
+    <div class="com-grid">
+      <div class="com-globe" id="com-globe">
+        <p class="sr-only" data-com="summary">{fmtInt(peopleLocated)} people in {countriesCount} countries have starred, forked or contributed to Artifact Keeper on GitHub.</p>
+        <svg class="com-fallback" viewBox="-104 -104 208 208" aria-hidden="true" focusable="false">
+          <defs>
+            <radialGradient id="com-sphere" cx="38%" cy="32%" r="75%">
+              <stop offset="0" stop-color="var(--panel2)" />
+              <stop offset="1" stop-color="var(--bg)" />
+            </radialGradient>
+          </defs>
+          <circle r="100" fill="url(#com-sphere)" stroke="var(--line2)" stroke-width=".6" />
+          <g fill="none" stroke="var(--line)" stroke-width=".4">{graticule.map((d) => <path d={d} />)}</g>
+          <g class="com-dots">{dots.map((p) => <circle cx={p.x} cy={p.y} r={p.r} />)}</g>
+        </svg>
+        <canvas aria-hidden="true" width="560" height="560"></canvas>
+      </div>
+      <div class="com-side">
+        <dl class="com-stats">
+          {tiles.map((t) => (
+            <div class="card">
+              <dt>{t.label}</dt>
+              <dd><b class="tnum" data-key={t.key} data-count={t.value} data-fmt="comma">{fmtInt(t.value)}</b></dd>
+            </div>
+          ))}
+        </dl>
+        <div class="com-top">
+          <h3 id="com-top-h">Top countries</h3>
+          <ol aria-labelledby="com-top-h" data-com="top">
+            {topCountries.map((c) => (
+              <li style={`--w:${((c.people / topPeople) * 100).toFixed(1)}%`}>
+                <span class="nm">{countryName(c.code, c.name)}</span>
+                <span class="bar" aria-hidden="true"></span>
+                <span class="ct tnum">{fmtInt(c.people)}</span>
+              </li>
+            ))}
+          </ol>
+        </div>
+        <p class="com-note">Updated <time data-com="updated" datetime={updatedIso}>{updated}</time> <span class="sep">·</span> Data: <a href={STATS_REPO}>artifact-keeper/stats</a> <span class="sep">·</span> <a href={STATS_GLOBE} target="_blank" rel="noopener">Explore the globe<span class="sr-only"> (opens in a new tab)</span></a></p>
+      </div>
+    </div>
+  </div>
+  <script type="application/json" id="com-places" set:html={placeData} />
+</section>
+
+<script>
+  import { gsap } from 'gsap';
+  import { ScrollTrigger } from 'gsap/ScrollTrigger';
+  import { counter } from '../../scripts/counter';
+  import { GEO_URL, LATEST_URL, countryName, fmtInt, normalize, type Stats } from '../../lib/stats-model';
+
+  const sec = document.getElementById('community');
+  if (sec) {
+    const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    const q = (s: string) => sec.querySelector<HTMLElement>(s);
+    const nums = Array.from(sec.querySelectorAll<HTMLElement>('.com-stats [data-key]'));
+    let counted = false;
+    let tl: gsap.core.Timeline | null = null;
+
+    // Fetch fresh numbers right away; the count-up only starts on scroll, so it usually picks them up.
+    const getJson = (url: string) => fetch(url, { cache: 'default' }).then((r) => (r.ok ? r.json() : Promise.reject(new Error(String(r.status)))));
+    Promise.all([getJson(LATEST_URL), getJson(GEO_URL)])
+      .then(([latest, geo]) => apply(normalize(latest, geo)))
+      .catch(() => { /* offline or blocked: the numbers baked at build stay */ });
+
+    function apply(s: Stats) {
+      if (counted && tl) { tl.kill(); tl = null; }
+      for (const el of nums) {
+        const v = s.metrics[el.dataset.key as keyof Stats['metrics']];
+        if (typeof v !== 'number') continue;
+        el.dataset.count = String(v);
+        el.textContent = fmtInt(v);
+      }
+      const set = (k: string, v: string) => { const el = q(`[data-com="${k}"]`); if (el && el.textContent !== v) el.textContent = v; };
+      set('countries', String(s.countriesCount));
+      set('people', fmtInt(s.peopleLocated));
+      set('summary', `${fmtInt(s.peopleLocated)} people in ${s.countriesCount} countries have starred, forked or contributed to Artifact Keeper on GitHub.`);
+      set('updated', s.updated);
+      const top = q('[data-com="top"]');
+      if (top && s.topCountries.length) {
+        const max = s.topCountries[0].people || 1;
+        top.replaceChildren(...s.topCountries.map((c) => {
+          const li = document.createElement('li');
+          li.style.setProperty('--w', `${((c.people / max) * 100).toFixed(1)}%`);
+          const mk = (cls: string, text = '') => { const x = document.createElement('span'); x.className = cls; x.textContent = text; return x; };
+          const bar = mk('bar'); bar.setAttribute('aria-hidden', 'true');
+          li.append(mk('nm', countryName(c.code, c.name)), bar, mk('ct tnum', fmtInt(c.people)));
+          return li;
+        }));
+      }
+    }
+
+    if (!reduce) {
+      gsap.registerPlugin(ScrollTrigger);
+      ScrollTrigger.create({
+        trigger: q('.com-stats'), start: 'top 85%', once: true,
+        onEnter: () => { counted = true; tl = gsap.timeline(); nums.forEach((el) => counter(el, tl, 0, 1)); },
+      });
+    }
+
+    // The globe script loads only once the chapter is close to the viewport.
+    const globe = q('#com-globe');
+    if (globe && 'IntersectionObserver' in window) {
+      const io = new IntersectionObserver((es) => {
+        if (!es.some((e) => e.isIntersecting)) return;
+        io.disconnect();
+        import('../../scripts/globe').then((m) => m.initGlobe(globe, reduce)).catch((e) => { globe.dataset.globe = `load-failed: ${(e as Error).message}`; });
+      }, { rootMargin: '400px 0px' });
+      io.observe(globe);
+    }
+  }
+</script>

@@ -6,7 +6,8 @@
   "scripts": {
     "dev": "astro dev",
     "build": "astro build",
-    "preview": "astro preview"
+    "preview": "astro preview",
+    "land-mask": "node scripts/build-land-mask.mjs"
   },
   "dependencies": {
     "@astrojs/sitemap": "^3.2.0",
@@ -18,5 +19,9 @@
     "astro": "^5.1.5",
     "gsap": "3.12.5",
     "sharp": "^0.33.0"
+  },
+  "devDependencies": {
+    "topojson-client": "^3.1.0",
+    "world-atlas": "^2.0.2"
   }
 }

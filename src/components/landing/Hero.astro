@@ -1,6 +1,10 @@
 ---
 import { HERO } from '../../lib/landing-svg';
 import { release } from '../../data/site';
+import { stats } from '../../data/stats';
+// Proof-row numbers come from the stats repo at build time, rounded down so they never overstate.
+const starsFloor = Math.floor(stats.metrics.stars / 100) * 100;
+const pullsK = Math.floor(stats.metrics.dockerPullsBackend / 10000) * 10;
 ---
 <section class="hero" id="hero" aria-labelledby="h1">
   <div class="wrap">
@@ -36,11 +40,11 @@ import { release } from '../../data/site';
     <div class="proof">
       <span><b>{release.version}</b></span>
       <span><b>MIT</b> licensed</span>
-      <span><b class="tnum" data-count="1200" data-suffix="+" data-fmt="comma">1,200+</b> GitHub stars</span>
-      <span><b class="tnum" data-count="140" data-suffix="K+">140K+</b> backend pulls on Docker Hub</span>
+      <span><b class="tnum" data-count={starsFloor} data-suffix="+" data-fmt="comma">{starsFloor.toLocaleString("en-US")}+</b> GitHub stars</span>
+      <span><b class="tnum" data-count={pullsK} data-suffix="K+">{pullsK}K+</b> backend pulls on Docker Hub</span>
       <span><b>Rust</b> + <b>PostgreSQL</b></span>
     </div>
-    <p class="proof-note">GitHub stars checked 2026-11-02 · Docker Hub pulls checked 2026-10-30</p>
+    <p class="proof-note">Stars and pulls from artifact-keeper/stats, updated {stats.updated}</p>
   </div>
   <dialog class="promo" id="promo" aria-labelledby="promo-title">
     <div class="promo-bar">

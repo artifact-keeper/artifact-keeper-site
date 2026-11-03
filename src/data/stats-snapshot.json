@@ -1,0 +1,2473 @@
+{
+  "updated": "2026-11-02 16:09 UTC",
+  "metrics": {
+    "stars": 1225,
+    "forks": 172,
+    "contributors": 82,
+    "dockerPulls": 410349,
+    "dockerPullsBackend": 148649,
+    "releaseDownloads": 5680,
+    "releases": 56,
+    "mergedPrs": 2442
+  },
+  "countriesCount": 63,
+  "peopleLocated": 602,
+  "topCountries": [
+    {
+      "code": "US",
+      "name": "United States",
+      "people": 113
+    },
+    {
+      "code": "DE",
+      "name": "Germany",
+      "people": 87
+    },
+    {
+      "code": "CN",
+      "name": "China",
+      "people": 48
+    },
+    {
+      "code": "FR",
+      "name": "France",
+      "people": 37
+    },
+    {
+      "code": "GB",
+      "name": "United Kingdom",
+      "people": 28
+    },
+    {
+      "code": "CA",
+      "name": "Canada",
+      "people": 19
+    }
+  ],
+  "places": [
+    {
+      "lat": 51.164,
+      "lon": 10.448,
+      "place": "Germany",
+      "country_code": "DE",
+      "total": 34,
+      "contributors": 0
+    },
+    {
+      "lat": 37.567,
+      "lon": 126.978,
+      "place": "Seoul",
+      "country_code": "KR",
+      "total": 14,
+      "contributors": 2
+    },
+    {
+      "lat": 39.784,
+      "lon": -100.446,
+      "place": "United States",
+      "country_code": "US",
+      "total": 13,
+      "contributors": 1
+    },
+    {
+      "lat": 52.517,
+      "lon": 13.395,
+      "place": "Berlin",
+      "country_code": "DE",
+      "total": 12,
+      "contributors": 1
+    },
+    {
+      "lat": 46.603,
+      "lon": 1.888,
+      "place": "France",
+      "country_code": "FR",
+      "total": 11,
+      "contributors": 0
+    },
+    {
+      "lat": 37.788,
+      "lon": -122.408,
+      "place": "San Francisco",
+      "country_code": "US",
+      "total": 9,
+      "contributors": 0
+    },
+    {
+      "lat": 31.231,
+      "lon": 121.47,
+      "place": "Shanghai",
+      "country_code": "CN",
+      "total": 9,
+      "contributors": 0
+    },
+    {
+      "lat": 46.799,
+      "lon": 8.232,
+      "place": "Switzerland",
+      "country_code": "CH",
+      "total": 9,
+      "contributors": 0
+    },
+    {
+      "lat": 48.853,
+      "lon": 2.348,
+      "place": "Paris",
+      "country_code": "FR",
+      "total": 9,
+      "contributors": 1
+    },
+    {
+      "lat": 51.507,
+      "lon": -0.128,
+      "place": "London",
+      "country_code": "GB",
+      "total": 8,
+      "contributors": 2
+    },
+    {
+      "lat": 48.208,
+      "lon": 16.373,
+      "place": "Vienna",
+      "country_code": "AT",
+      "total": 8,
+      "contributors": 0
+    },
+    {
+      "lat": 52.243,
+      "lon": 5.634,
+      "place": "Netherlands",
+      "country_code": "NL",
+      "total": 8,
+      "contributors": 0
+    },
+    {
+      "lat": 30.271,
+      "lon": -97.744,
+      "place": "Austin",
+      "country_code": "US",
+      "total": 8,
+      "contributors": 1
+    },
+    {
+      "lat": 61.067,
+      "lon": -107.992,
+      "place": "Canada",
+      "country_code": "CA",
+      "total": 8,
+      "contributors": 0
+    },
+    {
+      "lat": 55.626,
+      "lon": 37.606,
+      "place": "Moscow",
+      "country_code": "RU",
+      "total": 7,
+      "contributors": 1
+    },
+    {
+      "lat": 48.137,
+      "lon": 11.575,
+      "place": "Munich",
+      "country_code": "DE",
+      "total": 6,
+      "contributors": 0
+    },
+    {
+      "lat": 38.708,
+      "lon": -9.137,
+      "place": "Lisbon",
+      "country_code": "PT",
+      "total": 6,
+      "contributors": 0
+    },
+    {
+      "lat": 47.374,
+      "lon": 8.541,
+      "place": "Zurich",
+      "country_code": "CH",
+      "total": 6,
+      "contributors": 1
+    },
+    {
+      "lat": 59.325,
+      "lon": 18.071,
+      "place": "Stockholm",
+      "country_code": "SE",
+      "total": 6,
+      "contributors": 0
+    },
+    {
+      "lat": 39.906,
+      "lon": 116.391,
+      "place": "Beijing",
+      "country_code": "CN",
+      "total": 6,
+      "contributors": 0
+    },
+    {
+      "lat": 54.702,
+      "lon": -3.277,
+      "place": "United Kingdom",
+      "country_code": "GB",
+      "total": 6,
+      "contributors": 0
+    },
+    {
+      "lat": 53.55,
+      "lon": 10.001,
+      "place": "Hamburg",
+      "country_code": "DE",
+      "total": 6,
+      "contributors": 1
+    },
+    {
+      "lat": 47.604,
+      "lon": -122.33,
+      "place": "Seattle",
+      "country_code": "US",
+      "total": 5,
+      "contributors": 0
+    },
+    {
+      "lat": 64.686,
+      "lon": 97.745,
+      "place": "Russia",
+      "country_code": "RU",
+      "total": 5,
+      "contributors": 0
+    },
+    {
+      "lat": 23.129,
+      "lon": 113.259,
+      "place": "Guangzhou City",
+      "country_code": "CN",
+      "total": 5,
+      "contributors": 0
+    },
+    {
+      "lat": 1.357,
+      "lon": 103.819,
+      "place": "Singapore",
+      "country_code": "SG",
+      "total": 5,
+      "contributors": 0
+    },
+    {
+      "lat": 40.713,
+      "lon": -74.006,
+      "place": "New York",
+      "country_code": "US",
+      "total": 5,
+      "contributors": 0
+    },
+    {
+      "lat": 25.074,
+      "lon": 55.189,
+      "place": "Dubai",
+      "country_code": "AE",
+      "total": 5,
+      "contributors": 1
+    },
+    {
+      "lat": -28.817,
+      "lon": 24.992,
+      "place": "South Africa",
+      "country_code": "ZA",
+      "total": 5,
+      "contributors": 1
+    },
+    {
+      "lat": 30.055,
+      "lon": 107.875,
+      "place": "Chongqing",
+      "country_code": "CN",
+      "total": 5,
+      "contributors": 1
+    },
+    {
+      "lat": -33.87,
+      "lon": 151.208,
+      "place": "Sydney",
+      "country_code": "AU",
+      "total": 4,
+      "contributors": 0
+    },
+    {
+      "lat": 38.895,
+      "lon": -77.036,
+      "place": "Washington",
+      "country_code": "US",
+      "total": 4,
+      "contributors": 1
+    },
+    {
+      "lat": -37.814,
+      "lon": 144.963,
+      "place": "Melbourne",
+      "country_code": "AU",
+      "total": 4,
+      "contributors": 0
+    },
+    {
+      "lat": 59.675,
+      "lon": 14.521,
+      "place": "Sweden",
+      "country_code": "SE",
+      "total": 4,
+      "contributors": 0
+    },
+    {
+      "lat": 42.359,
+      "lon": -71.058,
+      "place": "Boston",
+      "country_code": "US",
+      "total": 4,
+      "contributors": 0
+    },
+    {
+      "lat": 59.913,
+      "lon": 10.739,
+      "place": "Oslo",
+      "country_code": "NO",
+      "total": 4,
+      "contributors": 0
+    },
+    {
+      "lat": -24.776,
+      "lon": 134.755,
+      "place": "Australia",
+      "country_code": "AU",
+      "total": 4,
+      "contributors": 0
+    },
+    {
+      "lat": 44.436,
+      "lon": 26.103,
+      "place": "Bucharest",
+      "country_code": "RO",
+      "total": 4,
+      "contributors": 0
+    },
+    {
+      "lat": 36.701,
+      "lon": -118.756,
+      "place": "California",
+      "country_code": "US",
+      "total": 4,
+      "contributors": 0
+    },
+    {
+      "lat": 47.482,
+      "lon": 19.145,
+      "place": "Budapest",
+      "country_code": "HU",
+      "total": 4,
+      "contributors": 1
+    },
+    {
+      "lat": 30.249,
+      "lon": 120.205,
+      "place": "Hangzhou City",
+      "country_code": "CN",
+      "total": 4,
+      "contributors": 0
+    },
+    {
+      "lat": 47.594,
+      "lon": 14.125,
+      "place": "Austria",
+      "country_code": "AT",
+      "total": 4,
+      "contributors": 1
+    },
+    {
+      "lat": 34.541,
+      "lon": 108.924,
+      "place": "China",
+      "country_code": "CN",
+      "total": 4,
+      "contributors": 0
+    },
+    {
+      "lat": 22.351,
+      "lon": 78.668,
+      "place": "India",
+      "country_code": "IN",
+      "total": 3,
+      "contributors": 0
+    },
+    {
+      "lat": 22.545,
+      "lon": 114.055,
+      "place": "Shenzhen",
+      "country_code": "CN",
+      "total": 3,
+      "contributors": 0
+    },
+    {
+      "lat": 45.758,
+      "lon": 4.832,
+      "place": "Lyon",
+      "country_code": "FR",
+      "total": 3,
+      "contributors": 0
+    },
+    {
+      "lat": 49.007,
+      "lon": 8.403,
+      "place": "Karlsruhe",
+      "country_code": "DE",
+      "total": 3,
+      "contributors": 0
+    },
+    {
+      "lat": 50.64,
+      "lon": 4.667,
+      "place": "Belgium",
+      "country_code": "BE",
+      "total": 3,
+      "contributors": 0
+    },
+    {
+      "lat": 51.5,
+      "lon": -0.192,
+      "place": "London",
+      "country_code": "GB",
+      "total": 3,
+      "contributors": 0
+    },
+    {
+      "lat": -10.333,
+      "lon": -53.2,
+      "place": "Brazil",
+      "country_code": "BR",
+      "total": 3,
+      "contributors": 0
+    },
+    {
+      "lat": 49.454,
+      "lon": 11.077,
+      "place": "Nuremberg",
+      "country_code": "DE",
+      "total": 3,
+      "contributors": 0
+    },
+    {
+      "lat": 61.153,
+      "lon": 8.788,
+      "place": "Norway",
+      "country_code": "NO",
+      "total": 3,
+      "contributors": 0
+    },
+    {
+      "lat": -23.551,
+      "lon": -46.633,
+      "place": "São Paulo",
+      "country_code": "BR",
+      "total": 3,
+      "contributors": 0
+    },
+    {
+      "lat": 44.977,
+      "lon": -93.265,
+      "place": "Minneapolis",
+      "country_code": "US",
+      "total": 3,
+      "contributors": 0
+    },
+    {
+      "lat": 37.788,
+      "lon": -122.356,
+      "place": "San Francisco Bay Area",
+      "country_code": "US",
+      "total": 3,
+      "contributors": 0
+    },
+    {
+      "lat": 45.503,
+      "lon": -73.57,
+      "place": "Montreal",
+      "country_code": "CA",
+      "total": 3,
+      "contributors": 0
+    },
+    {
+      "lat": 43.604,
+      "lon": 1.444,
+      "place": "Toulouse",
+      "country_code": "FR",
+      "total": 3,
+      "contributors": 0
+    },
+    {
+      "lat": 43.653,
+      "lon": -79.384,
+      "place": "Toronto",
+      "country_code": "CA",
+      "total": 3,
+      "contributors": 0
+    },
+    {
+      "lat": 24.48,
+      "lon": 118.085,
+      "place": "Xiamen",
+      "country_code": "CN",
+      "total": 3,
+      "contributors": 1
+    },
+    {
+      "lat": 41.681,
+      "lon": 44.029,
+      "place": "Georgia",
+      "country_code": "GE",
+      "total": 3,
+      "contributors": 1
+    },
+    {
+      "lat": 32.085,
+      "lon": 34.782,
+      "place": "Tel-Aviv",
+      "country_code": "IL",
+      "total": 3,
+      "contributors": 0
+    },
+    {
+      "lat": 32.044,
+      "lon": 118.779,
+      "place": "Nanjing",
+      "country_code": "CN",
+      "total": 3,
+      "contributors": 1
+    },
+    {
+      "lat": 50.847,
+      "lon": 4.352,
+      "place": "Brussels",
+      "country_code": "BE",
+      "total": 3,
+      "contributors": 0
+    },
+    {
+      "lat": 49.76,
+      "lon": 6.644,
+      "place": "Trier",
+      "country_code": "DE",
+      "total": 3,
+      "contributors": 1
+    },
+    {
+      "lat": 46.75,
+      "lon": 13.833,
+      "place": "Carinthia",
+      "country_code": "AT",
+      "total": 3,
+      "contributors": 1
+    },
+    {
+      "lat": -33.929,
+      "lon": 18.417,
+      "place": "Cape Town",
+      "country_code": "ZA",
+      "total": 3,
+      "contributors": 0
+    },
+    {
+      "lat": 50.821,
+      "lon": -0.14,
+      "place": "Brighton",
+      "country_code": "GB",
+      "total": 3,
+      "contributors": 1
+    },
+    {
+      "lat": 24,
+      "lon": 53.999,
+      "place": "United Arab Emirates",
+      "country_code": "AE",
+      "total": 3,
+      "contributors": 1
+    },
+    {
+      "lat": 48.102,
+      "lon": -1.66,
+      "place": "Rennes",
+      "country_code": "FR",
+      "total": 3,
+      "contributors": 1
+    },
+    {
+      "lat": 50.735,
+      "lon": 7.102,
+      "place": "Bonn",
+      "country_code": "DE",
+      "total": 2,
+      "contributors": 0
+    },
+    {
+      "lat": 12.977,
+      "lon": 77.59,
+      "place": "Bengaluru",
+      "country_code": "IN",
+      "total": 2,
+      "contributors": 0
+    },
+    {
+      "lat": 41.006,
+      "lon": 28.976,
+      "place": "Istanbul",
+      "country_code": "TR",
+      "total": 2,
+      "contributors": 0
+    },
+    {
+      "lat": 49.816,
+      "lon": 6.13,
+      "place": "Luxembourg",
+      "country_code": "LU",
+      "total": 2,
+      "contributors": 0
+    },
+    {
+      "lat": 65.012,
+      "lon": 25.47,
+      "place": "Oulu",
+      "country_code": "FI",
+      "total": 2,
+      "contributors": 0
+    },
+    {
+      "lat": 51.443,
+      "lon": -2.582,
+      "place": "Bristol",
+      "country_code": "GB",
+      "total": 2,
+      "contributors": 0
+    },
+    {
+      "lat": 49.487,
+      "lon": 31.272,
+      "place": "Ukraine",
+      "country_code": "UA",
+      "total": 2,
+      "contributors": 0
+    },
+    {
+      "lat": 50.637,
+      "lon": 3.064,
+      "place": "Lille",
+      "country_code": "FR",
+      "total": 2,
+      "contributors": 0
+    },
+    {
+      "lat": -13.988,
+      "lon": 33.768,
+      "place": "Lilongwe",
+      "country_code": "MW",
+      "total": 2,
+      "contributors": 0
+    },
+    {
+      "lat": 45.056,
+      "lon": -92.808,
+      "place": "Stillwater",
+      "country_code": "US",
+      "total": 2,
+      "contributors": 0
+    },
+    {
+      "lat": 40.76,
+      "lon": -111.887,
+      "place": "Salt Lake City",
+      "country_code": "US",
+      "total": 2,
+      "contributors": 0
+    },
+    {
+      "lat": 50.062,
+      "lon": 19.937,
+      "place": "Krakow",
+      "country_code": "PL",
+      "total": 2,
+      "contributors": 0
+    },
+    {
+      "lat": 23.974,
+      "lon": 120.982,
+      "place": "Taiwan",
+      "country_code": "TW",
+      "total": 2,
+      "contributors": 0
+    },
+    {
+      "lat": 13.752,
+      "lon": 100.494,
+      "place": "Bangkok",
+      "country_code": "TH",
+      "total": 2,
+      "contributors": 0
+    },
+    {
+      "lat": 47.246,
+      "lon": -122.438,
+      "place": "Tacoma",
+      "country_code": "US",
+      "total": 2,
+      "contributors": 0
+    },
+    {
+      "lat": 35.78,
+      "lon": -78.639,
+      "place": "Raleigh",
+      "country_code": "US",
+      "total": 2,
+      "contributors": 0
+    },
+    {
+      "lat": 50.001,
+      "lon": -86.001,
+      "place": "Ontario",
+      "country_code": "CA",
+      "total": 2,
+      "contributors": 0
+    },
+    {
+      "lat": -27.469,
+      "lon": 153.024,
+      "place": "Brisbane",
+      "country_code": "AU",
+      "total": 2,
+      "contributors": 0
+    },
+    {
+      "lat": 55.67,
+      "lon": 10.333,
+      "place": "Denmark",
+      "country_code": "DK",
+      "total": 2,
+      "contributors": 0
+    },
+    {
+      "lat": 43.236,
+      "lon": 76.946,
+      "place": "Almaty",
+      "country_code": "KZ",
+      "total": 2,
+      "contributors": 0
+    },
+    {
+      "lat": 41.893,
+      "lon": 12.483,
+      "place": "Rome",
+      "country_code": "IT",
+      "total": 2,
+      "contributors": 0
+    },
+    {
+      "lat": -42.035,
+      "lon": 146.637,
+      "place": "Tasmania",
+      "country_code": "AU",
+      "total": 2,
+      "contributors": 0
+    },
+    {
+      "lat": 45.188,
+      "lon": 5.736,
+      "place": "Grenoble",
+      "country_code": "FR",
+      "total": 2,
+      "contributors": 0
+    },
+    {
+      "lat": 45.985,
+      "lon": 24.686,
+      "place": "Romania",
+      "country_code": "RO",
+      "total": 2,
+      "contributors": 0
+    },
+    {
+      "lat": 47.182,
+      "lon": 19.506,
+      "place": "Hungary",
+      "country_code": "HU",
+      "total": 2,
+      "contributors": 0
+    },
+    {
+      "lat": 22.282,
+      "lon": 114.158,
+      "place": "Hong Kong",
+      "country_code": "CN",
+      "total": 2,
+      "contributors": 0
+    },
+    {
+      "lat": 15.927,
+      "lon": 107.965,
+      "place": "Vietnam",
+      "country_code": "VN",
+      "total": 2,
+      "contributors": 0
+    },
+    {
+      "lat": 39.38,
+      "lon": -77.278,
+      "place": "New Market",
+      "country_code": "US",
+      "total": 2,
+      "contributors": 0
+    },
+    {
+      "lat": 50.484,
+      "lon": 23.759,
+      "place": "Żerniki",
+      "country_code": "PL",
+      "total": 2,
+      "contributors": 0
+    },
+    {
+      "lat": 51.341,
+      "lon": 12.375,
+      "place": "Leipzig",
+      "country_code": "DE",
+      "total": 2,
+      "contributors": 0
+    },
+    {
+      "lat": 32.716,
+      "lon": -117.164,
+      "place": "San Diego",
+      "country_code": "US",
+      "total": 2,
+      "contributors": 0
+    },
+    {
+      "lat": 26.254,
+      "lon": 29.268,
+      "place": "Egypt",
+      "country_code": "EG",
+      "total": 2,
+      "contributors": 0
+    },
+    {
+      "lat": 30.044,
+      "lon": 31.236,
+      "place": "Cairo",
+      "country_code": "EG",
+      "total": 2,
+      "contributors": 0
+    },
+    {
+      "lat": 47.219,
+      "lon": -1.554,
+      "place": "Nantes",
+      "country_code": "FR",
+      "total": 2,
+      "contributors": 0
+    },
+    {
+      "lat": -22.911,
+      "lon": -43.209,
+      "place": "Rio de Janeiro",
+      "country_code": "BR",
+      "total": 2,
+      "contributors": 0
+    },
+    {
+      "lat": 52.373,
+      "lon": 4.892,
+      "place": "Amsterdam",
+      "country_code": "NL",
+      "total": 2,
+      "contributors": 0
+    },
+    {
+      "lat": 50.776,
+      "lon": 6.084,
+      "place": "Aachen",
+      "country_code": "DE",
+      "total": 2,
+      "contributors": 0
+    },
+    {
+      "lat": 31.264,
+      "lon": -98.546,
+      "place": "Texas",
+      "country_code": "US",
+      "total": 2,
+      "contributors": 0
+    },
+    {
+      "lat": 29,
+      "lon": 120,
+      "place": "Zhejiang",
+      "country_code": "CN",
+      "total": 2,
+      "contributors": 0
+    },
+    {
+      "lat": 35.677,
+      "lon": 139.764,
+      "place": "Tokyo",
+      "country_code": "JP",
+      "total": 2,
+      "contributors": 0
+    },
+    {
+      "lat": 47.798,
+      "lon": 13.046,
+      "place": "Salzburg",
+      "country_code": "AT",
+      "total": 2,
+      "contributors": 0
+    },
+    {
+      "lat": 53.219,
+      "lon": 6.568,
+      "place": "Groningen",
+      "country_code": "NL",
+      "total": 2,
+      "contributors": 1
+    },
+    {
+      "lat": 41.506,
+      "lon": -90.516,
+      "place": "Moline",
+      "country_code": "US",
+      "total": 2,
+      "contributors": 1
+    },
+    {
+      "lat": 36.167,
+      "lon": -115.148,
+      "place": "Las Vegas",
+      "country_code": "US",
+      "total": 1,
+      "contributors": 0
+    },
+    {
+      "lat": 54.687,
+      "lon": 25.283,
+      "place": "Vilnius",
+      "country_code": "LT",
+      "total": 1,
+      "contributors": 0
+    },
+    {
+      "lat": 47.498,
+      "lon": 19.04,
+      "place": "Budapest",
+      "country_code": "HU",
+      "total": 1,
+      "contributors": 0
+    },
+    {
+      "lat": 36.575,
+      "lon": 139.239,
+      "place": "Japan",
+      "country_code": "JP",
+      "total": 1,
+      "contributors": 0
+    },
+    {
+      "lat": 59.696,
+      "lon": 10.176,
+      "place": "Drammen",
+      "country_code": "NO",
+      "total": 1,
+      "contributors": 0
+    },
+    {
+      "lat": 47.482,
+      "lon": 8.209,
+      "place": "Brugg",
+      "country_code": "CH",
+      "total": 1,
+      "contributors": 0
+    },
+    {
+      "lat": 48.398,
+      "lon": 9.991,
+      "place": "Ulm",
+      "country_code": "DE",
+      "total": 1,
+      "contributors": 0
+    },
+    {
+      "lat": 46.522,
+      "lon": 6.633,
+      "place": "Lausanne",
+      "country_code": "CH",
+      "total": 1,
+      "contributors": 0
+    },
+    {
+      "lat": 19.146,
+      "lon": 72.823,
+      "place": "Mumbai",
+      "country_code": "IN",
+      "total": 1,
+      "contributors": 0
+    },
+    {
+      "lat": 51.449,
+      "lon": 5.45,
+      "place": "Eindhoven",
+      "country_code": "NL",
+      "total": 1,
+      "contributors": 0
+    },
+    {
+      "lat": 54.983,
+      "lon": 73.375,
+      "place": "Omsk",
+      "country_code": "RU",
+      "total": 1,
+      "contributors": 0
+    },
+    {
+      "lat": 53.43,
+      "lon": 14.593,
+      "place": "Szczecin",
+      "country_code": "PL",
+      "total": 1,
+      "contributors": 0
+    },
+    {
+      "lat": 41.15,
+      "lon": -8.61,
+      "place": "Porto",
+      "country_code": "PT",
+      "total": 1,
+      "contributors": 0
+    },
+    {
+      "lat": 44.024,
+      "lon": 21.077,
+      "place": "Serbia",
+      "country_code": "RS",
+      "total": 1,
+      "contributors": 0
+    },
+    {
+      "lat": 51.482,
+      "lon": 7.22,
+      "place": "Bochum",
+      "country_code": "DE",
+      "total": 1,
+      "contributors": 0
+    },
+    {
+      "lat": 51.718,
+      "lon": 8.753,
+      "place": "Paderborn",
+      "country_code": "DE",
+      "total": 1,
+      "contributors": 0
+    },
+    {
+      "lat": 40.836,
+      "lon": 14.249,
+      "place": "Naples",
+      "country_code": "IT",
+      "total": 1,
+      "contributors": 0
+    },
+    {
+      "lat": 34.685,
+      "lon": 33.033,
+      "place": "Limassol",
+      "country_code": "CY",
+      "total": 1,
+      "contributors": 0
+    },
+    {
+      "lat": 45.943,
+      "lon": 4.819,
+      "place": "Reyrieux",
+      "country_code": "FR",
+      "total": 1,
+      "contributors": 0
+    },
+    {
+      "lat": 57.817,
+      "lon": 28.334,
+      "place": "Pskov",
+      "country_code": "RU",
+      "total": 1,
+      "contributors": 0
+    },
+    {
+      "lat": 40.751,
+      "lon": -73.969,
+      "place": "New York",
+      "country_code": "US",
+      "total": 1,
+      "contributors": 0
+    },
+    {
+      "lat": 51.264,
+      "lon": 7.178,
+      "place": "Wuppertal",
+      "country_code": "DE",
+      "total": 1,
+      "contributors": 0
+    },
+    {
+      "lat": 22.573,
+      "lon": 88.364,
+      "place": "Kolkata",
+      "country_code": "IN",
+      "total": 1,
+      "contributors": 0
+    },
+    {
+      "lat": 40.417,
+      "lon": -3.704,
+      "place": "Madrid",
+      "country_code": "ES",
+      "total": 1,
+      "contributors": 0
+    },
+    {
+      "lat": 41.849,
+      "lon": -70.775,
+      "place": "Carver",
+      "country_code": "US",
+      "total": 1,
+      "contributors": 0
+    },
+    {
+      "lat": 30.438,
+      "lon": -84.281,
+      "place": "Tallahassee",
+      "country_code": "US",
+      "total": 1,
+      "contributors": 0
+    },
+    {
+      "lat": 46.12,
+      "lon": 14.815,
+      "place": "Slovenia",
+      "country_code": "SI",
+      "total": 1,
+      "contributors": 0
+    },
+    {
+      "lat": 45.587,
+      "lon": -122.593,
+      "place": "Portland",
+      "country_code": "US",
+      "total": 1,
+      "contributors": 0
+    },
+    {
+      "lat": 19.055,
+      "lon": 72.869,
+      "place": "Mumbai",
+      "country_code": "IN",
+      "total": 1,
+      "contributors": 0
+    },
+    {
+      "lat": 34.054,
+      "lon": -117.261,
+      "place": "Loma Linda",
+      "country_code": "US",
+      "total": 1,
+      "contributors": 0
+    },
+    {
+      "lat": 35.673,
+      "lon": -79.039,
+      "place": "North Carolina",
+      "country_code": "US",
+      "total": 1,
+      "contributors": 0
+    },
+    {
+      "lat": 51.207,
+      "lon": 0.721,
+      "place": "Kent",
+      "country_code": "GB",
+      "total": 1,
+      "contributors": 0
+    },
+    {
+      "lat": 51.358,
+      "lon": -0.299,
+      "place": "Chessington",
+      "country_code": "GB",
+      "total": 1,
+      "contributors": 0
+    },
+    {
+      "lat": 51.681,
+      "lon": 7.819,
+      "place": "Hamm",
+      "country_code": "DE",
+      "total": 1,
+      "contributors": 0
+    },
+    {
+      "lat": 40.772,
+      "lon": -73.984,
+      "place": "New York",
+      "country_code": "US",
+      "total": 1,
+      "contributors": 0
+    },
+    {
+      "lat": 54.57,
+      "lon": 18.393,
+      "place": "Rumia",
+      "country_code": "PL",
+      "total": 1,
+      "contributors": 0
+    },
+    {
+      "lat": 40.587,
+      "lon": -105.077,
+      "place": "Fort Collins",
+      "country_code": "US",
+      "total": 1,
+      "contributors": 0
+    },
+    {
+      "lat": 30.674,
+      "lon": -96.37,
+      "place": "Bryan",
+      "country_code": "US",
+      "total": 1,
+      "contributors": 0
+    },
+    {
+      "lat": 52.865,
+      "lon": -7.979,
+      "place": "Ireland",
+      "country_code": "IE",
+      "total": 1,
+      "contributors": 0
+    },
+    {
+      "lat": 32.563,
+      "lon": -97.142,
+      "place": "Mansfield",
+      "country_code": "US",
+      "total": 1,
+      "contributors": 0
+    },
+    {
+      "lat": 33.686,
+      "lon": -117.826,
+      "place": "Irvine",
+      "country_code": "US",
+      "total": 1,
+      "contributors": 0
+    },
+    {
+      "lat": 44.523,
+      "lon": -89.584,
+      "place": "Stevens Point",
+      "country_code": "US",
+      "total": 1,
+      "contributors": 0
+    },
+    {
+      "lat": 42.482,
+      "lon": -83.083,
+      "place": "Warren",
+      "country_code": "US",
+      "total": 1,
+      "contributors": 0
+    },
+    {
+      "lat": 38.581,
+      "lon": -121.494,
+      "place": "Sacramento",
+      "country_code": "US",
+      "total": 1,
+      "contributors": 0
+    },
+    {
+      "lat": 42.776,
+      "lon": 19.202,
+      "place": "Montenegro",
+      "country_code": "ME",
+      "total": 1,
+      "contributors": 0
+    },
+    {
+      "lat": 47.614,
+      "lon": -122.192,
+      "place": "Bellevue",
+      "country_code": "US",
+      "total": 1,
+      "contributors": 0
+    },
+    {
+      "lat": 39.662,
+      "lon": -8.135,
+      "place": "Portugal",
+      "country_code": "PT",
+      "total": 1,
+      "contributors": 0
+    },
+    {
+      "lat": 39.294,
+      "lon": 35.232,
+      "place": "Turkey",
+      "country_code": "TR",
+      "total": 1,
+      "contributors": 0
+    },
+    {
+      "lat": 25.68,
+      "lon": -100.315,
+      "place": "Monterrey",
+      "country_code": "MX",
+      "total": 1,
+      "contributors": 0
+    },
+    {
+      "lat": -15.794,
+      "lon": -47.883,
+      "place": "Brasília",
+      "country_code": "BR",
+      "total": 1,
+      "contributors": 0
+    },
+    {
+      "lat": 31.173,
+      "lon": -7.336,
+      "place": "Morocco",
+      "country_code": "MA",
+      "total": 1,
+      "contributors": 0
+    },
+    {
+      "lat": 42.315,
+      "lon": 69.588,
+      "place": "Shymkent",
+      "country_code": "KZ",
+      "total": 1,
+      "contributors": 0
+    },
+    {
+      "lat": 46.202,
+      "lon": 6.147,
+      "place": "Geneva",
+      "country_code": "CH",
+      "total": 1,
+      "contributors": 0
+    },
+    {
+      "lat": 36.156,
+      "lon": -95.993,
+      "place": "Tulsa",
+      "country_code": "US",
+      "total": 1,
+      "contributors": 0
+    },
+    {
+      "lat": -44.003,
+      "lon": 170.478,
+      "place": "Earth",
+      "country_code": "NZ",
+      "total": 1,
+      "contributors": 0
+    },
+    {
+      "lat": 46.103,
+      "lon": 11.13,
+      "place": "Provincia di Trento",
+      "country_code": "IT",
+      "total": 1,
+      "contributors": 0
+    },
+    {
+      "lat": 47.153,
+      "lon": 0.653,
+      "place": "Le Pré des Dépends",
+      "country_code": "FR",
+      "total": 1,
+      "contributors": 0
+    },
+    {
+      "lat": 51.752,
+      "lon": -1.258,
+      "place": "Oxford",
+      "country_code": "GB",
+      "total": 1,
+      "contributors": 0
+    },
+    {
+      "lat": 52.476,
+      "lon": -71.826,
+      "place": "Quebec",
+      "country_code": "CA",
+      "total": 1,
+      "contributors": 0
+    },
+    {
+      "lat": 27.771,
+      "lon": -82.634,
+      "place": "Saint Petersburg",
+      "country_code": "US",
+      "total": 1,
+      "contributors": 0
+    },
+    {
+      "lat": 40.739,
+      "lon": -73.975,
+      "place": "New York",
+      "country_code": "US",
+      "total": 1,
+      "contributors": 0
+    },
+    {
+      "lat": 22.816,
+      "lon": 108.318,
+      "place": "Nanning",
+      "country_code": "CN",
+      "total": 1,
+      "contributors": 0
+    },
+    {
+      "lat": 41.838,
+      "lon": -72.466,
+      "place": "Vernon",
+      "country_code": "US",
+      "total": 1,
+      "contributors": 0
+    },
+    {
+      "lat": 47.727,
+      "lon": 10.317,
+      "place": "Kempten (Allgäu)",
+      "country_code": "DE",
+      "total": 1,
+      "contributors": 0
+    },
+    {
+      "lat": 51.779,
+      "lon": -4.805,
+      "place": "Neverland",
+      "country_code": "GB",
+      "total": 1,
+      "contributors": 0
+    },
+    {
+      "lat": 30.812,
+      "lon": 34.859,
+      "place": "Israel",
+      "country_code": "IL",
+      "total": 1,
+      "contributors": 0
+    },
+    {
+      "lat": 40.64,
+      "lon": 22.935,
+      "place": "Thessaloniki",
+      "country_code": "GR",
+      "total": 1,
+      "contributors": 0
+    },
+    {
+      "lat": 52.421,
+      "lon": 10.786,
+      "place": "Wolfsburg",
+      "country_code": "DE",
+      "total": 1,
+      "contributors": 0
+    },
+    {
+      "lat": 53.139,
+      "lon": 8.215,
+      "place": "Oldenburg",
+      "country_code": "DE",
+      "total": 1,
+      "contributors": 0
+    },
+    {
+      "lat": 40.298,
+      "lon": -111.694,
+      "place": "Orem",
+      "country_code": "US",
+      "total": 1,
+      "contributors": 0
+    },
+    {
+      "lat": 52.198,
+      "lon": 0.139,
+      "place": "Cambridge",
+      "country_code": "GB",
+      "total": 1,
+      "contributors": 0
+    },
+    {
+      "lat": 61.669,
+      "lon": 50.835,
+      "place": "Syktyvkar",
+      "country_code": "RU",
+      "total": 1,
+      "contributors": 0
+    },
+    {
+      "lat": 31.311,
+      "lon": 120.621,
+      "place": "Suzhou City",
+      "country_code": "CN",
+      "total": 1,
+      "contributors": 0
+    },
+    {
+      "lat": 39.423,
+      "lon": -111.714,
+      "place": "Utah",
+      "country_code": "US",
+      "total": 1,
+      "contributors": 0
+    },
+    {
+      "lat": 37.822,
+      "lon": -83.56,
+      "place": "Wall Of Denial",
+      "country_code": "US",
+      "total": 1,
+      "contributors": 0
+    },
+    {
+      "lat": 50.45,
+      "lon": 30.524,
+      "place": "Kyiv",
+      "country_code": "UA",
+      "total": 1,
+      "contributors": 0
+    },
+    {
+      "lat": 52.667,
+      "lon": 1,
+      "place": "Norfolk",
+      "country_code": "GB",
+      "total": 1,
+      "contributors": 0
+    },
+    {
+      "lat": 40.724,
+      "lon": -74.22,
+      "place": "DIRTY LAUNDRY EXPRESS",
+      "country_code": "US",
+      "total": 1,
+      "contributors": 0
+    },
+    {
+      "lat": 42.638,
+      "lon": 12.674,
+      "place": "Italy",
+      "country_code": "IT",
+      "total": 1,
+      "contributors": 0
+    },
+    {
+      "lat": 30.66,
+      "lon": 104.063,
+      "place": "Chengdu",
+      "country_code": "CN",
+      "total": 1,
+      "contributors": 0
+    },
+    {
+      "lat": 49.918,
+      "lon": 8.592,
+      "place": "Weiterstadt",
+      "country_code": "DE",
+      "total": 1,
+      "contributors": 0
+    },
+    {
+      "lat": 51.688,
+      "lon": 6.143,
+      "place": "eXcited",
+      "country_code": "DE",
+      "total": 1,
+      "contributors": 0
+    },
+    {
+      "lat": 43.77,
+      "lon": 11.256,
+      "place": "Florence",
+      "country_code": "IT",
+      "total": 1,
+      "contributors": 0
+    },
+    {
+      "lat": 51.514,
+      "lon": 7.465,
+      "place": "Dortmund",
+      "country_code": "DE",
+      "total": 1,
+      "contributors": 0
+    },
+    {
+      "lat": 51.128,
+      "lon": 71.43,
+      "place": "Astana",
+      "country_code": "KZ",
+      "total": 1,
+      "contributors": 0
+    },
+    {
+      "lat": 13.08,
+      "lon": 80.281,
+      "place": "Chennai",
+      "country_code": "IN",
+      "total": 1,
+      "contributors": 0
+    },
+    {
+      "lat": 43.344,
+      "lon": 17.808,
+      "place": "Local community Centar II",
+      "country_code": "BA",
+      "total": 1,
+      "contributors": 0
+    },
+    {
+      "lat": 44.815,
+      "lon": 20.446,
+      "place": "Belgrade",
+      "country_code": "RS",
+      "total": 1,
+      "contributors": 0
+    },
+    {
+      "lat": 55.861,
+      "lon": -4.25,
+      "place": "Glasgow",
+      "country_code": "GB",
+      "total": 1,
+      "contributors": 0
+    },
+    {
+      "lat": 42.765,
+      "lon": 59.598,
+      "place": "Kegeyli",
+      "country_code": "UZ",
+      "total": 1,
+      "contributors": 0
+    },
+    {
+      "lat": 43.353,
+      "lon": -5.88,
+      "place": "Oviedo",
+      "country_code": "ES",
+      "total": 1,
+      "contributors": 0
+    },
+    {
+      "lat": 50.049,
+      "lon": 1.418,
+      "place": "Eu",
+      "country_code": "FR",
+      "total": 1,
+      "contributors": 0
+    },
+    {
+      "lat": 44.95,
+      "lon": -93.093,
+      "place": "Saint Paul",
+      "country_code": "US",
+      "total": 1,
+      "contributors": 0
+    },
+    {
+      "lat": 59.961,
+      "lon": 30.159,
+      "place": "Saint Petersburg",
+      "country_code": "RU",
+      "total": 1,
+      "contributors": 0
+    },
+    {
+      "lat": 59.933,
+      "lon": 30.347,
+      "place": "Saint Petersburg",
+      "country_code": "RU",
+      "total": 1,
+      "contributors": 0
+    },
+    {
+      "lat": 50.082,
+      "lon": 8.242,
+      "place": "Wiesbaden",
+      "country_code": "DE",
+      "total": 1,
+      "contributors": 0
+    },
+    {
+      "lat": 52.075,
+      "lon": 4.27,
+      "place": "The Hague",
+      "country_code": "NL",
+      "total": 1,
+      "contributors": 0
+    },
+    {
+      "lat": 53.442,
+      "lon": -2.232,
+      "place": "Manchester",
+      "country_code": "GB",
+      "total": 1,
+      "contributors": 0
+    },
+    {
+      "lat": 19.321,
+      "lon": -99.151,
+      "place": "Mexico City",
+      "country_code": "MX",
+      "total": 1,
+      "contributors": 0
+    },
+    {
+      "lat": 41.381,
+      "lon": -74.313,
+      "place": "East Coast",
+      "country_code": "US",
+      "total": 1,
+      "contributors": 0
+    },
+    {
+      "lat": 41.876,
+      "lon": -87.624,
+      "place": "Chicago",
+      "country_code": "US",
+      "total": 1,
+      "contributors": 0
+    },
+    {
+      "lat": 37.323,
+      "lon": -122.032,
+      "place": "Cupertino",
+      "country_code": "US",
+      "total": 1,
+      "contributors": 0
+    },
+    {
+      "lat": 46.082,
+      "lon": 13.202,
+      "place": "Udine",
+      "country_code": "IT",
+      "total": 1,
+      "contributors": 0
+    },
+    {
+      "lat": 33.388,
+      "lon": -96.402,
+      "place": "Desert",
+      "country_code": "US",
+      "total": 1,
+      "contributors": 0
+    },
+    {
+      "lat": 35.205,
+      "lon": -92.448,
+      "place": "Arkansas",
+      "country_code": "US",
+      "total": 1,
+      "contributors": 0
+    },
+    {
+      "lat": 37.123,
+      "lon": -78.493,
+      "place": "Virginia",
+      "country_code": "US",
+      "total": 1,
+      "contributors": 0
+    },
+    {
+      "lat": 33.742,
+      "lon": -84.597,
+      "place": "Atlanta, GA",
+      "country_code": "US",
+      "total": 1,
+      "contributors": 0
+    },
+    {
+      "lat": 40.178,
+      "lon": 44.513,
+      "place": "Yerevan",
+      "country_code": "AM",
+      "total": 1,
+      "contributors": 0
+    },
+    {
+      "lat": 42.379,
+      "lon": -72.032,
+      "place": "Massachusetts",
+      "country_code": "US",
+      "total": 1,
+      "contributors": 0
+    },
+    {
+      "lat": 37.531,
+      "lon": 126.976,
+      "place": "국방부",
+      "country_code": "KR",
+      "total": 1,
+      "contributors": 0
+    },
+    {
+      "lat": 35.87,
+      "lon": 128.693,
+      "place": "Daegu",
+      "country_code": "KR",
+      "total": 1,
+      "contributors": 0
+    },
+    {
+      "lat": 36.582,
+      "lon": 127.525,
+      "place": "Cheongju",
+      "country_code": "KR",
+      "total": 1,
+      "contributors": 0
+    },
+    {
+      "lat": -36.987,
+      "lon": 147.507,
+      "place": "Graveyard",
+      "country_code": "AU",
+      "total": 1,
+      "contributors": 0
+    },
+    {
+      "lat": -37.788,
+      "lon": 175.282,
+      "place": "Hamilton City",
+      "country_code": "NZ",
+      "total": 1,
+      "contributors": 0
+    },
+    {
+      "lat": 44.841,
+      "lon": -0.58,
+      "place": "Bordeaux",
+      "country_code": "FR",
+      "total": 1,
+      "contributors": 0
+    },
+    {
+      "lat": 50.087,
+      "lon": 14.421,
+      "place": "Prague",
+      "country_code": "CZ",
+      "total": 1,
+      "contributors": 0
+    },
+    {
+      "lat": 50.978,
+      "lon": 11.029,
+      "place": "Erfurt",
+      "country_code": "DE",
+      "total": 1,
+      "contributors": 0
+    },
+    {
+      "lat": 50.286,
+      "lon": 5.482,
+      "place": "Hotton",
+      "country_code": "BE",
+      "total": 1,
+      "contributors": 0
+    },
+    {
+      "lat": 41.033,
+      "lon": 14.298,
+      "place": "Marcianise",
+      "country_code": "IT",
+      "total": 1,
+      "contributors": 0
+    },
+    {
+      "lat": 45.068,
+      "lon": 7.682,
+      "place": "Turin",
+      "country_code": "IT",
+      "total": 1,
+      "contributors": 0
+    },
+    {
+      "lat": 37.651,
+      "lon": 126.585,
+      "place": "ASIA",
+      "country_code": "KR",
+      "total": 1,
+      "contributors": 0
+    },
+    {
+      "lat": 48.859,
+      "lon": 2.32,
+      "place": "Paris",
+      "country_code": "FR",
+      "total": 1,
+      "contributors": 0
+    },
+    {
+      "lat": 25.774,
+      "lon": -80.194,
+      "place": "Miami",
+      "country_code": "US",
+      "total": 1,
+      "contributors": 0
+    },
+    {
+      "lat": 21.028,
+      "lon": 105.854,
+      "place": "Hà Nội",
+      "country_code": "VN",
+      "total": 1,
+      "contributors": 0
+    },
+    {
+      "lat": 10.779,
+      "lon": 106.692,
+      "place": "War Remnants Museum",
+      "country_code": "VN",
+      "total": 1,
+      "contributors": 0
+    },
+    {
+      "lat": 48.573,
+      "lon": 7.811,
+      "place": "Kehl",
+      "country_code": "DE",
+      "total": 1,
+      "contributors": 0
+    },
+    {
+      "lat": 39.101,
+      "lon": -84.513,
+      "place": "Cincinnati",
+      "country_code": "US",
+      "total": 1,
+      "contributors": 0
+    },
+    {
+      "lat": 14.897,
+      "lon": 100.833,
+      "place": "Thailand",
+      "country_code": "TH",
+      "total": 1,
+      "contributors": 0
+    },
+    {
+      "lat": 54.783,
+      "lon": 9.433,
+      "place": "Flensburg",
+      "country_code": "DE",
+      "total": 1,
+      "contributors": 0
+    },
+    {
+      "lat": 52.199,
+      "lon": 8.714,
+      "place": "Löhne",
+      "country_code": "DE",
+      "total": 1,
+      "contributors": 0
+    },
+    {
+      "lat": 33,
+      "lon": 120,
+      "place": "Jiangsu",
+      "country_code": "CN",
+      "total": 1,
+      "contributors": 0
+    },
+    {
+      "lat": -26.49,
+      "lon": -49.078,
+      "place": "Jaraguá do Sul",
+      "country_code": "BR",
+      "total": 1,
+      "contributors": 0
+    },
+    {
+      "lat": 37.42,
+      "lon": 127.126,
+      "place": "Seongnam-si",
+      "country_code": "KR",
+      "total": 1,
+      "contributors": 0
+    },
+    {
+      "lat": 39.643,
+      "lon": -84.287,
+      "place": "Miamisburg",
+      "country_code": "US",
+      "total": 1,
+      "contributors": 0
+    },
+    {
+      "lat": 32.756,
+      "lon": -117.069,
+      "place": "San Diego",
+      "country_code": "US",
+      "total": 1,
+      "contributors": 0
+    },
+    {
+      "lat": 43.048,
+      "lon": -76.147,
+      "place": "City of Syracuse",
+      "country_code": "US",
+      "total": 1,
+      "contributors": 0
+    },
+    {
+      "lat": 54.523,
+      "lon": 18.604,
+      "place": "Gdynia",
+      "country_code": "PL",
+      "total": 1,
+      "contributors": 0
+    },
+    {
+      "lat": 51.221,
+      "lon": 4.4,
+      "place": "Antwerp",
+      "country_code": "BE",
+      "total": 1,
+      "contributors": 0
+    },
+    {
+      "lat": 43.485,
+      "lon": -71.655,
+      "place": "New Hampshire",
+      "country_code": "US",
+      "total": 1,
+      "contributors": 0
+    },
+    {
+      "lat": -34.61,
+      "lon": -58.389,
+      "place": "Buenos Aires",
+      "country_code": "AR",
+      "total": 1,
+      "contributors": 0
+    },
+    {
+      "lat": 53.546,
+      "lon": -113.491,
+      "place": "Edmonton",
+      "country_code": "CA",
+      "total": 1,
+      "contributors": 0
+    },
+    {
+      "lat": 30.331,
+      "lon": 71.247,
+      "place": "Pakistan",
+      "country_code": "PK",
+      "total": 1,
+      "contributors": 0
+    },
+    {
+      "lat": 34.73,
+      "lon": -86.586,
+      "place": "Huntsville",
+      "country_code": "US",
+      "total": 1,
+      "contributors": 0
+    },
+    {
+      "lat": 51.846,
+      "lon": 5.871,
+      "place": "Nijmegen",
+      "country_code": "NL",
+      "total": 1,
+      "contributors": 0
+    },
+    {
+      "lat": 49.489,
+      "lon": 8.467,
+      "place": "Mannheim",
+      "country_code": "DE",
+      "total": 1,
+      "contributors": 0
+    },
+    {
+      "lat": 4.653,
+      "lon": -74.084,
+      "place": "Bogota",
+      "country_code": "CO",
+      "total": 1,
+      "contributors": 0
+    },
+    {
+      "lat": 30.579,
+      "lon": 114.292,
+      "place": "Wuhan",
+      "country_code": "CN",
+      "total": 1,
+      "contributors": 0
+    },
+    {
+      "lat": 29.872,
+      "lon": 121.55,
+      "place": "Ningbo",
+      "country_code": "CN",
+      "total": 1,
+      "contributors": 0
+    },
+    {
+      "lat": 43.683,
+      "lon": -79.327,
+      "place": "Toronto",
+      "country_code": "CA",
+      "total": 1,
+      "contributors": 0
+    },
+    {
+      "lat": 17.361,
+      "lon": 78.474,
+      "place": "Hyderabad",
+      "country_code": "IN",
+      "total": 1,
+      "contributors": 0
+    },
+    {
+      "lat": 47.423,
+      "lon": 8.567,
+      "place": "Glattpark",
+      "country_code": "CH",
+      "total": 1,
+      "contributors": 0
+    },
+    {
+      "lat": 47.071,
+      "lon": 15.438,
+      "place": "Graz",
+      "country_code": "AT",
+      "total": 1,
+      "contributors": 0
+    },
+    {
+      "lat": 20.046,
+      "lon": 110.196,
+      "place": "Haikou City",
+      "country_code": "CN",
+      "total": 1,
+      "contributors": 0
+    },
+    {
+      "lat": 38.256,
+      "lon": -85.758,
+      "place": "Louisville",
+      "country_code": "US",
+      "total": 1,
+      "contributors": 0
+    },
+    {
+      "lat": 52.232,
+      "lon": 21.007,
+      "place": "Warsaw",
+      "country_code": "PL",
+      "total": 1,
+      "contributors": 0
+    },
+    {
+      "lat": 34.054,
+      "lon": -118.243,
+      "place": "Los Angeles",
+      "country_code": "US",
+      "total": 1,
+      "contributors": 0
+    },
+    {
+      "lat": 56.786,
+      "lon": -4.114,
+      "place": "Scotland",
+      "country_code": "GB",
+      "total": 1,
+      "contributors": 0
+    },
+    {
+      "lat": 48.88,
+      "lon": 2.327,
+      "place": "Liège",
+      "country_code": "FR",
+      "total": 1,
+      "contributors": 0
+    },
+    {
+      "lat": 52.216,
+      "lon": 19.134,
+      "place": "Poland",
+      "country_code": "PL",
+      "total": 1,
+      "contributors": 0
+    },
+    {
+      "lat": 38.995,
+      "lon": 21.988,
+      "place": "Greece",
+      "country_code": "GR",
+      "total": 1,
+      "contributors": 0
+    },
+    {
+      "lat": 56.841,
+      "lon": 24.754,
+      "place": "Latvia",
+      "country_code": "LV",
+      "total": 1,
+      "contributors": 0
+    },
+    {
+      "lat": 27.696,
+      "lon": 68.859,
+      "place": "Sukkur",
+      "country_code": "PK",
+      "total": 1,
+      "contributors": 0
+    },
+    {
+      "lat": 36.638,
+      "lon": 127.696,
+      "place": "South Korea",
+      "country_code": "KR",
+      "total": 1,
+      "contributors": 0
+    },
+    {
+      "lat": 51,
+      "lon": 10,
+      "place": "Europe",
+      "country_code": "",
+      "total": 1,
+      "contributors": 0
+    },
+    {
+      "lat": 51.407,
+      "lon": 5.545,
+      "place": "Erebor",
+      "country_code": "NL",
+      "total": 1,
+      "contributors": 0
+    },
+    {
+      "lat": 18.521,
+      "lon": 73.855,
+      "place": "Pune",
+      "country_code": "IN",
+      "total": 1,
+      "contributors": 0
+    },
+    {
+      "lat": 32.648,
+      "lon": 54.564,
+      "place": "Iran",
+      "country_code": "IR",
+      "total": 1,
+      "contributors": 0
+    },
+    {
+      "lat": 42.678,
+      "lon": -74.485,
+      "place": "Village of Cobleskill",
+      "country_code": "US",
+      "total": 1,
+      "contributors": 0
+    },
+    {
+      "lat": 23.751,
+      "lon": 89.64,
+      "place": "Barbakpur",
+      "country_code": "BD",
+      "total": 1,
+      "contributors": 0
+    },
+    {
+      "lat": 31.199,
+      "lon": 29.895,
+      "place": "Alexandria",
+      "country_code": "EG",
+      "total": 1,
+      "contributors": 0
+    },
+    {
+      "lat": -34.718,
+      "lon": -58.3,
+      "place": "Bernal",
+      "country_code": "AR",
+      "total": 1,
+      "contributors": 0
+    },
+    {
+      "lat": 59.92,
+      "lon": 30.462,
+      "place": "SPb",
+      "country_code": "RU",
+      "total": 1,
+      "contributors": 0
+    },
+    {
+      "lat": 20.254,
+      "lon": -9.24,
+      "place": "Mauritania",
+      "country_code": "MR",
+      "total": 1,
+      "contributors": 0
+    },
+    {
+      "lat": 52.091,
+      "lon": 5.122,
+      "place": "Utrecht",
+      "country_code": "NL",
+      "total": 1,
+      "contributors": 0
+    },
+    {
+      "lat": 49.744,
+      "lon": 15.338,
+      "place": "Czechia",
+      "country_code": "CZ",
+      "total": 1,
+      "contributors": 0
+    },
+    {
+      "lat": 4.016,
+      "lon": 9.148,
+      "place": "Glocal Gaz",
+      "country_code": "CM",
+      "total": 1,
+      "contributors": 0
+    },
+    {
+      "lat": 56.129,
+      "lon": 40.408,
+      "place": "Vladimir",
+      "country_code": "RU",
+      "total": 1,
+      "contributors": 0
+    },
+    {
+      "lat": 51.997,
+      "lon": 4.56,
+      "place": "South Holland",
+      "country_code": "NL",
+      "total": 1,
+      "contributors": 0
+    },
+    {
+      "lat": -22.978,
+      "lon": -49.868,
+      "place": "Ourinhos",
+      "country_code": "BR",
+      "total": 1,
+      "contributors": 0
+    },
+    {
+      "lat": 39.921,
+      "lon": 32.854,
+      "place": "Ankara",
+      "country_code": "TR",
+      "total": 1,
+      "contributors": 0
+    },
+    {
+      "lat": 35.473,
+      "lon": -97.517,
+      "place": "Oklahoma City",
+      "country_code": "US",
+      "total": 1,
+      "contributors": 0
+    },
+    {
+      "lat": 48.449,
+      "lon": 10.221,
+      "place": "Leipheim",
+      "country_code": "DE",
+      "total": 1,
+      "contributors": 0
+    },
+    {
+      "lat": 48.849,
+      "lon": 2.552,
+      "place": "Noisy-le-Grand",
+      "country_code": "FR",
+      "total": 1,
+      "contributors": 0
+    },
+    {
+      "lat": 34.982,
+      "lon": 33.145,
+      "place": "Cyprus",
+      "country_code": "CY",
+      "total": 1,
+      "contributors": 0
+    },
+    {
+      "lat": 34.181,
+      "lon": -118.307,
+      "place": "Burbank",
+      "country_code": "US",
+      "total": 1,
+      "contributors": 0
+    },
+    {
+      "lat": 42.698,
+      "lon": 23.322,
+      "place": "Sofia",
+      "country_code": "BG",
+      "total": 1,
+      "contributors": 0
+    },
+    {
+      "lat": -30.082,
+      "lon": -51.026,
+      "place": "Viamão",
+      "country_code": "BR",
+      "total": 1,
+      "contributors": 0
+    },
+    {
+      "lat": 53.8,
+      "lon": -1.745,
+      "place": "Bradford",
+      "country_code": "GB",
+      "total": 1,
+      "contributors": 0
+    },
+    {
+      "lat": 33.754,
+      "lon": -84.39,
+      "place": "Atlanta",
+      "country_code": "US",
+      "total": 1,
+      "contributors": 1
+    },
+    {
+      "lat": 43.157,
+      "lon": -77.615,
+      "place": "Rochester",
+      "country_code": "US",
+      "total": 1,
+      "contributors": 1
+    },
+    {
+      "lat": 45.421,
+      "lon": -75.69,
+      "place": "Ottawa",
+      "country_code": "CA",
+      "total": 1,
+      "contributors": 1
+    }
+  ]
+}

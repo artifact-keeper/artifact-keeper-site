@@ -8,6 +8,7 @@ import UseCases from '../components/landing/UseCases.astro';
 import Formats from '../components/landing/Formats.astro';
 import Migration from '../components/landing/Migration.astro';
 import Deploy from '../components/landing/Deploy.astro';
+import Community from '../components/landing/Community.astro';
 import FooterCTA from '../components/landing/FooterCTA.astro';
 import Footer from '../components/landing/Footer.astro';
 import { FORMAT_SYMBOLS } from '../lib/landing-svg';
@@ -19,7 +20,8 @@ import { FORMAT_SYMBOLS } from '../lib/landing-svg';
   <Navbar />
   <main id="top">
     <Hero />
-    <BlastRadius detail={false} />
+    <Community />
+    <BlastRadius detail={false} chapter="2" />
     <Gates />
     <UseCases />
     <Formats />
