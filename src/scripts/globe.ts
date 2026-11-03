@@ -19,7 +19,7 @@ const LIGHT = (() => { const v = [-0.5, 0.6, 0.62], n = Math.hypot(...v); return
 // each row's longitude step widened by 1/cos(lat), and alternate rows offset by half
 // a step so the pattern reads as a soft hex grid rather than lines of longitude.
 function buildDots(): { x: Float32Array; y: Float32Array; z: Float32Array; n: number } {
-  const bits = Uint8Array.from(atob(mask.bits), (c) => c.charCodeAt(0));
+  const bits = Uint8Array.from(atob(mask.bits), (c) => c.codePointAt(0) ?? 0);
   const land = (lat: number, lon: number) => {
     const i = Math.min(mask.w - 1, Math.floor(((lon + 180) / 360) * mask.w));
     const j = Math.min(mask.h - 1, Math.floor(((90 - lat) / 180) * mask.h));
@@ -140,7 +140,7 @@ function start(root: HTMLElement, canvas: HTMLCanvasElement, reduce: boolean): v
       const y = Y * ct - z1 * st;
       const lit = x1 * lx + y * ly + z * lz;
       const a = (0.2 + 0.8 * z) * (0.65 + 0.35 * Math.max(0, lit));
-      const b = Math.min(BUCKETS - 1, (a * BUCKETS) | 0);
+      const b = Math.min(BUCKETS - 1, Math.trunc(a * BUCKETS));
       const px = cx + x1 * R, py = cy - y * R, p = paths[b];
       p.moveTo(px + r, py);
       p.arc(px, py, r, 0, Math.PI * 2);
@@ -176,7 +176,10 @@ function start(root: HTMLElement, canvas: HTMLCanvasElement, reduce: boolean): v
     raf = requestAnimationFrame(tick);
   };
   const play = () => { if (!raf && !reduce && visible) { last = 0; raf = requestAnimationFrame(tick); } };
-  const pause = () => { if (raf) cancelAnimationFrame(raf); raf = 0; };
+  const pause = () => {
+    if (raf) { cancelAnimationFrame(raf); }
+    raf = 0;
+  };
 
   resize();
   draw();
