@@ -1,0 +1,154 @@
+---
+title: v1.8.x
+description: Read-path authorization closed across virtual repositories, REST and OCI, 2FA enforcement policy, VS Code extension gateway, the Maven GC data-loss fix, and the 1.7.4 to 1.7.8 security patches
+---
+
+The 1.8 line's centre of gravity is authorization: several read paths were enforcing less than they appeared to, and 1.8.0 closes them across virtual repositories, REST content routes and OCI `/v2`. It also adds a 2FA enforcement policy, a governed VS Code (Open VSX) extension gateway, per-repository egress proxies and the OCI 1.1 Referrers API. The latest patch is **1.8.2**.
+
+This page also covers the **1.7 maintenance patches** (1.7.4, 1.7.6, 1.7.8) that shipped alongside it: all three are security releases, and each carries an operator action beyond upgrading.
+
+For the full commit-level changelogs, see the GitHub releases for [v1.8.0](https://github.com/artifact-keeper/artifact-keeper/releases/tag/v1.8.0), [v1.8.1](https://github.com/artifact-keeper/artifact-keeper/releases/tag/v1.8.1) and [v1.8.2](https://github.com/artifact-keeper/artifact-keeper/releases/tag/v1.8.2).
+
+## Upgrading
+
+:::caution[Read this before you deploy]
+1.8.0 deliberately refuses several requests that previously succeeded, and 1.8.1 fixes a Maven storage-GC bug that **deleted hand-repaired objects on 1.7.0 through 1.8.0**. Check the Maven GC section below before anything else if you have ever inserted rows into `maven_flat_object_owner`.
+:::
+
+### Version numbering: 1.7.5 and 1.7.7 do not exist
+
+- **`v1.7.5` is a dead tag** ([#3429](https://github.com/artifact-keeper/artifact-keeper/issues/3429)). Its Docker Publish failed, so no images or release object were produced; its content shipped unchanged in 1.7.6. Upgrade to 1.8.x from 1.7.6.
+- **`v1.7.7` was never released** ([#3466](https://github.com/artifact-keeper/artifact-keeper/issues/3466)). Its publish failed on scanner CVEs; 1.7.8 supersedes it. On 1.7.6, go straight to 1.7.8 (or to 1.8.1+).
+
+### Maven storage GC could delete hand-repaired objects (1.8.1 / 1.7.8)
+
+If you ever repaired a Maven 404 by inserting a row into `maven_flat_object_owner`, **that object may already be gone** ([#3431](https://github.com/artifact-keeper/artifact-keeper/issues/3431)). Since 1.7.0 the orphan Maven flat-object sweep enumerated its delete candidates from that table, so the row that made a legacy object readable was the row that queued it for deletion: a 200 for one hour, then the bytes were lost.
+
+- **Affected versions: 1.7.0 through 1.8.0.** Before 1.7.3 the candidate scan often never completed on large tables; the 1.7.3 guard rebuild made it complete, so upgrading to 1.7.3+ caused mass reclamation of hand-repaired data. Do not use your version to rule yourself out.
+- **The fix:** the sweep now reclaims only rows the system wrote and can re-derive (`primary_row`, `metadata_files`, `derived_checksum`, `metadata_rollup`, `write_claim`), and it is now **opt-in behind `MAVEN_FLAT_GC_ENABLED`**. Unset, it reports what it would reclaim and deletes nothing.
+- **Recovery** is only possible from storage-side retention (object versioning, a lifecycle noncurrent window, a bucket replica, or a filesystem backup). Each reclaim logged `Storage GC: reclaimed orphaned row-less Maven flat object` at INFO with the `storage_key`, so backend logs reconstruct the key list to restore.
+
+### Six behaviour changes in 1.8.0
+
+Six migrations run on start-up (**197, 198, 200, 201, 202, 205**), all additive; the rollback procedure published with this release still applies.
+
+| Change | Affected if | What to do |
+|---|---|---|
+| **OCI `/v2` pulls enforce the token's `read:artifacts` scope** ([#3408](https://github.com/artifact-keeper/artifact-keeper/issues/3408)) | You mint `write:artifacts`-only tokens and also `docker pull` with them | Add `read:artifacts`. The refusal is `403 DENIED` naming the missing scope |
+| **Cookie-authenticated mutations require `X-Requested-With`** ([#3065](https://github.com/artifact-keeper/artifact-keeper/issues/3065)) | A non-browser client authenticates with the `ak_access_token` cookie, sends `Sec-Fetch-*` or an HTML `Accept`, and makes state-changing calls | Send the header (any value) or switch to a Bearer/API token. Package clients and token auth are unchanged |
+| **REST content paths require the `read` action, not merely any grant** ([#3331](https://github.com/artifact-keeper/artifact-keeper/issues/3331)) | A principal's only grant on a private repository is `write`/`delete`, or a custom role omits `read` | Add `read` to the grant. Built-in roles all carry it |
+| **Reported storage drops sharply on OCI-heavy instances** ([#3286](https://github.com/artifact-keeper/artifact-keeper/issues/3286)) | You watch `unique_bytes` or the storage dashboard | Nothing. Layers were double-counted (one instance reported 3097 GB against 1.14 TiB actual). No bytes are deleted and quota enforcement does not move |
+| **Ungraded scanner findings classify as `high`, not `info`** ([#3306](https://github.com/artifact-keeper/artifact-keeper/issues/3306), [#3296](https://github.com/artifact-keeper/artifact-keeper/issues/3296)) | You scan with OpenSCAP, or Trivy against `UNKNOWN`-severity CVEs | Expect grades to drop on the first rescan. Acknowledge findings or grade your SCAP rules; do not widen the policy threshold |
+| **OpenPGP repository-metadata signatures now expire** ([#1327](https://github.com/artifact-keeper/artifact-keeper/issues/1327)) | You mirror a Debian/RPM repository with tooling that enforces signature expiry | Refresh more often than `SIGNATURE_EXPIRY_SECONDS` (default 7 days), raise it, or set `0` for the old behaviour |
+
+### npm scan results change in 1.8.2
+
+**npm packages published directly to a hosted repository were never actually scanned** ([#3442](https://github.com/artifact-keeper/artifact-keeper/issues/3442)). They reported `completed` with zero findings because the engine cataloged nothing. After 1.8.2 they return real findings at their **next scan**, so promotion rules, quarantine policies and severity thresholds that always passed **can begin to block unchanged artifacts**. Stored results are not rewritten; a zero-finding row is reused by checksum for 24 hours, so pass `bypass_dedup: true` on an immediate rescan. Applies to `npm`, `yarn`, `bower` and `pnpm` formats on `local`/`staging` repositories; the GitHub release has a SQL query to list the affected artifacts before upgrading. If you must upgrade before triaging, temporarily raise `max_severity` or disable the npm promotion rule. PyPI sdists, RubyGems, Cargo and NuGet have the same gap, tracked in [#3603](https://github.com/artifact-keeper/artifact-keeper/issues/3603).
+
+### Shared S3 buckets: proxy-cache keys change in 1.8.2
+
+Two deployments sharing one S3 bucket (separated only by `S3_PREFIX`) shared one proxy cache and served each other's upstream bytes ([#3454](https://github.com/artifact-keeper/artifact-keeper/issues/3454)). Keys are now `proxy-cache/<scope>/<repo_key>/<path>/__content__`, with the scope defaulting to the persistent peer instance id; `PROXY_CACHE_SCOPE` overrides it and there is no value that disables scoping. The existing IAM grant on `proxy-cache/*` still covers it.
+
+- **Expect one cold-cache burst** on first start: every proxy-cache lookup misses once and refetches. No data loss and no action required; old objects are left in place and swept when a repository is deleted.
+- **Very long paths can flip to a hard `400`.** The scope adds 37 bytes against the 1024-byte object-key limit, so paths of roughly 947 to 990 bytes now exceed it. Shorten the repository key or set a short `PROXY_CACHE_SCOPE`.
+
+### Carried over from the 1.7 patches
+
+If you are coming from 1.7.3, these 1.7.4 and 1.7.6 notes also apply (details under [Patches](#patches)):
+
+- **Rotate upstream Basic credentials** on remote repositories whose upstream you do not control (GHSA-78h6-3wp8-2542), and rotate tokens used against `/ext` routes served by a third-party v2 WASM plugin (GHSA-9rqp-mgmw-5879).
+- **Docker Hub pull-through with credentials now authenticates anonymously.** Private Docker Hub images stop being pullable, surfacing as `502 Upstream returned error status 401`, and pulls fall under anonymous rate limits. There is no opt-out through 1.10.x; 1.11.0 adds `oci_trusted_bearer_realms` ([#3591](https://github.com/artifact-keeper/artifact-keeper/issues/3591)), see [v1.11.x](/docs/release-notes/v1-11-0/#upgrading).
+- **Proxy-cache entries admitted before 1.7.4 are not re-verified** (GHSA-qxv7-p3mq-88fv); evict suspect ones with `POST /api/v1/repositories/{key}/cache/invalidate?path=...`.
+- **Multi-hop proxies:** every trusted hop must be listed in `RATE_LIMIT_TRUSTED_PROXY_CIDRS`, as `/32`s (GHSA-8jm4-4x6c-6787).
+- **PyPI PEP 658 metadata is now cached** ([#3300](https://github.com/artifact-keeper/artifact-keeper/issues/3300)). `.whl.metadata` sidecars are classified immutable, so a bad one will not heal on its own; clear it with `POST /api/v1/repositories/{key}/cache/invalidate?path=simple/{project}/{dist}.metadata`.
+
+## Highlights
+
+### Authorization: what a read actually checked
+
+- **Virtual repositories authorize the member set against the caller, across every format** ([#3323](https://github.com/artifact-keeper/artifact-keeper/issues/3323)). An anonymous request to a public virtual over private members previously reached member content unchecked. Roughly forty read paths (PyPI simple index, npm packuments, cargo sparse index, Helm `index.yaml`, NuGet, Conda, CRAN, Hex, RubyGems, Conan, Composer, Pub, Swift, Go, Debian, Alpine, Maven, Hugging Face and more) now resolve members through one caller-aware helper. RPM `repodata` is explicitly not included yet.
+- **REST content paths require the `read` action** ([#3331](https://github.com/artifact-keeper/artifact-keeper/issues/3331)): a `write`-only grant no longer serves bytes through REST.
+- **OCI `/v2` reads enforce the token's action ceiling** ([#3408](https://github.com/artifact-keeper/artifact-keeper/issues/3408)): a push-only CI token is no longer also a read credential.
+- **`GET /v2/_catalog` is scoped to what the caller can read** ([#3355](https://github.com/artifact-keeper/artifact-keeper/issues/3355)), closing the name enumeration tracked from 1.7.3 as [#3269](https://github.com/artifact-keeper/artifact-keeper/issues/3269).
+
+### Supply chain, signing and scanning
+
+- **Alpine/apk signatures are verifiable by real `apk`** ([#3021](https://github.com/artifact-keeper/artifact-keeper/issues/3021)); previously signed repositories failed with `BAD signature`.
+- **Attestation verification authenticates the Rekor `integratedTime`** via the Signed Entry Timestamp, failing closed when it is missing or invalid ([#3231](https://github.com/artifact-keeper/artifact-keeper/issues/3231)); persisted verifications survive re-evaluation ([#3230](https://github.com/artifact-keeper/artifact-keeper/issues/3230)).
+- **Scan verdicts invalidate when the CVE database updates**, not only on scanner upgrades ([#3287](https://github.com/artifact-keeper/artifact-keeper/issues/3287)).
+- **Proxy-cached content gets security visibility and an SBOM** ([#3394](https://github.com/artifact-keeper/artifact-keeper/issues/3394), [#3395](https://github.com/artifact-keeper/artifact-keeper/issues/3395), [#3396](https://github.com/artifact-keeper/artifact-keeper/issues/3396)), and CVE blast radius no longer answers zero for proxied content ([#3397](https://github.com/artifact-keeper/artifact-keeper/issues/3397)).
+- **The proxy scan gate got its documented semantics:** `Info` findings no longer block pulls, and `block_on_policy_violation` / `severity_threshold` are actually enforced ([#3243](https://github.com/artifact-keeper/artifact-keeper/issues/3243), [#3246](https://github.com/artifact-keeper/artifact-keeper/issues/3246)).
+
+### Storage and GC
+
+- **Blob GC's readiness gate can open on registries serving multi-arch images** ([#3285](https://github.com/artifact-keeper/artifact-keeper/issues/3285)). Previously `BLOB_GC_ENABLED=true` was a permanent no-op there; a stuck gate now names up to 20 offending `digest@repository` pairs.
+- **The proxy-cache catalog backfill is bounded** ([#3289](https://github.com/artifact-keeper/artifact-keeper/issues/3289), [#3305](https://github.com/artifact-keeper/artifact-keeper/issues/3305)), removing a contributor to `Server overloaded` 503s under burst.
+
+### New capabilities
+
+- **Governed VS Code extension gateway** ([#3253](https://github.com/artifact-keeper/artifact-keeper/issues/3253)): an Open VSX gallery proxy with rewritten asset URLs and age-gate enforcement.
+- **2FA enforcement policy** ([#2805](https://github.com/artifact-keeper/artifact-keeper/issues/2805)): `disabled`, `required_for_admins` or `required_for_all`, settable via API or pinned with `TOTP_POLICY`. Scoped to interactive local password login only (CI, `docker pull` and SSO/LDAP users are unaffected); unenrolled users get a 10-minute enrollment ticket. `TOTP_POLICY=disabled` plus a restart is the offline break-glass. Backend only: enroll through the API until the web UI supports it.
+- **Per-repository outbound egress proxy** ([#2469](https://github.com/artifact-keeper/artifact-keeper/issues/2469), [#2811](https://github.com/artifact-keeper/artifact-keeper/issues/2811)) with `inherit`, `direct` and `explicit` modes; a per-repository setting overrides the process proxy environment.
+- **OCI 1.1 Referrers API** ([#3108](https://github.com/artifact-keeper/artifact-keeper/issues/3108)), with the `OCI-Subject` response header on subject-carrying pushes.
+- **Admin control over proxy scan verdicts** ([#3244](https://github.com/artifact-keeper/artifact-keeper/issues/3244)) and a discoverable admin break-glass flag in `GET /api/v1/system/config` ([#2571](https://github.com/artifact-keeper/artifact-keeper/issues/2571)).
+
+### Fixes worth knowing about
+
+- **Uploads larger than about 90 MB no longer fail** with a connection reset ([#3263](https://github.com/artifact-keeper/artifact-keeper/issues/3263)): `GLOBAL_REQUEST_TIMEOUT_SECS` no longer applies to byte-transfer routes.
+- **cargo** answers under `/api/cargo` ([#3000](https://github.com/artifact-keeper/artifact-keeper/issues/3000)); **npm** virtuals merge every member's packument ([#2844](https://github.com/artifact-keeper/artifact-keeper/issues/2844)); **Helm** supports plain `helm cm-push` ([#2941](https://github.com/artifact-keeper/artifact-keeper/issues/2941)); **HuggingFace** `hf download` works on Xet-backed models ([#3359](https://github.com/artifact-keeper/artifact-keeper/issues/3359)).
+- **PyPI** virtual fixes ([#2748](https://github.com/artifact-keeper/artifact-keeper/issues/2748), [#3405](https://github.com/artifact-keeper/artifact-keeper/issues/3405), [#3290](https://github.com/artifact-keeper/artifact-keeper/issues/3290), [#3404](https://github.com/artifact-keeper/artifact-keeper/issues/3404)); **Maven** proxied metadata and SNAPSHOT redeploys ([#3265](https://github.com/artifact-keeper/artifact-keeper/issues/3265), [#3270](https://github.com/artifact-keeper/artifact-keeper/issues/3270), [#3357](https://github.com/artifact-keeper/artifact-keeper/issues/3357)); **NuGet** V2 via virtuals and Chocolatey long paths ([#3350](https://github.com/artifact-keeper/artifact-keeper/issues/3350), [#3291](https://github.com/artifact-keeper/artifact-keeper/issues/3291)); **OCI** upload-status probe, spec-shaped errors, `HEAD` blob re-block and schema1 scan-gate coverage ([#3275](https://github.com/artifact-keeper/artifact-keeper/issues/3275), [#3284](https://github.com/artifact-keeper/artifact-keeper/issues/3284), [#3258](https://github.com/artifact-keeper/artifact-keeper/issues/3258), [#3024](https://github.com/artifact-keeper/artifact-keeper/issues/3024)).
+- **Identity:** deleting a user who created migration jobs or signing keys no longer 500s ([#2878](https://github.com/artifact-keeper/artifact-keeper/issues/2878)); federated logins no longer invent colliding placeholder emails ([#3416](https://github.com/artifact-keeper/artifact-keeper/issues/3416)); an OIDC provider seeded from `OIDC_*` env vars no longer outlives its configuration ([#2819](https://github.com/artifact-keeper/artifact-keeper/issues/2819)); browsers get the login page instead of a Basic-auth popup when guest access is off ([#2936](https://github.com/artifact-keeper/artifact-keeper/issues/2936), [#3082](https://github.com/artifact-keeper/artifact-keeper/issues/3082)).
+- **Backups** abort when their durable claim is lost ([#3084](https://github.com/artifact-keeper/artifact-keeper/issues/3084)), and backup/restore now write audit events with a real manifest checksum ([#3011](https://github.com/artifact-keeper/artifact-keeper/issues/3011)).
+
+## Patches
+
+### 1.8.2 (2026-09-01)
+
+No schema migrations. Two upgrade notes (npm scan results and shared S3 buckets) are under [Upgrading](#upgrading).
+
+- **Security:** `wasmtime` bumped to 36.0.14, closing **RUSTSEC-2026-0269** / GHSA-vqjp-4c8c-hfgg (CVSS v4 8.8) in the WASM plugin engine ([#3608](https://github.com/artifact-keeper/artifact-keeper/issues/3608)). Not a live escape (plugins get no preopened directories); 1.7.0 through 1.8.1 carry an affected pin. No operator action.
+- **Security:** backup-archive integrity could be disabled by blanking the manifest checksum ([#3373](https://github.com/artifact-keeper/artifact-keeper/issues/3373)); an empty repository-key segment let an unauthenticated caller make the server buffer a whole upload before the 401 ([#3508](https://github.com/artifact-keeper/artifact-keeper/issues/3508)); `/api/helm` and `/api/cargo` alias routes authorized against the wrong repository ([#3443](https://github.com/artifact-keeper/artifact-keeper/issues/3443)); LDAP login no longer reveals whether a username exists ([#3371](https://github.com/artifact-keeper/artifact-keeper/issues/3371)).
+- **Proxy/remote:** Remote Ansible repositories advertise collection versions again ([#3365](https://github.com/artifact-keeper/artifact-keeper/issues/3365)); images pulled through Remote Docker appear on the Packages page ([#3611](https://github.com/artifact-keeper/artifact-keeper/issues/3611), [#3441](https://github.com/artifact-keeper/artifact-keeper/issues/3441)); Remote Helm no longer serves an empty `index.yaml` ([#3448](https://github.com/artifact-keeper/artifact-keeper/issues/3448)); Maven checksum sidecars are no longer cached for only 5 minutes ([#3459](https://github.com/artifact-keeper/artifact-keeper/issues/3459)).
+- **Scanning:** `POST /{key}/security/proxy-scans/rescan` failures now carry a `code` (`NO_SCANNER_CONFIGURED`, `RESCAN_SCAN_FAILED`, `RESCAN_BUDGET_EXCEEDED`) instead of a generic `503`, and the rescan gets its own timeout budget ([#3455](https://github.com/artifact-keeper/artifact-keeper/issues/3455)).
+- **Supply chain:** published tags are re-verified against cosign signatures ([#3559](https://github.com/artifact-keeper/artifact-keeper/issues/3559)); Docker Hub mirrors are now signed ([#3562](https://github.com/artifact-keeper/artifact-keeper/issues/3562)); release binaries are signed, attested and ship an SBOM ([#3558](https://github.com/artifact-keeper/artifact-keeper/issues/3558)); `:latest` and floating `X.Y` tags move only after the release gate passes ([#3540](https://github.com/artifact-keeper/artifact-keeper/issues/3540)).
+- **Added: silent SSO auto-login** via OIDC `prompt=none` ([#3546](https://github.com/artifact-keeper/artifact-keeper/issues/3546)); disable fleet-wide with `OIDC_SILENT_SSO=false`.
+- **Fixed:** `LIKE` patterns now escape `%`, `_` and `\` on read paths ([#3500](https://github.com/artifact-keeper/artifact-keeper/issues/3500)); native routes no longer refuse entitled reads ([#3452](https://github.com/artifact-keeper/artifact-keeper/issues/3452)); migration-job status and progress reporting fixes ([#3497](https://github.com/artifact-keeper/artifact-keeper/issues/3497), [#3510](https://github.com/artifact-keeper/artifact-keeper/issues/3510), [#3378](https://github.com/artifact-keeper/artifact-keeper/issues/3378), [#3380](https://github.com/artifact-keeper/artifact-keeper/issues/3380)); REST deletes of OCI manifests unwind the OCI index ([#3476](https://github.com/artifact-keeper/artifact-keeper/issues/3476)); the storage-GC tick no longer runs on every replica at once ([#3384](https://github.com/artifact-keeper/artifact-keeper/issues/3384)).
+
+### 1.8.1 (2026-08-21)
+
+No schema migrations.
+
+- **Data-loss fix:** the Maven storage-GC sweep no longer deletes operator-attributed objects and is now opt-in behind `MAVEN_FLAT_GC_ENABLED` ([#3431](https://github.com/artifact-keeper/artifact-keeper/issues/3431)). See [Upgrading](#upgrading).
+- **Security (bundled scanners):** Trivy in the scanner-adapter image rebuilt from v0.74.0 on go1.26.7, clearing 10 HIGH (`CVE-2026-33818`, `CVE-2026-56853`, `-56858`, `-56859`, `-56860`, `-56862`, `CVE-2026-39821`, `CVE-2026-46600`, `CVE-2026-56864`, `CVE-2026-56865`); scanner-adapter published as **1.2.7**. Grype's `x/mod` pair cleared by override. These are third-party tooling CVEs, not reachable through the Artifact Keeper API.
+- **Security:** **RUSTSEC-2026-0258**, `h2` 0.4.13 to 0.4.16, closing an empty-DATA-frame denial of service reachable on the gRPC port before authentication. Take it promptly if gRPC is exposed to untrusted networks.
+- **Fixed:** proxied downloads are counted again for Docker/OCI, cargo, NuGet, Debian, Helm and Go ([#3446](https://github.com/artifact-keeper/artifact-keeper/issues/3446)).
+
+### 1.7.8 (2026-08-21)
+
+The 1.7-line backport of 1.8.1 (supersedes the unpublished 1.7.7, [#3466](https://github.com/artifact-keeper/artifact-keeper/issues/3466)). No schema migrations.
+
+- The same **Maven storage-GC data-loss fix** and `MAVEN_FLAT_GC_ENABLED` opt-in as 1.8.1.
+- The same bundled-scanner CVE fixes; on this line the scanner-adapter is published as **1.2.6**, and its own binary also clears six Go stdlib HIGHs. Two of the Trivy CVEs (`CVE-2026-39821`, `CVE-2026-46600`) had been suppressed in this branch's `.trivyignore`.
+- **RUSTSEC-2026-0258** (`h2` 0.4.16).
+- Proxied downloads are recorded again, but are only shown in the artifact listing from 1.8.x onward.
+
+### 1.7.6 (2026-08-17)
+
+A security release with three advisories and no schema migrations (content intended for the dead `v1.7.5` tag).
+
+- **GHSA-fv45-mwhh-q23r:** percent-encoded repository keys (`/maven/privat%65/...`) bypassed visibility for authenticated callers with no grant. Keys are now percent-decoded before lookup, failing closed with an existence-hiding `404`. Upgrade; nothing else needed.
+- **GHSA-8jm4-4x6c-6787:** rate limiting trusted a client-supplied `X-Forwarded-For` prefix. The resolver now walks the chain right to left and stops at the first untrusted hop, so **every trusted hop must be listed in `RATE_LIMIT_TRUSTED_PROXY_CIDRS`**, as `/32`s rather than subnets real clients can originate from. The default single-Caddy compose deployment needs no change.
+- **GHSA-95fx-g94v-8jqg:** backup restore ingested tables outside the export allowlist. The allowlist still contains `users`, `roles`, `user_roles`, `permission_grants` and `api_tokens`, so this does not make a hostile archive safe: restore only archives you produced ([#3373](https://github.com/artifact-keeper/artifact-keeper/issues/3373), fixed in 1.8.2).
+- **PyPI PEP 658:** `.whl.metadata` sidecars are now cached ([#3300](https://github.com/artifact-keeper/artifact-keeper/issues/3300)) and classified **immutable**, so a bad one will not heal on its own; clear it with `POST /api/v1/repositories/{key}/cache/invalidate?path=simple/{project}/{dist}.metadata`. A missing metadata source returns `404` instead of a permanent `500` ([#3366](https://github.com/artifact-keeper/artifact-keeper/issues/3366)).
+
+### 1.7.4 (2026-08-14)
+
+A security-only release: four advisories, one commit ([#3347](https://github.com/artifact-keeper/artifact-keeper/pull/3347)), no migrations. Three of the four need action beyond upgrading.
+
+- **GHSA-9rqp-mgmw-5879:** any authenticated caller could read a private repository's artifact inventory (paths, versions, sizes, SHA-256) through the `/ext` WASM plugin proxy, and a repository-scoped token could escape its scope there. Affects only instances running a v2 `request-handler` plugin with a non-public repository on its format key. `/ext` now applies the standard gate (`401` anonymous, existence-hiding `404` without a grant). The same fix stops copying client `Authorization`, `Cookie`, `X-API-Key` and similar headers into plugin memory: **if you ran a plugin you did not author, rotate tokens used against its routes.**
+- **GHSA-78h6-3wp8-2542:** stored upstream Basic credentials could be sent to a cross-origin `WWW-Authenticate: Bearer realm=` named by a hostile or compromised upstream. Credential forwarding is now pinned to the configured upstream's origin, and cross-origin attempts are logged at `warn` under the `security` target. **Rotate upstream credentials** where the upstream is not one you trust. Bearer-token upstreams were not exposed.
+- **Docker Hub behaviour change (from GHSA-78h6):** Docker Hub's realm `auth.docker.io` is a different origin from `registry-1.docker.io`, so credentialed Docker Hub remotes now exchange tokens anonymously. Private Docker Hub images fail as `502 Upstream returned error status 401`, and pulls hit anonymous rate limits. Same-origin registries (GHCR, most Harbor, Nexus, Artifactory) are unaffected. No opt-out until 1.11.0 added `oci_trusted_bearer_realms` ([#3591](https://github.com/artifact-keeper/artifact-keeper/issues/3591)).
+- **GHSA-4cw7-mgqj-hgmg:** proxied PyPI simple-index pages passed upstream HTML (including `<script>`, forms and attribute breakouts) through on your origin. Pages are now rebuilt from parsed anchors; no purge needed. The raw generic download route `GET /api/v1/repositories/{key}/download/simple/{project}/` is not yet covered.
+- **GHSA-qxv7-p3mq-88fv:** npm, PyPI and Maven proxy-cache commits are gated on the upstream's published digest. The gate fails open when no digest is published, and its mismatches do **not** increment `ak_proxy_cache_checksum_mismatch_total`. Existing cache entries are not re-verified and never expire; evict suspect paths one at a time with `POST /api/v1/repositories/{key}/cache/invalidate?path=...` (needs `repository:admin`). Note: this gate also stopped Maven release and integrity-pinned npm artifacts from caching at all until **1.9.0** ([#3487](https://github.com/artifact-keeper/artifact-keeper/issues/3487)).
+
+Full GitHub release notes: [v1.8.0](https://github.com/artifact-keeper/artifact-keeper/releases/tag/v1.8.0), [v1.8.1](https://github.com/artifact-keeper/artifact-keeper/releases/tag/v1.8.1), [v1.8.2](https://github.com/artifact-keeper/artifact-keeper/releases/tag/v1.8.2), [v1.7.4](https://github.com/artifact-keeper/artifact-keeper/releases/tag/v1.7.4), [v1.7.6](https://github.com/artifact-keeper/artifact-keeper/releases/tag/v1.7.6), [v1.7.8](https://github.com/artifact-keeper/artifact-keeper/releases/tag/v1.7.8).

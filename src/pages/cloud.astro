@@ -1,0 +1,136 @@
+---
+import LandingLayout from '../layouts/LandingLayout.astro';
+import Navbar from '../components/landing/Navbar.astro';
+import Footer from '../components/landing/Footer.astro';
+import { waitlistForm as wf } from '../data/site';
+import { formats } from '../data/formats';
+---
+
+<LandingLayout
+  title="Artifact Keeper Cloud: join the waitlist"
+  description="artifactkeeper.cloud is the hosted edition of the open-source Artifact Keeper server. It is not live yet: join the waitlist to hear first."
+>
+  <Navbar solid current="/cloud/" />
+
+  <main id="top" class="page cloud">
+    <div class="wrap">
+      <div class="cloud-grid">
+        <div class="cloud-copy">
+          <span class="eyebrow"><span class="pip"></span>Artifact Keeper Cloud <span class="sep">·</span> Coming soon</span>
+          <h1 class="h2">The same registry, run for you.</h1>
+          <p class="lead">artifactkeeper.cloud is the hosted edition of the open-source server: the same {formats.length} formats, the same gates and blast radius, without operating it yourself. It is not live yet. Leave your email and you will hear first.</p>
+
+          <div class="cloud-cards">
+            <div class="card"><h3><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3l8 4v5c0 5-3.5 8-8 9-4.5-1-8-4-8-9V7z"/></svg>Same open-source server</h3><p>The MIT-licensed release you can run yourself, operated for you.</p></div>
+            <div class="card"><h3><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8.6"/><path d="M3.4 12h17.2M12 3.4c3.2 3.6 3.2 13.6 0 17.2M12 3.4c-3.2 3.6-3.2 13.6 0 17.2"/></svg>Your data, your region</h3></div>
+            <div class="card"><h3><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 12h12M12 6l6 6-6 6"/></svg>Migrate in</h3><p>From Artifactory, Nexus or a self-hosted Artifact Keeper.</p></div>
+          </div>
+          <p class="small cloud-note">Cloud is operated separately from the enterprise support OpenTeams provides for self-hosted installations.</p>
+        </div>
+
+        <div class="screen waitlist" id="waitlist">
+          <div class="screen-bar"><span class="dots" aria-hidden="true"><i></i><i></i><i></i></span><span class="crumb">artifactkeeper.cloud <span aria-hidden="true">/</span> <b>waitlist</b></span></div>
+          <form
+            class="wl-form"
+            id="wl-form"
+            action={wf.action}
+            method={wf.method}
+            data-ajax={wf.ajaxAction}
+            data-gw-endpoint={wf.getwaitlist?.endpoint}
+            data-gw-id={wf.getwaitlist?.id}
+            data-gw-source={wf.getwaitlist?.source}
+            data-email={wf.fields.email}
+            data-company={wf.fields.company}
+            data-success={wf.successParam}
+            accept-charset="UTF-8"
+          >
+            <div class="wl-fields">
+              <label for="wl-email">Work email <span class="req" aria-hidden="true">*</span></label>
+              <input id="wl-email" name={wf.fields.email} type="email" autocomplete="email" required placeholder="you@company.com" />
+              <label for="wl-company">Company <span class="opt">optional</span></label>
+              <input id="wl-company" name={wf.fields.company} type="text" autocomplete="organization" />
+              <label class="consent"><input type="checkbox" name="consent" value="yes" required /><span>Email me when Cloud opens and for occasional product updates</span></label>
+              {Object.entries(wf.hidden).map(([k, v]) => <input type="hidden" name={k} value={v} />)}
+              <div class="hp" aria-hidden="true"><label>Leave this empty <input type="text" name={wf.honeypot} tabindex="-1" autocomplete="off" /></label></div>
+              <button class="btn btn-primary" type="submit">Join the waitlist</button>
+            </div>
+            <div class="wl-done" id="wl-done" role="status" aria-live="polite" hidden>
+              <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M7 12.5l3.2 3.2L17 9"/></svg>
+              <div>
+                <b id="wl-done-title">You're on the list.</b>
+                <span id="wl-done-confirm" hidden>Check your inbox to confirm your spot.</span>
+                <span id="wl-done-note">We will email you when Cloud opens.</span>
+              </div>
+            </div>
+            <p class="small">We use your address only for Cloud news and product updates. <a href="/privacy/">Privacy</a></p>
+          </form>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <Footer />
+</LandingLayout>
+
+<script>
+  // Progressive enhancement. Without JS the form is a plain POST to FormSubmit, which redirects
+  // back with ?joined=1. With JS: GetWaitlist when an ID is configured (src/data/site.ts), else the
+  // FormSubmit JSON endpoint; every failure falls back to the plain FormSubmit POST.
+  const form = document.getElementById('wl-form') as HTMLFormElement | null;
+  const done = document.getElementById('wl-done');
+  if (form && done) {
+    const ds = form.dataset;
+    const note = document.getElementById('wl-done-note')!;
+
+    const confirm = document.getElementById('wl-done-confirm')!;
+    // GetWaitlist: "You're on the list. Check your inbox to confirm your spot." (it sends a
+    // verification email). FormSubmit: "You're on the list. We will email you when Cloud opens."
+    const showDone = (viaGetWaitlist = false) => {
+      form.classList.add('done');
+      done.hidden = false;
+      if (viaGetWaitlist) { confirm.hidden = false; note.hidden = true; }
+    };
+    if (ds.success && new URLSearchParams(location.search).has(ds.success)) showDone();
+
+    const viaFormSubmit = async (body: FormData) => {
+      const res = await fetch(ds.ajax!, { method: 'POST', body, headers: { Accept: 'application/json' } });
+      if (!res.ok) throw new Error(String(res.status));
+      const data = await res.json().catch(() => ({}));
+      if (data && (data.success === false || data.success === 'false')) throw new Error(data.message || 'rejected');
+    };
+    const viaGetWaitlist = async (body: FormData) => {
+      const res = await fetch(ds.gwEndpoint!, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+        body: JSON.stringify({
+          email: body.get(ds.email!),
+          waitlist_id: Number.isNaN(Number(ds.gwId)) ? ds.gwId : Number(ds.gwId),
+          metadata: { company: body.get(ds.company!) || '', source: ds.gwSource },
+        }),
+      });
+      if (!res.ok) throw new Error(String(res.status));
+      return res.json();
+    };
+
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      if (!form.reportValidity()) return;
+      const btn = form.querySelector('button[type=submit]') as HTMLButtonElement | null;
+      if (btn) btn.disabled = true;
+      const body = new FormData(form);
+      try {
+        if (ds.gwEndpoint && ds.gwId) {
+          await viaGetWaitlist(body);
+          showDone(true);
+        } else {
+          await viaFormSubmit(body);
+          showDone();
+        }
+      } catch (err) {
+        // Never lose a signup: hand it to FormSubmit with a plain POST (and its redirect).
+        if (btn) btn.disabled = false;
+        HTMLFormElement.prototype.submit.call(form);
+      }
+    });
+  }
+</script>

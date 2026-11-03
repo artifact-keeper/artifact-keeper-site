@@ -1,5 +1,13 @@
 ---
-import "../styles/landing.css";
+import '@fontsource-variable/bricolage-grotesque/opsz.css';
+import '@fontsource/ibm-plex-sans/400.css';
+import '@fontsource/ibm-plex-sans/500.css';
+import '@fontsource/ibm-plex-sans/600.css';
+import '@fontsource/fira-code/400.css';
+import '@fontsource/fira-code/500.css';
+import '@fontsource/fira-code/600.css';
+import '../styles/story.css';
+import { BASE_SPRITE } from '../lib/landing-svg';
 
 interface Props {
   title?: string;
@@ -7,49 +15,59 @@ interface Props {
 }
 
 const {
-  title = "Artifact Keeper — The Open-Source Artifactory Alternative",
-  description = "The open-source Artifactory alternative. Full-featured artifact management with security scanning, 40+ package formats, and enterprise features—all free.",
+  title = "Artifact Keeper: the open-source artifact registry that knows who's exposed",
+  description = 'MIT-licensed artifact registry in Rust. 37 native package formats, gated upstreams, attributed downloads and a CVE blast-radius report.',
 } = Astro.props;
 
 const canonicalURL = new URL(Astro.url.pathname, Astro.site);
+const ogImage = new URL('/og-image.png', Astro.site);
 ---
 
 <!doctype html>
-<html lang="en">
+<html lang="en" data-theme="dark">
   <head>
     <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <meta name="description" content={description} />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <script is:inline>
+      // Set the theme before first paint: saved choice, else dark.
+      (function () {
+        var t = null;
+        try { t = localStorage.getItem('ak-theme'); } catch (e) {}
+        document.documentElement.dataset.theme = t === 'light' || t === 'dark' ? t : 'dark';
+      })();
+    </script>
     <title>{title}</title>
+    <meta name="description" content={description} />
+    <link rel="canonical" href={canonicalURL} />
+    <meta name="theme-color" content="#040B16" />
     <link rel="icon" href="/favicon.ico" sizes="any" />
     <link rel="icon" type="image/png" href="/favicon.png" />
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    <link rel="sitemap" href="/sitemap-index.xml" />
 
     <!-- Open Graph -->
+    <meta property="og:site_name" content="Artifact Keeper" />
     <meta property="og:title" content={title} />
     <meta property="og:description" content={description} />
     <meta property="og:type" content="website" />
     <meta property="og:url" content={canonicalURL} />
-    <meta property="og:image" content={new URL('/og-image.png', Astro.site)} />
+    <meta property="og:image" content={ogImage} />
     <meta property="og:image:width" content="1200" />
     <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content="Artifact Keeper: the artifact registry that knows who's exposed." />
 
-    <!-- Twitter Card -->
+    <!-- Twitter -->
     <meta name="twitter:card" content="summary_large_image" />
     <meta name="twitter:title" content={title} />
     <meta name="twitter:description" content={description} />
-    <meta name="twitter:image" content={new URL('/og-image.png', Astro.site)} />
+    <meta name="twitter:image" content={ogImage} />
   </head>
-  <body class="font-sans text-gray-900 bg-white">
+  <body>
+    <Fragment set:html={BASE_SPRITE} />
     <slot />
     <script>
-      document.querySelectorAll('.js-email-link').forEach((el) => {
-        const name = el.getAttribute('data-name');
-        const domain = el.getAttribute('data-domain');
-        if (name && domain) {
-          el.setAttribute('href', 'mail' + 'to:' + name + '@' + domain);
-        }
-      });
+      import { bindCopyButtons } from '../scripts/copy';
+      bindCopyButtons();
     </script>
   </body>
 </html>

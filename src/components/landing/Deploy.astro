@@ -1,0 +1,55 @@
+---
+import EnterpriseContact from './EnterpriseContact.astro';
+---
+<section class="band" id="deploy" aria-labelledby="ch6">
+  <div class="wrap">
+    <div class="chap-head">
+      <span class="eyebrow"><span class="pip"></span>Chapter 6 <span class="sep">·</span> Deploy</span>
+      <h2 class="h2" id="ch6">Run it anywhere in five minutes.</h2>
+      <p class="lead cloud-line">Prefer not to run it? <a href="/cloud/">Join the Cloud waitlist.</a></p>
+      <p class="lead">One Rust backend and PostgreSQL, with artifacts on a filesystem, S3-compatible, Azure Blob or Google Cloud Storage. OIDC, LDAP and SAML 2.0 for sign-in. Prometheus metrics and OpenTelemetry traces built in.</p>
+    </div>
+    <div class="dep">
+      <div class="screen" id="termbox">
+        <div class="tabs" role="tablist" aria-label="Install method">
+          <button role="tab" id="tab-compose" aria-controls="t-compose" aria-selected="true">Docker Compose</button>
+          <button role="tab" id="tab-helm" aria-controls="t-helm" aria-selected="false" tabindex="-1">Helm</button>
+          <button role="tab" id="tab-cli" aria-controls="t-cli" aria-selected="false" tabindex="-1">CLI</button>
+          <span class="sp"></span>
+          <button class="copy" type="button" id="copyterm"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a1 1 0 0 1 1-1h9"/></svg><span>Copy</span></button>
+        </div>
+<pre class="term" role="tabpanel" id="t-compose" aria-labelledby="tab-compose" tabindex="0"><span class="c"># Quickstart installer: generates secrets, downloads the files, starts the stack</span>
+<span class="pr">$ </span><span class="cmd">curl -fsSL https://raw.githubusercontent.com/artifact-keeper/artifact-keeper/main/scripts/install.sh | bash</span>
+
+<span class="c"># Already have docker-compose.yml and a .env with your secrets?</span>
+<span class="pr">$ </span><span class="cmd">docker compose up -d</span>
+
+<span class="c"># Readiness check (DB + migrations + setup)</span>
+<span class="pr">$ </span><span class="cmd">curl http://localhost:30080/readyz</span>
+
+<span class="c"># Then open http://localhost:30080</span></pre>
+<pre class="term" role="tabpanel" id="t-helm" aria-labelledby="tab-helm" tabindex="0" hidden><span class="pr">$ </span><span class="cmd">helm repo add artifact-keeper https://artifact-keeper.github.io/artifact-keeper-iac/</span>
+<span class="pr">$ </span><span class="cmd">helm repo update</span>
+
+<span class="c"># Install with default values (dev)</span>
+<span class="pr">$ </span><span class="cmd">helm install ak artifact-keeper/artifact-keeper \
+  --namespace artifact-keeper \
+  --create-namespace</span>
+
+<span class="c"># Production: see the Helm guide for the values-production overlay</span></pre>
+<pre class="term" role="tabpanel" id="t-cli" aria-labelledby="tab-cli" tabindex="0" hidden><span class="pr">$ </span><span class="cmd">brew install artifact-keeper/tap/ak</span>
+<span class="pr">$ </span><span class="cmd">ak instance add myserver https://registry.company.com</span>
+<span class="pr">$ </span><span class="cmd">ak auth login</span>
+
+<span class="c"># Configure every package manager in this project</span>
+<span class="pr">$ </span><span class="cmd">ak setup auto</span>
+<span class="pr">$ </span><span class="cmd">ak repo list</span></pre>
+      </div>
+      <div class="dep-links">
+        <a class="card dep-link" href="/docs/deployment/docker/"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="10" width="18" height="10" rx="2"/><path d="M7 10V6h4v4M11 10V6h4v4"/></svg><span>Docker Compose guide</span><span class="arr" aria-hidden="true">→</span></a>
+        <a class="card dep-link" href="/docs/deployment/helm/"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2.6l8.2 4.7v9.4L12 21.4l-8.2-4.7V7.3z"/><circle cx="12" cy="12" r="3"/></svg><span>Helm chart</span><span class="arr" aria-hidden="true">→</span></a>
+        <div class="card dep-ent"><EnterpriseContact logoHeight="28px" /></div>
+      </div>
+    </div>
+  </div>
+</section>

@@ -1,0 +1,37 @@
+---
+// Chapter 3 teaser. The full animated strips live on /use-cases/ (UseCaseStrips.astro).
+import { useCases, LAB_NOTE } from '../../data/use-cases';
+---
+<section class="band" id="usecases" aria-labelledby="ch3u">
+  <div class="wrap">
+    <div class="chap-head">
+      <span class="eyebrow"><span class="pip"></span>Chapter 3 <span class="sep">·</span> Use cases</span>
+      <p class="kicker">From mirror to metal, from channel to agent.</p>
+      <h2 class="h2" id="ch3u">Three things teams run through it.</h2>
+      <p class="lead">Each one is a recorded walkthrough. Same registry, same gates, five stages, one refusal that matters.</p>
+    </div>
+    <div class="uct" id="uct">
+      {useCases.map((c) => {
+        const [value, label] = c.stats[c.headline];
+        return (
+          <article class="card uct-card">
+            <div class="uct-n">use case {c.n}</div>
+            <h3>{c.title}</h3>
+            <ol class="mini" aria-label="Five stages">
+              {c.stages.map(([name], i) => (
+                <li style={`--i:${i}`} class:list={[{ rf: i === c.refuse }]}>
+                  <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M7 12.5l3.2 3.2L17 9"/></svg>
+                  <span>{name}</span>
+                </li>
+              ))}
+            </ol>
+            <p class="uct-claim">{c.claim}</p>
+            <div class="uct-stat"><b>{value}</b><span>{label}</span></div>
+            <a class="more" href={`/use-cases/#${c.slug}`}>See the flow →</a>
+          </article>
+        );
+      })}
+    </div>
+    <p class="uc-note uct-note">{LAB_NOTE}</p>
+  </div>
+</section>

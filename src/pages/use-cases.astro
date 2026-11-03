@@ -1,0 +1,35 @@
+---
+import LandingLayout from '../layouts/LandingLayout.astro';
+import Navbar from '../components/landing/Navbar.astro';
+import Footer from '../components/landing/Footer.astro';
+import UseCaseStrips from '../components/landing/UseCaseStrips.astro';
+---
+
+<LandingLayout
+  title="Use cases: three recorded walkthroughs | Artifact Keeper"
+  description="Rocky Linux on bare metal, a private conda channel for pixi and AI coding agents, each run through one Artifact Keeper registry with its gates."
+>
+  <Navbar solid current="/use-cases/" />
+  <main id="top">
+    <section class="band sub" aria-labelledby="uc-h1">
+      <div class="wrap">
+        <div class="chap-head">
+          <span class="eyebrow"><span class="pip"></span>Use cases <span class="sep">·</span> Recorded walkthroughs</span>
+          <h1 class="h2" id="uc-h1">Three things teams run through it.</h1>
+          <p class="lead">Each one is a recorded walkthrough. Same registry, same gates, five stages, one refusal that matters.</p>
+        </div>
+        <UseCaseStrips />
+      </div>
+    </section>
+  </main>
+  <Footer />
+</LandingLayout>
+
+<script>
+  import { ScrollTrigger } from 'gsap/ScrollTrigger';
+  import { initUseCaseStrips } from '../scripts/use-case-strips';
+  if (!window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+    initUseCaseStrips();
+    if (document.fonts && document.fonts.ready) document.fonts.ready.then(() => ScrollTrigger.refresh());
+  }
+</script>

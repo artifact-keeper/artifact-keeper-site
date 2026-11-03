@@ -1,0 +1,29 @@
+---
+import { MARQUEE } from '../../lib/landing-svg';
+import { formats, clientAliases } from '../../data/formats';
+---
+<section class="band alt" id="formats" aria-labelledby="ch3">
+  <div class="wrap">
+    <div class="fmt-head">
+      <div class="chap-head">
+        <span class="eyebrow"><span class="pip"></span>Chapter 4 <span class="sep">·</span> One front door</span>
+        <p class="kicker">Every format your company ships.</p>
+        <h2 class="h2" id="ch3">{formats.length} native formats. {clientAliases} client aliases. One registry.</h2>
+        <p class="lead">Each format speaks its native wire protocol. Your teams keep their clients. Maven and Gradle, npm, Yarn and pnpm, pip and Poetry, cargo, go mod, Docker and Podman, helm, apt and dnf.</p>
+      </div>
+      <div class="bigcount" aria-hidden="true">
+        <div><b data-count={formats.length}>{formats.length}</b><span>native formats</span></div>
+        <div><b data-count={clientAliases}>{clientAliases}</b><span>client aliases</span></div>
+      </div>
+    </div>
+  </div>
+  <div class="mq" id="mq" aria-label="Supported formats">
+    <Fragment set:html={MARQUEE} />
+  </div>
+  <div class="wrap">
+    <div class="fmt-foot">
+      <div class="card"><h3>Need another? Write a WASM plugin.</h3><p>Any language that compiles to WebAssembly. Implement the WIT <code>FormatHandler</code> contract, install it, and it serves like a built-in format.</p></div>
+      <div class="card"><h3>50+ clients, unchanged.</h3><div class="clients"><code>gradle</code><code>yarn</code><code>pnpm</code><code>poetry</code><code>twine</code><code>dotnet</code><code>bundler</code><code>buildx</code><code>oras</code><code>tofu</code><code>zypper</code><code>mamba</code><code>buf</code><code>huggingface_hub</code><code>git lfs</code></div></div>
+    </div>
+  </div>
+</section>

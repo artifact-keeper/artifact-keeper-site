@@ -1,0 +1,27 @@
+---
+// Enterprise support call to action. The OpenTeams link always renders; the address line
+// renders only once contacts.enterprise is set in src/data/site.ts.
+import { contacts } from '../../data/site';
+import OpenTeamsLogo from './OpenTeamsLogo.astro';
+
+interface Props {
+  /** "card" sits inside a card (Deploy chapter); "inline" is a centred line (closing CTA). */
+  variant?: 'card' | 'inline';
+  /** CSS height of the OpenTeams logo; OpenTeamsLogo's default when omitted. */
+  logoHeight?: string;
+}
+const { variant = 'card', logoHeight } = Astro.props;
+const label = contacts.openteams.replace(/^https?:\/\//, '').replace(/\/$/, '');
+---
+<div class:list={['ent', variant]}>
+  <a class="ot-mark" href={contacts.openteams} target="_blank" rel="noopener"><OpenTeamsLogo height={logoHeight} /></a>
+  <p>Enterprise support, migration and managed hosting.</p>
+  <a class="more" href={contacts.openteams} target="_blank" rel="noopener">{label} →</a>
+  {contacts.enterprise && (
+    <div class="mail">
+      <code>{contacts.enterprise}</code>
+      <button class="copy" type="button" data-copy={contacts.enterprise}><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a1 1 0 0 1 1-1h9"/></svg><span>Copy</span></button>
+      <a class="mailto" href={`mailto:${contacts.enterprise}`}>Email</a>
+    </div>
+  )}
+</div>

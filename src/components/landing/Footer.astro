@@ -1,35 +1,35 @@
 ---
-const navLinks = [
-  { label: "Docs", href: "/docs/" },
-  { label: "GitHub", href: "https://github.com/artifact-keeper" },
-  { label: "Demo", href: "https://demo.artifactkeeper.com" },
-  { label: "Privacy", href: "/privacy" },
-];
+import { contacts, release } from '../../data/site';
+import OpenTeamsLogo from './OpenTeamsLogo.astro';
 
-const year = new Date().getFullYear();
+interface Props {
+  /** True on the home page, where the brand link scrolls back to the top. */
+  home?: boolean;
+}
+const { home = false } = Astro.props;
 ---
-
-<footer class="bg-gray-900 text-gray-400 py-8">
-  <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
-    <p class="text-white font-bold text-lg mb-4">Artifact Keeper</p>
-
-    <nav class="flex items-center justify-center gap-6 mb-4">
-      {navLinks.map((link) => (
-        <a
-          href={link.href}
-          class="text-gray-400 hover:text-white transition-colors duration-200 text-sm"
-        >
-          {link.label}
-        </a>
-      ))}
-    </nav>
-
-    <p class="text-sm mb-2">MIT Licensed</p>
-    <p class="text-xs text-gray-500 mb-1">Built with Rust and TypeScript</p>
-    <p class="text-xs text-gray-600 mb-1">Security scanning by <a href="https://trivy.dev/" class="hover:text-gray-400">Trivy</a> &amp; <a href="https://dependencytrack.org/" class="hover:text-gray-400">OWASP Dependency-Track</a>. Search by <a href="https://opensearch.org/" class="hover:text-gray-400">OpenSearch</a>. Database by <a href="https://www.postgresql.org/" class="hover:text-gray-400">PostgreSQL</a>.</p>
-    <p class="text-xs text-gray-500">&copy; {year} Artifact Keeper. All rights reserved.</p>
-    <p class="text-xs text-gray-600 mt-3">
-      "JFrog" and "Artifactory" are trademarks of JFrog Ltd. Artifact Keeper is not affiliated with or endorsed by JFrog.
-    </p>
+<footer>
+  <div class="wrap foot">
+    <div>
+      <a class="brand" href={home ? '#top' : '/'}><svg viewBox="0 0 512 512" aria-hidden="true"><use href="#ak-shield"/></svg><span>Artifact Keeper</span></a>
+      <nav aria-label="Footer" style="margin-top:20px"><ul>
+        <li><a href="/docs/">Docs</a></li>
+        <li><a href="/security/">Security</a></li>
+        <li><a href="/use-cases/">Use cases</a></li>
+        <li><a href="/migrate/">Migrate</a></li>
+        <li><a href="https://github.com/artifact-keeper/artifact-keeper" target="_blank" rel="noopener">GitHub</a></li>
+        <li><a href="https://demo.artifactkeeper.com" target="_blank" rel="noopener">Demo</a></li>
+        <li><a href="/cloud/">Cloud <span class="nav-pill">waitlist</span></a></li>
+        <li><a href={contacts.openteams} target="_blank" rel="noopener">Support</a></li>
+        <li><a href="/privacy/">Privacy</a></li>
+      </ul></nav>
+      <a class="ot-by" href={contacts.openteams} target="_blank" rel="noopener"><span>Enterprise support by</span><OpenTeamsLogo height="18px" /></a>
+      <div class="legal">
+        <p>Community and product questions: <span class="addr">{contacts.support}</span></p>
+        <p>Scanning by Trivy, Grype, OpenSCAP and OWASP Dependency-Track. Search by OpenSearch. Database by PostgreSQL.</p>
+        <p>Format logos are Simple Icons (CC0); the marks belong to their owners. JFrog and Artifactory are trademarks of JFrog Ltd; Nexus is a trademark of Sonatype. Artifact Keeper is not affiliated.</p>
+      </div>
+    </div>
+    <div class="ver">{release.version} · {release.date}<br>MIT licensed</div>
   </div>
 </footer>

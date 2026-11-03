@@ -45,13 +45,13 @@ Since v1.3.0, any request that does not match a known route also collapses to a 
 
 Request rate over the last 5 minutes:
 
-```promql
+```text
 rate(ak_http_requests_total[5m])
 ```
 
 95th percentile latency by path:
 
-```promql
+```text
 histogram_quantile(0.95, rate(ak_http_request_duration_seconds_bucket[5m]))
 ```
 
@@ -69,13 +69,13 @@ Track upload and download activity across repositories and package formats.
 
 Upload rate by format over the last hour:
 
-```promql
+```text
 sum(rate(ak_artifact_uploads_total[1h])) by (format)
 ```
 
 Average upload size by format:
 
-```promql
+```text
 rate(ak_artifact_upload_size_bytes_sum[5m]) / rate(ak_artifact_upload_size_bytes_count[5m])
 ```
 
@@ -111,7 +111,7 @@ When `ak_db_pool_connections_active` approaches `ak_db_pool_connections_max`, ne
 
 Pool utilization percentage:
 
-```promql
+```text
 ak_db_pool_connections_active / ak_db_pool_connections_max * 100
 ```
 
@@ -132,13 +132,13 @@ Track background operations including backups, security scanning, webhooks, and 
 
 Backup failure rate:
 
-```promql
+```text
 rate(ak_backup_operations_total{status="failure"}[1h])
 ```
 
 Average scan duration by scanner:
 
-```promql
+```text
 rate(ak_security_scan_duration_seconds_sum[5m]) / rate(ak_security_scan_duration_seconds_count[5m])
 ```
 
