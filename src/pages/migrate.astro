@@ -1,0 +1,47 @@
+---
+import LandingLayout from '../layouts/LandingLayout.astro';
+import Navbar from '../components/landing/Navbar.astro';
+import Footer from '../components/landing/Footer.astro';
+import MigrationDetail from '../components/landing/MigrationDetail.astro';
+import EnterpriseContact from '../components/landing/EnterpriseContact.astro';
+---
+
+<LandingLayout
+  title="Migrate from Artifactory or Nexus | Artifact Keeper"
+  description="Point Artifact Keeper at Artifactory or Nexus. The built-in tool copies artifacts and metadata read-only, resumes interrupted runs and verifies before you cut over."
+>
+  <Navbar solid current="/migrate/" />
+  <main id="top">
+    <section class="band sub" id="migrate" aria-labelledby="mg-h1">
+      <div class="wrap">
+        <div class="chap-head">
+          <span class="eyebrow"><span class="pip"></span>Migration</span>
+          <p class="kicker">Leave Artifactory without a migration project.</p>
+          <h1 class="h2" id="mg-h1">Point it at Artifactory or Nexus. It copies, you verify.</h1>
+        </div>
+        <MigrationDetail />
+        <nav class="readmore" aria-label="Migration guides">
+          <span>Read the guides</span>
+          <ul>
+            <li><a href="/docs/migration/from-artifactory/">Migrating from Artifactory</a></li>
+            <li><a href="/docs/migration/from-nexus/">Migrating from Nexus</a></li>
+          </ul>
+        </nav>
+        <div class="mig-help">
+          <p class="mig-help-q">Need help planning a migration?</p>
+          <EnterpriseContact logoHeight="28px" />
+        </div>
+      </div>
+    </section>
+  </main>
+  <Footer />
+</LandingLayout>
+
+<script>
+  import { ScrollTrigger } from 'gsap/ScrollTrigger';
+  import { initMigration } from '../scripts/migration';
+  if (!window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+    initMigration();
+    if (document.fonts && document.fonts.ready) document.fonts.ready.then(() => ScrollTrigger.refresh());
+  }
+</script>

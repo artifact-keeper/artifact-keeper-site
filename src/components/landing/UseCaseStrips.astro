@@ -1,0 +1,26 @@
+---
+// The three full, animated use-case strips (story prototype, chapter 3), shown on /use-cases/.
+// Each strip is followed by an optional recording when public/use-cases/<slug>.mp4 exists.
+import fs from 'node:fs';
+import path from 'node:path';
+import { useCases } from '../../data/use-cases';
+import { useCaseStrip } from '../../lib/landing-svg';
+
+const strips = useCases.map((c) => ({
+  c,
+  html: useCaseStrip(c),
+  video: fs.existsSync(path.join(process.cwd(), 'public', 'use-cases', `${c.slug}.mp4`)) ? `/use-cases/${c.slug}.mp4` : null,
+}));
+---
+<div class="ucs">
+  {strips.map(({ c, html, video }) => (
+    <div class="uc-wrap">
+      <Fragment set:html={html} />
+      {video && (
+        <figure class="uc-video">
+          <video controls preload="none" playsinline src={video} aria-label={`Recording: ${c.title}`}></video>
+        </figure>
+      )}
+    </div>
+  ))}
+</div>

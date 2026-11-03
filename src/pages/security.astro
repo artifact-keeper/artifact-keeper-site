@@ -1,0 +1,105 @@
+---
+import LandingLayout from '../layouts/LandingLayout.astro';
+import Navbar from '../components/landing/Navbar.astro';
+import Footer from '../components/landing/Footer.astro';
+import GatesDetail from '../components/landing/GatesDetail.astro';
+import BlastRadius from '../components/landing/BlastRadius.astro';
+
+// "The rest of the toolbox": facts from FACTS.md and src/content/docs/docs/security/ only.
+const toolbox = [
+  {
+    title: 'Artifact signing',
+    body: 'GPG/RSA signatures on repository metadata: Debian Release, RPM repomd, Alpine APKINDEX and Conda repodata.',
+    code: 'Release.gpg · repomd.xml.asc',
+    href: '/docs/security/signing/',
+    icon: '<path d="M4 20h16M6 16l9.5-9.5a2.1 2.1 0 0 1 3 3L9 19H6z"/>',
+  },
+  {
+    title: 'SBOM and Dependency-Track',
+    body: 'CycloneDX SBOMs for stored artifacts, with OWASP Dependency-Track for SBOM analysis and policy.',
+    code: 'bomFormat: CycloneDX',
+    href: '/docs/security/sbom/',
+    icon: '<path d="M5 4h10l4 4v12H5z"/><path d="M15 4v4h4M8 12h8M8 16h5"/>',
+  },
+  {
+    title: 'Health scores',
+    body: 'Every artifact scored 0 to 100 and graded A to F. Security 40%, quality 25%, license 20%, metadata 15%.',
+    code: 'A 90–100 · B 75–89 · C 50–74',
+    href: '/docs/security/health-scores/',
+    icon: '<path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/>',
+  },
+  {
+    title: 'Audit log',
+    body: 'Every authorization denial is recorded as PERMISSION_DENIED, so blocked attempts leave a trail too.',
+    code: 'GET /api/v1/admin/audit?action=PERMISSION_DENIED',
+    href: '/docs/security/audit-log/',
+    icon: '<path d="M4 6h16M4 12h10M4 18h6"/>',
+  },
+  {
+    title: 'Identity',
+    body: 'OIDC, LDAP, SAML 2.0, local accounts and scoped API tokens, side by side. RBAC checks read, write and delete separately.',
+    code: 'OIDC · LDAP · SAML 2.0 · local',
+    href: '/docs/advanced/auth/',
+    icon: '<circle cx="12" cy="8" r="4"/><path d="M4 21c1.5-4 4.5-6 8-6s6.5 2 8 6"/>',
+  },
+  {
+    title: 'Red-team suite',
+    body: '15 automated tests in the repository: auth bypass, path traversal, SSRF, SQL injection, WASM sandbox, metrics auth and more.',
+    code: './scripts/redteam/run-all.sh',
+    href: '/docs/security/red-team/',
+    icon: '<path d="M12 3l8 4v5c0 5-3.5 8-8 9-4.5-1-8-4-8-9V7z"/><path d="M9 12l2 2 4-4"/>',
+  },
+];
+---
+
+<LandingLayout
+  title="Security: gates, blast radius and the rest of the toolbox | Artifact Keeper"
+  description="Six gates between the internet and your build, a CVE blast-radius report, signing, SBOMs, health scores, an audit log and a red-team suite, all in the open-source registry."
+>
+  <Navbar solid current="/security/" />
+  <main id="top">
+    <section class="band sub sec-intro" aria-labelledby="sec-h1">
+      <div class="wrap">
+        <div class="chap-head">
+          <span class="eyebrow"><span class="pip"></span>Security</span>
+          <h1 class="h2" id="sec-h1">From the first upstream fetch to the day the CVE drops.</h1>
+          <p class="lead">Every control below is part of the registry, not an add-on. Gate what comes in, grade what you hold, and know exactly who pulled what when a vulnerability lands.</p>
+        </div>
+      </div>
+    </section>
+    <GatesDetail chapter={null} />
+    <BlastRadius id="blast-radius" chapter={null} />
+    <section class="band alt" id="toolbox" aria-labelledby="tb-h2">
+      <div class="wrap">
+        <div class="chap-head">
+          <span class="eyebrow"><span class="pip"></span>Toolbox</span>
+          <h2 class="h2" id="tb-h2">The rest of the toolbox.</h2>
+        </div>
+        <div class="toolbox">
+          {toolbox.map((t) => (
+            <article class="card">
+              <h3><svg viewBox="0 0 24 24" aria-hidden="true" set:html={t.icon} />{t.title}</h3>
+              <p>{t.body}</p>
+              <code class="tb-code">{t.code}</code>
+              <a class="more" href={t.href}>Read the docs →</a>
+            </article>
+          ))}
+        </div>
+      </div>
+    </section>
+  </main>
+  <Footer />
+</LandingLayout>
+
+<script>
+  import { ScrollTrigger } from 'gsap/ScrollTrigger';
+  import { initGates } from '../scripts/gates';
+  import { initBlastRadius } from '../scripts/blast-radius';
+  const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  initBlastRadius(reduce);
+  if (!reduce) {
+    initGates();
+    if (document.fonts && document.fonts.ready) document.fonts.ready.then(() => ScrollTrigger.refresh());
+    window.addEventListener('load', () => ScrollTrigger.refresh());
+  }
+</script>

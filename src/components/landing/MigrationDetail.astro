@@ -1,0 +1,62 @@
+---
+// The full migration chapter (story prototype, chapter 6), shown on /migrate/.
+import { MIGFLOW } from '../../lib/landing-svg';
+import { compareRows, compareColumns, compareAsOf } from '../../data/compare';
+---
+    <div class="mig">
+      <div>
+        <div class="stages" id="stages" aria-hidden="true">
+          <div class="bar"><i></i></div>
+          <div class="stg"><span class="dot"><svg viewBox="0 0 24 24"><path d="M5 12l5 5 9-10"/></svg></span><b>Connect</b></div>
+          <div class="stg"><span class="dot"><svg viewBox="0 0 24 24"><path d="M5 12l5 5 9-10"/></svg></span><b>Select</b></div>
+          <div class="stg"><span class="dot"><svg viewBox="0 0 24 24"><path d="M5 12l5 5 9-10"/></svg></span><b>Run</b></div>
+          <div class="stg"><span class="dot"><svg viewBox="0 0 24 24"><path d="M5 12l5 5 9-10"/></svg></span><b>Verify</b></div>
+        </div>
+        <ol class="steps">
+          <li><span class="n">01</span><div><h3>Connect</h3><p>Add an Artifactory or Nexus source with a token. The tool only reads from it.</p></div></li>
+          <li><span class="n">02</span><div><h3>Select</h3><p>List the source repositories. Pick what moves.</p></div></li>
+          <li><span class="n">03</span><div><h3>Run</h3><p>The built-in tool copies artifacts and their metadata. An interrupted run resumes where it stopped.</p></div></li>
+          <li><span class="n">04</span><div><h3>Verify</h3><p>Integrity checks after the copy. Then cut over.</p></div></li>
+        </ol>
+        <div class="facts">
+          <div><svg viewBox="0 0 24 24"><path d="M5 12l5 5 9-10"/></svg>Read-only against the source</div>
+          <div><svg viewBox="0 0 24 24"><path d="M5 12l5 5 9-10"/></svg>Resumes interrupted runs</div>
+          <div><svg viewBox="0 0 24 24"><path d="M5 12l5 5 9-10"/></svg>Preserves metadata</div>
+          <div><svg viewBox="0 0 24 24"><path d="M5 12l5 5 9-10"/></svg>Repositories and artifacts, plus users and permissions from Artifactory</div>
+        </div>
+      </div>
+      <figure class="shot flowfig">
+        <Fragment set:html={MIGFLOW} />
+        <figcaption>Artifactory or Nexus in, read-only. Verified before you cut over. The same tool runs in the web UI.</figcaption>
+      </figure>
+    </div>
+
+    <div class="cmp" id="compare">
+      <div class="cmp-head">
+        <h3>Artifact Keeper vs JFrog vs Sonatype.</h3>
+        <p>What each registry includes, by edition. Based on JFrog's and Sonatype's public pricing pages and feature matrices as of {compareAsOf}, to the best of our understanding.</p>
+      </div>
+      <div class="cmp-scroll">
+        <table class="cmp-tbl">
+          <thead>
+            <tr>
+              <th scope="col"><span class="sr-only">Category</span></th>
+              <th scope="col" class="cmp-ak"><img src="/logo-48.png" alt="" width="18" height="18" />{compareColumns.ak}</th>
+              <th scope="col">{compareColumns.jfrog}</th>
+              <th scope="col">{compareColumns.sonatype}</th>
+            </tr>
+          </thead>
+          <tbody>
+            {compareRows.map((r) => (
+              <tr>
+                <th scope="row">{r.category}</th>
+                <td class="cmp-ak" data-col={compareColumns.ak}>{r.ak}{r.akLink && <a class="cmp-link" href={r.akLink.href}>{r.akLink.label}</a>}</td>
+                <td data-col={compareColumns.jfrog}>{r.jfrog}</td>
+                <td data-col={compareColumns.sonatype}>{r.sonatype}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      <p class="tm">Editions and prices change. Check the vendors' pages before you decide. JFrog, Artifactory and Xray are trademarks of JFrog Ltd.; Sonatype, Nexus and Lifecycle are trademarks of Sonatype, Inc. Artifact Keeper is not affiliated with either.</p>
+    </div>

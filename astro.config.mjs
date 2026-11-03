@@ -1,10 +1,10 @@
 import { defineConfig } from 'astro/config';
 import starlight from '@astrojs/starlight';
 import starlightClientMermaid from '@pasqal-io/starlight-client-mermaid';
-import tailwind from '@astrojs/tailwind';
 
 export default defineConfig({
   site: 'https://artifactkeeper.com',
+  redirects: { '/docs/deployment/kubernetes/': '/docs/deployment/helm/', '/platform/': '/' },
   integrations: [
     starlight({
       title: 'Artifact Keeper',
@@ -15,11 +15,19 @@ export default defineConfig({
         replacesTitle: false,
       },
       favicon: '/favicon.png',
+      head: [
+        { tag: 'link', attrs: { rel: 'icon', href: '/favicon.ico', sizes: 'any' } },
+        { tag: 'link', attrs: { rel: 'apple-touch-icon', href: '/apple-touch-icon.png' } },
+        { tag: 'meta', attrs: { property: 'og:image', content: 'https://artifactkeeper.com/og-image.png' } },
+        { tag: 'meta', attrs: { property: 'og:image:width', content: '1200' } },
+        { tag: 'meta', attrs: { property: 'og:image:height', content: '630' } },
+        { tag: 'meta', attrs: { name: 'twitter:image', content: 'https://artifactkeeper.com/og-image.png' } },
+      ],
       social: {
         github: 'https://github.com/artifact-keeper',
       },
       customCss: ['./src/styles/custom.css'],
-      disable404Route: true,
+      disable404Route: false,
       sidebar: [
         {
           label: 'Getting Started',
@@ -154,6 +162,10 @@ export default defineConfig({
         {
           label: 'Release Notes',
           items: [
+            { label: 'v1.11.x', slug: 'docs/release-notes/v1-11-0' },
+            { label: 'v1.10.x', slug: 'docs/release-notes/v1-10-0' },
+            { label: 'v1.9.x', slug: 'docs/release-notes/v1-9-0' },
+            { label: 'v1.8.x', slug: 'docs/release-notes/v1-8-0' },
             { label: 'v1.7.3', slug: 'docs/release-notes/v1-7-3' },
             { label: 'v1.7.2', slug: 'docs/release-notes/v1-7-2' },
             { label: 'v1.7.1', slug: 'docs/release-notes/v1-7-1' },
@@ -173,9 +185,6 @@ export default defineConfig({
           ],
         },
       ],
-    }),
-    tailwind({
-      applyBaseStyles: false,
     }),
   ],
 });

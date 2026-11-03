@@ -1,0 +1,105 @@
+---
+// Chapter 1: blast radius (story prototype). Shown on / (id "story") and /security/ (id "blast-radius").
+// Its script (src/scripts/blast-radius.ts) addresses the console by id, so one instance per page.
+// detail={false} drops the endpoint code block and the explainer notes under the console (landing page).
+interface Props { id?: string; chapter?: string | null; detail?: boolean }
+const { id = 'story', chapter = '1', detail = true } = Astro.props;
+---
+<section class="band" id={id} aria-labelledby="ch1">
+  <div class="wrap">
+    <div class="chap-head">
+      <span class="eyebrow"><span class="pip"></span>{chapter && <>Chapter {chapter} <span class="sep">·</span> </>}Blast radius</span>
+      <p class="kicker">Tuesday, 09:12. A CVE drops.</p>
+      <h2 class="h2" id="ch1">Who pulled it, from where, and how far does it reach?</h2>
+      <p class="lead">Artifact Keeper records the user, client IP, user agent and time of every download, across every format. Blast radius joins vulnerability findings to that record. <strong>One request, one answer.</strong></p>
+    </div>
+
+    <div class="br-track" id="brtrack"><div class="br" id="br">
+      <div class="rail" id="rail"><span class="fill" aria-hidden="true"></span><ol>
+        <li class="on"><span class="n">01</span><h3>Ask about the CVE</h3><p>One admin request, keyed by CVE ID or by artifact.</p></li>
+        <li><span class="n">02</span><h3>Get exact totals</h3><p>Artifacts, repositories, users, IPs and downloads. Summary totals are exact.</p></li>
+        <li><span class="n">03</span><h3>See the exposure</h3><p>Every affected repository is classed by who can read it.</p></li>
+        <li><span class="n">04</span><h3>Name the downloaders</h3><p>Who pulled it, how often, from how many IPs, first and last time.</p></li>
+        <li><span class="n">05</span><h3>Act on it</h3><p>Block, quarantine, notify. In the same registry.</p></li>
+      </ol></div>
+
+      <div class="console screen" id="console" role="group" aria-label="Blast radius report, example response">
+        <div class="screen-bar">
+          <span class="dots" aria-hidden="true"><i></i><i></i><i></i></span>
+          <span class="crumb">Admin <span aria-hidden="true">/</span> Security <span aria-hidden="true">/</span> <b>Blast radius</b></span>
+          <span class="right"><span class="pill grey">admin only</span></span>
+        </div>
+        <div class="cs-body">
+          <div class="cs-q" data-beat="1">
+            <div class="cs-input"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg><span class="lab">CVE</span><span id="cve">CVE-2021-44228</span><span class="caret" aria-hidden="true"></span></div>
+            <span class="cs-go">Blast radius <svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M3 8h10M9 4l4 4-4 4"/></svg></span>
+          </div>
+          <div class="cs-req" id="req"><span class="verb">GET</span><span class="path">/api/v1/admin/security/cve/CVE-2021-44228/blast-radius</span><span class="pill green">200 OK</span></div>
+
+          <div class="cs-tiles" id="tiles">
+            <div class="tile"><div class="k">Affected artifacts</div><span class="skel" aria-hidden="true">--</span><div class="v" data-n="3">3</div></div>
+            <div class="tile"><div class="k">Affected repos</div><span class="skel" aria-hidden="true">--</span><div class="v" data-n="2">2</div></div>
+            <div class="tile"><div class="k">Downloader users</div><span class="skel" aria-hidden="true">--</span><div class="v" data-n="5">5</div></div>
+            <div class="tile"><div class="k">Distinct IPs</div><span class="skel" aria-hidden="true">--</span><div class="v" data-n="11">11</div></div>
+            <div class="tile"><div class="k">Total downloads</div><span class="skel" aria-hidden="true">--</span><div class="v" data-n="27">27</div></div>
+            <div class="tile alert"><div class="k">Anonymous downloads</div><span class="skel" aria-hidden="true">--</span><div class="v">yes</div></div>
+          </div>
+
+          <div class="cs-two">
+            <div class="cs-sec" id="repos">
+              <header>Affected repositories</header><div class="sk" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i></div>
+              <div class="repo"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16v14H4zM4 9h16"/></svg>public-libs<span class="pill red">public</span></div>
+              <div class="repo"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16v14H4zM4 9h16"/></svg>platform-internal<span class="pill amber">restricted_acl</span></div>
+              <div class="legend">
+                <div><code><span class="dot" style="background:var(--s-red)"></span>public</code><span>Anyone, including anonymous clients, can read.</span></div>
+                <div><code><span class="dot" style="background:var(--s-warn)"></span>restricted_acl</code><span>Private, with at least one explicit ACL entry.</span></div>
+                <div><code><span class="dot" style="background:var(--s-accent-ink)"></span>restricted_roles</code><span>Private, no ACL entries. Access via roles or admin.</span></div>
+              </div>
+            </div>
+            <div class="cs-sec" id="dl">
+              <header>Downloaders <span class="tag">example response, shape from the docs</span></header><div class="sk" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i></div>
+              <div class="tbl-wrap">
+              <table class="tbl">
+                <thead><tr><th>User</th><th class="r">Downloads</th><th class="r">IPs</th><th class="opt">First</th><th class="opt">Last</th></tr></thead>
+                <tbody>
+                  <tr><td><span class="who">alice</span></td><td class="r">4</td><td class="r">2</td><td class="opt">2026-07-02</td><td class="opt">2026-07-10</td></tr>
+                  <tr><td><span class="who">ci-bot</span><span class="ex">example</span></td><td class="r">12</td><td class="r">3</td><td class="opt">2026-07-01</td><td class="opt">2026-07-12</td></tr>
+                  <tr><td><span class="who">anonymous</span><span class="ex">example</span></td><td class="r">6</td><td class="r">5</td><td class="opt" colspan="2"><span class="nul">user_id: null</span></td></tr>
+                </tbody>
+              </table>
+              </div>
+              <div class="cs-foot">Showing 3 of 6 downloaders · per_page 20</div>
+            </div>
+          </div>
+
+          <div class="cs-acts" id="acts">
+            <span class="act block"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M5.6 5.6l12.8 12.8"/></svg>Block it <small>policy: block Critical</small></span>
+            <span class="act quar"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="10" width="16" height="10" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></svg>Quarantine it</span>
+            <span class="act noti"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 16V11a6 6 0 0 1 12 0v5l2 2H4zM10 20a2 2 0 0 0 4 0"/></svg>Notify <small>webhook</small></span>
+            <span class="cap"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg>Admin-only. Attribution is sensitive.</span>
+          </div>
+        </div>
+      </div>
+    </div></div>
+
+    {detail && (
+    <div class="api">
+<pre class="code" aria-label="Blast radius endpoints"><span class="c"># Start from a CVE</span>
+<span class="v">GET</span> <span class="p">/api/v1/admin/security/cve/</span><span class="k">&#123;cve_id&#125;</span><span class="p">/blast-radius</span>
+
+<span class="c"># Or start from one artifact</span>
+<span class="v">GET</span> <span class="p">/api/v1/admin/security/artifact/</span><span class="k">&#123;artifact_id&#125;</span><span class="p">/blast-radius</span>
+
+<span class="c"># Optional window (RFC 3339) and paging</span>
+<span class="p">  ?</span><span class="k">from</span>=<span class="s">2026-07-02T09:15:00Z</span>&amp;<span class="k">to</span>=<span class="s">2026-07-10T18:42:07Z</span>
+<span class="p">  &amp;</span><span class="k">page</span>=<span class="s">1</span>&amp;<span class="k">per_page</span>=<span class="s">20</span>  <span class="c"># max 100</span></pre>
+      <div class="notes">
+        <div class="note"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3l8 4v5c0 5-3.5 8-8 9-4.5-1-8-4-8-9V7z"/></svg><span><b>Admin-only.</b> Anyone else gets a 403. Also surfaced in the admin web UI, straight from a CVE finding.</span></div>
+        <div class="note"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 12h4l3-8 4 16 3-8h2"/></svg><span><b>Every format, every download.</b> Telemetry is best-effort and never blocks a download. <code>X-Forwarded-For</code> is trusted only from configured proxy CIDRs.</span></div>
+        <div class="note"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16M4 12h10M4 18h6"/></svg><span><b>Bounded, honest output.</b> Summary totals are exact. <code>ip_addresses</code> is a sample of up to 50 per downloader; <code>affected_repos</code> is bounded to 200.</span></div>
+        <div class="note"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 8v5M12 16h.01"/></svg><span><b>Scope.</b> It reports who downloaded. Listing everyone who could have accessed it is not in this release.</span></div>
+      </div>
+    </div>
+    )}
+  </div>
+</section>

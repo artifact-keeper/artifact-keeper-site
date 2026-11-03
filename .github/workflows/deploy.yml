@@ -3,26 +3,30 @@ name: Deploy Site
 on:
   push:
     branches: [main]
+  pull_request:
+    branches: [main]
   workflow_dispatch:
 
 permissions:
   contents: read
-  pages: write
-  id-token: write
 
 concurrency:
-  group: pages
-  cancel-in-progress: true
+  # PRs get their own group so they never cancel a production deploy.
+  # A newer PR push cancels the older run; an in-flight Pages deploy is never cancelled.
+  group: ${{ github.event_name == 'pull_request' && format('pr-{0}', github.event.pull_request.number) || 'pages' }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   build:
-    runs-on: ak-ci-runners
+    # PR builds run on GitHub-hosted runners so fork PRs never execute on the
+    # self-hosted fleet; pushes to main keep using ak-ci-runners.
+    runs-on: ${{ github.event_name == 'pull_request' && 'ubuntu-latest' || 'ak-ci-runners' }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v6
         with:
-          node-version: 20
+          node-version: 22
           cache: npm
 
       - name: Install dependencies
@@ -31,13 +35,33 @@ jobs:
       - name: Build site
         run: npm run build
 
+      # Internal links only: --offline skips every http(s) URL, so external
+      # flakiness cannot fail the build. --index-files makes /dir/ links
+      # require dir/index.html, matching how GitHub Pages serves them.
+      - name: Check internal links
+        uses: lycheeverse/lychee-action@v2
+        with:
+          lycheeVersion: v0.24.2
+          fail: true
+          args: >-
+            --offline
+            --no-progress
+            --index-files index.html
+            --root-dir ${{ github.workspace }}/dist
+            'dist/**/*.html'
+
       - uses: actions/upload-pages-artifact@v3
+        if: github.event_name != 'pull_request'
         with:
           path: dist
 
   deploy:
     needs: build
+    if: github.event_name != 'pull_request'
     runs-on: ak-ci-runners
+    permissions:
+      pages: write
+      id-token: write
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}

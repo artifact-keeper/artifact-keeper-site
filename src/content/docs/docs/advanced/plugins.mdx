@@ -3,7 +3,7 @@ title: "WASM Plugin System"
 description: "Extend Artifact Keeper with custom format handlers using WebAssembly plugins"
 ---
 
-Artifact Keeper supports custom package format handlers via WebAssembly (WASM) plugins. If the built-in 45+ format handlers don't cover your needs, you can write a plugin that handles your custom format, compile it to WASM, and install it without modifying or rebuilding the server.
+Artifact Keeper supports custom package format handlers via WebAssembly (WASM) plugins. If the 37 built-in format handlers don't cover your needs, you can write a plugin that handles your custom format, compile it to WASM, and install it without modifying or rebuilding the server.
 
 ## What plugins can do
 
@@ -41,7 +41,7 @@ The plugin contract is defined in `wit/format-plugin.wit`. There are two worlds:
 
 ### Core handler interface
 
-```wit
+```text
 package artifact-keeper:format@1.0.0;
 
 interface handler {
@@ -80,7 +80,7 @@ world format-plugin {
 
 Plugins that implement the v2 world can also serve HTTP responses directly to native clients. This is how you support protocol-specific endpoints (PEP 503 simple API for pip, repodata XML for dnf, etc.).
 
-```wit
+```text
 interface request-handler {
     use handler.{metadata};
 

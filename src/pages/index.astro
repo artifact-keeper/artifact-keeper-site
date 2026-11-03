@@ -2,31 +2,159 @@
 import LandingLayout from '../layouts/LandingLayout.astro';
 import Navbar from '../components/landing/Navbar.astro';
 import Hero from '../components/landing/Hero.astro';
-import PainPoints from '../components/landing/PainPoints.astro';
-import ComparisonTable from '../components/landing/ComparisonTable.astro';
-import PackageGrid from '../components/landing/PackageGrid.astro';
+import BlastRadius from '../components/landing/BlastRadius.astro';
+import Gates from '../components/landing/Gates.astro';
+import UseCases from '../components/landing/UseCases.astro';
+import Formats from '../components/landing/Formats.astro';
 import Migration from '../components/landing/Migration.astro';
-import Security from '../components/landing/Security.astro';
-import Deployment from '../components/landing/Deployment.astro';
-import NativeApps from '../components/landing/NativeApps.astro';
-import OpenSource from '../components/landing/OpenSource.astro';
-import SocialProof from '../components/landing/SocialProof.astro';
+import Deploy from '../components/landing/Deploy.astro';
 import FooterCTA from '../components/landing/FooterCTA.astro';
 import Footer from '../components/landing/Footer.astro';
+import { FORMAT_SYMBOLS } from '../lib/landing-svg';
 ---
 
 <LandingLayout>
+  <Fragment set:html={FORMAT_SYMBOLS} />
+  <a class="skip" href="#story">Skip to the story</a>
   <Navbar />
-  <Hero />
-  <PainPoints />
-  <ComparisonTable />
-  <PackageGrid />
-  <Migration />
-  <Security />
-  <Deployment />
-  <NativeApps />
-  <OpenSource />
-  <SocialProof />
-  <FooterCTA />
-  <Footer />
+  <main id="top">
+    <Hero />
+    <BlastRadius detail={false} />
+    <Gates />
+    <UseCases />
+    <Formats />
+    <Migration />
+    <Deploy />
+    <FooterCTA />
+  </main>
+  <Footer home />
 </LandingLayout>
+
+<script>
+  // @ts-nocheck
+  // Landing page behaviour, ported unchanged from the story prototype (03-script.html),
+  // with GSAP bundled from npm instead of the CDN. Theme and nav scroll state: Navbar.astro.
+  import { gsap } from 'gsap';
+  import { ScrollTrigger } from 'gsap/ScrollTrigger';
+  import { copyText } from '../scripts/copy';
+  import { counter } from '../scripts/counter';
+  import { initBlastRadius } from '../scripts/blast-radius';
+
+
+  function initStory() {
+    var d = document, root = d.documentElement;
+    var $ = function (s, c) { return (c || d).querySelector(s); };
+    var $$ = function (s, c) { return Array.prototype.slice.call((c || d).querySelectorAll(s)); };
+    var reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+    /* ---------- nav: highlight the chapter in view (scroll state lives in Navbar.astro) ---------- */
+    if ("IntersectionObserver" in window) {
+      var links = $$(".nav-links a[href^='#']");
+      var io = new IntersectionObserver(function (es) {
+        es.forEach(function (e) {
+          if (!e.isIntersecting) return;
+          links.forEach(function (a) { a.classList.toggle("active", a.getAttribute("href") === "#" + e.target.id); });
+        });
+      }, { rootMargin: "-45% 0px -50% 0px" });
+      ["story", "gates", "usecases", "formats", "migrate", "deploy"].forEach(function (id) { var el = d.getElementById(id); if (el) io.observe(el); });
+    }
+
+    /* ---------- hero loop: SMIL packets + CSS rings, paused off-screen ---------- */
+    var hero = $("#hero"), graphs = $$(".graph");
+    var setHero = function (on) {
+      hero.classList.toggle("paused", !on);
+      graphs.forEach(function (g) { try { on ? g.unpauseAnimations() : g.pauseAnimations(); } catch (e) {} });
+    };
+    if (reduce) setHero(false);
+    else if ("IntersectionObserver" in window) new IntersectionObserver(function (es) { setHero(es[0].isIntersecting); }).observe(hero);
+
+    /* ---------- marquee paused off-screen ---------- */
+    var mq = $("#mq");
+    if ("IntersectionObserver" in window) new IntersectionObserver(function (es) { mq.classList.toggle("paused", !es[0].isIntersecting); }).observe(mq);
+
+    /* ---------- deploy tabs + typing ---------- */
+    var tabs = $$("[role=tab]"), panels = $$(".term");
+    var typingTimer = null;
+    panels.forEach(function (p) { $$(".cmd", p).forEach(function (c) { c.dataset.full = c.textContent; }); });
+    function stopTyping() {
+      if (typingTimer) { clearTimeout(typingTimer); typingTimer = null; }
+      panels.forEach(function (p) { $$(".cmd", p).forEach(function (c) { c.textContent = c.dataset.full; }); $$(".cur", p).forEach(function (x) { x.remove(); }); });
+    }
+    function typePanel(p) {
+      stopTyping();
+      if (reduce) return;
+      var cmds = $$(".cmd", p), i = 0, k = 0;
+      cmds.forEach(function (c) { c.textContent = ""; });
+      var cur = d.createElement("span"); cur.className = "cur"; cur.setAttribute("aria-hidden", "true");
+      (function step() {
+        if (i >= cmds.length) { cur.remove(); typingTimer = null; return; }
+        var c = cmds[i], full = c.dataset.full;
+        k = Math.min(full.length, k + 2);
+        c.textContent = full.slice(0, k); c.after(cur);
+        if (k >= full.length) { i++; k = 0; typingTimer = setTimeout(step, 260); }
+        else typingTimer = setTimeout(step, 14);
+      })();
+    }
+    function selectTab(t, type) {
+      tabs.forEach(function (x) { var on = x === t; x.setAttribute("aria-selected", on); x.tabIndex = on ? 0 : -1; });
+      panels.forEach(function (p) { p.hidden = p.id !== t.getAttribute("aria-controls"); });
+      if (type) typePanel(d.getElementById(t.getAttribute("aria-controls")));
+    }
+    tabs.forEach(function (t, i) {
+      t.addEventListener("click", function () { selectTab(t, true); });
+      t.addEventListener("keydown", function (e) {
+        var n = e.key === "ArrowRight" ? 1 : e.key === "ArrowLeft" ? -1 : 0;
+        if (!n) return; e.preventDefault();
+        var nt = tabs[(i + n + tabs.length) % tabs.length]; nt.focus(); selectTab(nt, true);
+      });
+    });
+    $("#copyterm").addEventListener("click", function () {
+      var p = panels.filter(function (x) { return !x.hidden; })[0];
+      var text = $$(".cmd", p).map(function (c) { return c.dataset.full; }).join("\n");
+      copyText(text, this);
+    });
+
+    if (reduce) { initBlastRadius(true); return; }
+    gsap.registerPlugin(ScrollTrigger);
+
+    /* ---------- hero proof counters ---------- */
+    $$(".proof [data-count]").forEach(function (el) { counter(el, null, 0, 1.6); });
+
+    /* ---------- CHAPTER 1: blast radius console (src/scripts/blast-radius.ts) ---------- */
+    initBlastRadius(false);
+
+    /* ---------- CHAPTER 4: formats ---------- */
+    (function () {
+      var tl = gsap.timeline({ paused: true });
+      $$(".bigcount [data-count]").forEach(function (el) { counter(el, tl, 0, 1.2); });
+      ScrollTrigger.create({ trigger: "#formats", start: "top 60%", once: true, onEnter: function () { tl.play(0); } });
+    })();
+
+    /* ---------- CHAPTER 2, 3 and 5 teasers: ticks draw on scroll-in ---------- */
+    $$(".uct .mini, .migt .mini, #gtiles").forEach(function (m) {
+      m.classList.add("armed");
+      ScrollTrigger.create({ trigger: m, start: "top 85%", once: true, onEnter: function () { m.classList.add("in"); } });
+    });
+
+
+    /* ---------- CHAPTER 6: terminal typing ---------- */
+    ScrollTrigger.create({ trigger: "#termbox", start: "top 70%", once: true, onEnter: function () { typePanel($(".term:not([hidden])")); } });
+
+    if (d.fonts && d.fonts.ready) d.fonts.ready.then(function () { ScrollTrigger.refresh(); });
+    window.addEventListener("load", function () { ScrollTrigger.refresh(); });
+  }
+
+  initStory();
+
+  /* ---------- promo video dialog ---------- */
+  (function () {
+    var dlg = document.getElementById('promo'), open = document.getElementById('watch'), close = document.getElementById('promo-close');
+    if (!dlg || !open || typeof dlg.showModal !== 'function') { if (open) open.hidden = true; return; }
+    var video = dlg.querySelector('video');
+    open.addEventListener('click', function () { dlg.showModal(); });
+    close.addEventListener('click', function () { dlg.close(); });
+    // A click on the backdrop (outside the panel) closes it too. Escape is native to <dialog>.
+    dlg.addEventListener('click', function (e) { if (e.target === dlg) dlg.close(); });
+    dlg.addEventListener('close', function () { if (video) video.pause(); open.focus(); });
+  })();
+</script>

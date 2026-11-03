@@ -45,7 +45,7 @@ The installer brings up the full stack:
 
 | Service | Description |
 |---------|-------------|
-| **Backend** | Rust API server with 45+ format handlers |
+| **Backend** | Rust API server with 37 native format handlers |
 | **Web UI** | Next.js frontend |
 | **Caddy** | Reverse proxy (HTTP + HTTPS with automatic TLS) |
 | **PostgreSQL 18** | Metadata storage |
@@ -83,7 +83,7 @@ curl -fsSL https://raw.githubusercontent.com/artifact-keeper/artifact-keeper/mai
 Install a specific version:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/artifact-keeper/artifact-keeper/main/scripts/install.sh | AK_VERSION=1.1.0 bash
+curl -fsSL https://raw.githubusercontent.com/artifact-keeper/artifact-keeper/main/scripts/install.sh | AK_VERSION=1.11.10 bash
 ```
 
 Install in minimal mode (no scanners):
@@ -162,7 +162,7 @@ To upgrade to a newer version, update `ARTIFACT_KEEPER_VERSION` in the `.env` fi
 
 ```bash
 cd artifact-keeper
-# Edit .env: set ARTIFACT_KEEPER_VERSION=1.2.0
+# Edit .env: set ARTIFACT_KEEPER_VERSION=1.11.10
 docker compose pull
 docker compose up -d
 ```
