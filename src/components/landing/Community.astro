@@ -1,8 +1,9 @@
 ---
 // Chapter 1: community adoption, from the public artifact-keeper/stats dataset.
 // Numbers are baked at build (src/data/stats.ts) and refreshed client-side when the
-// raw files are reachable. The WebGL globe (src/scripts/globe.ts + cobe) loads lazily;
-// until then, and wherever WebGL is unavailable, a static SVG projection stands in.
+// raw files are reachable. The dotted canvas globe (src/scripts/globe.ts, plain 2D canvas)
+// loads lazily; until then, and wherever the canvas cannot be used, a static SVG projection
+// stands in.
 import { stats, places } from '../../data/stats';
 import { STATS_GLOBE, STATS_REPO, countryName, fmtInt } from '../../lib/stats-model';
 
@@ -19,7 +20,8 @@ const updatedIso = (() => {
   return m ? `${m[1]}T${m[2]}Z` : undefined;
 })();
 
-// Static orthographic projection for the no-WebGL fallback, centred on the Atlantic.
+// Static orthographic projection for the fallback (before the globe script runs, or
+// without canvas), centred on the Atlantic.
 const LAT0 = (28 * Math.PI) / 180, LON0 = (-15 * Math.PI) / 180;
 const project = (latDeg: number, lonDeg: number) => {
   const la = (latDeg * Math.PI) / 180, lo = (lonDeg * Math.PI) / 180 - LON0;
@@ -156,7 +158,7 @@ const placeData = JSON.stringify(places.map((p) => [p.lat, p.lon, p.total, p.con
       });
     }
 
-    // The globe (and cobe) load only once the chapter is close to the viewport.
+    // The globe script loads only once the chapter is close to the viewport.
     const globe = q('#com-globe');
     if (globe && 'IntersectionObserver' in window) {
       const io = new IntersectionObserver((es) => {
