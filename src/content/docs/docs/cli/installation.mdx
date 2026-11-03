@@ -69,7 +69,9 @@ Linux binaries and packages are statically linked against musl, so they run on a
 
 ## Supported Server Versions
 
-Each `ak` minor version supports the server minor it's built for and the one before. `ak` 1.11 supports servers on 1.11 and 1.10.
+The first two numbers of the `ak` version tell you the server version it's built for. The last number is the CLI's own and doesn't match the server's patch number, so `ak` 1.11.0 is built from API 1.11.10. New commands may ship in CLI patch releases (1.11.x).
+
+A 1.11.x CLI supports servers on 1.10 and 1.11. Each `ak` minor supports the server minor it's built for and the one before.
 
 Other server versions aren't tested. `ak doctor` shows each server's version and warns when it's unsupported: upgrade the server if it's older, or `ak` if the server is newer.
 
