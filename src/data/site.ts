@@ -27,7 +27,8 @@ export const contacts = {
  * - With JS and an ID set: the page POSTs JSON to https://api.getwaitlist.com/api/v1/signup
  *   ({ email, waitlist_id, metadata: { company, source } }) and shows "You're on the list. Check
  *   your inbox to confirm your spot." (GetWaitlist email verification is on; referrals are off).
- *   On any failure it falls back to FormSubmit, so a signup is never lost.
+ *   On a network error or a 5xx it falls back to FormSubmit, so a signup is never lost; a 4xx (address
+ *   rejected or already registered) is shown inline instead. A filled `_honey` sends nothing.
  * - FormSubmit (https://formsubmit.co, no account): the first submission sends a one-time
  *   activation email to the target address; after that every signup is forwarded to it.
  *   Without JS the form always POSTs here and FormSubmit redirects to `_next` (/cloud/?joined=1),

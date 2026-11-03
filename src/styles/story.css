@@ -17,18 +17,6 @@
   --font-mono:"Fira Code", ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
   --maxw:1200px; --gut:16px; --radius:16px; --nav-h:64px;
 }
-@media (prefers-color-scheme: light){
-  :root:not([data-theme="dark"]){
-    color-scheme: light;
-    --bg:#F6F9FD; --bg2:#EAF1FA; --panel:#FFFFFF; --panel2:#F4F8FD; --line:#CFDCEC; --line2:#B7C9E0;
-    --ink:#06264B; --ink2:#1E3B60; --muted:#4B5F7A;
-    --accent:#0668CC; --accent-ink:#0668CC; --accent2:#0891B2; --on-accent:#FFFFFF;
-    --ok:#047857; --refuse:#C81E1E; --warn:#A35A00;
-    --glass:rgba(246,249,253,.8); --shadow:0 1px 0 rgba(255,255,255,.8) inset, 0 18px 40px -24px rgba(6,38,75,.28);
-    --grid:rgba(6,38,75,.05); --chip:rgba(6,104,204,.07); --chip-line:rgba(6,104,204,.22);
-    --code-bg:#06182E;
-  }
-}
 :root[data-theme="light"]{
   color-scheme: light;
   --bg:#F6F9FD; --bg2:#EAF1FA; --panel:#FFFFFF; --panel2:#F4F8FD; --line:#CFDCEC; --line2:#B7C9E0;
@@ -112,10 +100,22 @@ code,kbd,pre,.mono{font-family:var(--font-mono);font-variant-ligatures:none}
 .nav .btn{height:40px;padding:0 16px;font-size:14px;border-radius:10px}
 .nav .ext::after{content:"\2197";margin-left:4px;font-size:12px;opacity:.6}
 @media (max-width:899.98px){.nav-links{display:none}.nav-right{margin-left:auto}}
+/* mobile menu: hamburger in .nav-right, dropdown panel full width under the header */
+.nav-toggle .nt-close{display:none}
+.nav-toggle[aria-expanded="true"] .nt-open{display:none}
+.nav-toggle[aria-expanded="true"] .nt-close{display:inline}
+.nav-menu{position:absolute;top:100%;left:0;right:0;background:var(--panel);border-bottom:1px solid var(--line);
+  box-shadow:0 24px 48px -24px rgba(0,0,0,.45);max-height:calc(100dvh - var(--nav-h));overflow-y:auto;overscroll-behavior:contain}
+.nav-menu[hidden]{display:none}
+.nav .nav-menu ul{list-style:none;margin:0 auto;padding-top:8px;padding-bottom:12px;display:grid;gap:0;height:auto;align-items:stretch}
+.nav-menu li + li{border-top:1px solid var(--line)}
+.nav-menu a{display:flex;align-items:center;gap:8px;min-height:44px;padding:10px 4px;font-size:16px;font-weight:500;color:var(--ink);text-decoration:none}
+.nav-menu a:hover{color:var(--accent-ink)}
+.nav-menu a[aria-current="page"],.nav-menu a.active{color:var(--accent-ink)}
+@media (min-width:900px){.nav-toggle,.nav-menu{display:none !important}}
 @media (max-width:419.98px){.brand span{display:none}}
 .theme-ic-sun{display:none}
 :root[data-theme="light"] .theme-ic-sun{display:block}:root[data-theme="light"] .theme-ic-moon{display:none}
-@media (prefers-color-scheme: light){:root:not([data-theme="dark"]) .theme-ic-sun{display:block}:root:not([data-theme="dark"]) .theme-ic-moon{display:none}}
 
 /* ---------- hero (screen: dark in both themes) ---------- */
 .hero{position:relative;background:var(--s-bg);color:var(--s-ink);margin-top:calc(-1 * var(--nav-h));padding-top:calc(var(--nav-h) + clamp(36px, 5vw, 76px));padding-bottom:clamp(56px,7vw,88px);overflow:clip;isolation:isolate}
@@ -751,5 +751,7 @@ article.legal a:hover{text-decoration-thickness:2px}
 .wl-done > div{display:grid;gap:2px;min-width:0}
 .wl-done b{font:600 16px var(--font-display);color:var(--s-ink)}
 .wl-done span{font-size:14px;color:var(--s-muted)}
+.wl-error{margin:2px 0 0;padding:10px 12px;border-radius:10px;border:1px solid rgba(248,113,113,.4);background:rgba(248,113,113,.08);font:500 14px/1.45 var(--font-body);color:var(--s-red)}
+.wl-error[hidden]{display:none}
 .hp{position:absolute;left:-10000px;width:1px;height:1px;overflow:hidden}
 .waitlist .wl-form{position:relative}

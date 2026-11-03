@@ -1,15 +1,20 @@
 ---
 // The three full, animated use-case strips (story prototype, chapter 3), shown on /use-cases/.
-// Each strip is followed by an optional recording when public/use-cases/<slug>.mp4 exists.
-import fs from 'node:fs';
-import path from 'node:path';
+// Each strip is followed by an optional recording when public/use-cases/<slug>.mp4 exists
+// (see docs/use-case-videos.md).
 import { useCases } from '../../data/use-cases';
 import { useCaseStrip } from '../../lib/landing-svg';
 
+// Vite resolves this glob against the project root at build time (and watches it in dev), so the
+// check does not depend on process.cwd() or on where the compiled chunk lands. Only the keys are
+// used; the lazy importers are never called, so nothing extra is bundled.
+const videos = new Set(
+  Object.keys(import.meta.glob('/public/use-cases/*.mp4', { query: '?url' })).map((p) => p.split('/').pop()),
+);
 const strips = useCases.map((c) => ({
   c,
   html: useCaseStrip(c),
-  video: fs.existsSync(path.join(process.cwd(), 'public', 'use-cases', `${c.slug}.mp4`)) ? `/use-cases/${c.slug}.mp4` : null,
+  video: videos.has(`${c.slug}.mp4`) ? `/use-cases/${c.slug}.mp4` : null,
 }));
 ---
 <div class="ucs">

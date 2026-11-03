@@ -2,6 +2,7 @@
 // OpenTeams lockup, inlined so it takes the surrounding text colour (currentColor).
 // White on the dark theme, navy on the light theme; on "screen" panels set color to var(--s-ink).
 import raw from '../../assets/openteams-logo.svg?raw';
+import { svgInner } from '../../lib/landing-svg';
 
 interface Props {
   /** CSS height of the lockup; width follows the 1724:331 aspect ratio (viewBox cropped to the artwork). */
@@ -9,7 +10,7 @@ interface Props {
   class?: string;
 }
 const { height = '22px', class: cls } = Astro.props;
-const inner = raw.replace(/^[\s\S]*?<svg[^>]*>/, '').replace(/<\/svg>\s*$/, '');
+const inner = svgInner(raw);
 ---
 <svg
   class:list={['ot-logo', cls]}

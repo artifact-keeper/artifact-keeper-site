@@ -1,0 +1,31 @@
+---
+// The site navigation items. Navbar.astro renders this twice: the desktop bar and the mobile menu.
+import { contacts } from '../../data/site';
+
+interface Props {
+  /** Current page path, to mark the active item. */
+  current?: string;
+  /** On the home page chapter anchors stay as #hash; elsewhere they point back to /#hash. */
+  home?: boolean;
+}
+const { current = '', home = false } = Astro.props;
+const links: { href: string; label: string; pill?: string; ext?: boolean }[] = [
+  { href: '#story', label: 'Story' },
+  { href: '/security/', label: 'Security' },
+  { href: '/use-cases/', label: 'Use cases' },
+  { href: '/migrate/', label: 'Migrate' },
+  { href: '/cloud/', label: 'Cloud', pill: 'waitlist' },
+  { href: '/docs/', label: 'Docs' },
+  { href: contacts.openteams, label: 'Support', ext: true },
+];
+const resolve = (href: string) => (href.startsWith('#') && !home ? '/' + href : href);
+---
+{links.map((l) => (
+  <li><a
+    href={resolve(l.href)}
+    class:list={[{ ext: l.ext, active: current === l.href }]}
+    aria-current={current === l.href ? 'page' : undefined}
+    target={l.ext ? '_blank' : undefined}
+    rel={l.ext ? 'noopener' : undefined}
+  >{l.label}{l.pill && <> <span class="nav-pill">{l.pill}</span></>}</a></li>
+))}

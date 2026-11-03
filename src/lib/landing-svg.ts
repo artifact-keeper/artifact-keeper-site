@@ -15,7 +15,8 @@ for (const [p, src] of Object.entries(logoFiles)) {
   if (!m) throw new Error(`format logo ${slug} has no brand fill`);
   hex[slug] = m[1];
 }
-const strip_ = (s: string) => s.replace(/^[\s\S]*?<svg[^>]*>/, '').replace(/<\/svg>\s*$/, '').replace(/<title>[\s\S]*?<\/title>/, '');
+/** Inner markup of an SVG file: drops everything up to the opening <svg>, the closing </svg> and the first <title>. */
+export const svgInner = (s: string) => s.replace(/^[\s\S]*?<svg[^>]*>/, '').replace(/<\/svg>\s*$/, '').replace(/<title>[\s\S]*?<\/title>/, '');
 
 function lum(h) {
   const c = h.replace('#', '').match(/../g).map(x => Number.parseInt(x, 16) / 255).map(v => v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4);
@@ -182,7 +183,7 @@ export const MARQUEE = marqueeRow(marqueeRows[0], 'ltr') + marqueeRow(marqueeRow
 const usedSlugs = [...new Set(marqueeRows.flat().map((f) => f.logo).filter(Boolean).concat(sources.map((s) => s[2])))];
 for (const s of usedSlugs) if (!logoSrc[s]) throw new Error(`missing format logo ${s}.svg`);
 /** Format logo symbols (#i-<slug>), for the landing page only. */
-const symbolDefs = usedSlugs.map((s) => '<symbol id="i-' + s + '" viewBox="0 0 24 24">' + strip_(logoSrc[s]) + '</symbol>').join('');
+const symbolDefs = usedSlugs.map((s) => '<symbol id="i-' + s + '" viewBox="0 0 24 24">' + svgInner(logoSrc[s]) + '</symbol>').join('');
 export const FORMAT_SYMBOLS = `<svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false"><defs>${symbolDefs}</defs></svg>`;
 /** Shield symbol (#ak-shield) and the hub glow gradient, on every landing-layout page. */
-export const BASE_SPRITE = `<svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false"><defs><radialGradient id="hubglow"><stop offset="0" stop-color="#087CF4" stop-opacity=".55"/><stop offset=".45" stop-color="#06D6E9" stop-opacity=".12"/><stop offset="1" stop-color="#06D6E9" stop-opacity="0"/></radialGradient><symbol id="ak-shield" viewBox="0 0 512 512">${strip_(shieldSrc)}</symbol></defs></svg>`;
+export const BASE_SPRITE = `<svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false"><defs><radialGradient id="hubglow"><stop offset="0" stop-color="#087CF4" stop-opacity=".55"/><stop offset=".45" stop-color="#06D6E9" stop-opacity=".12"/><stop offset="1" stop-color="#06D6E9" stop-opacity="0"/></radialGradient><symbol id="ak-shield" viewBox="0 0 512 512">${svgInner(shieldSrc)}</symbol></defs></svg>`;

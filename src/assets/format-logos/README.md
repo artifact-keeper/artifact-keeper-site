@@ -4,8 +4,13 @@ These SVGs are from [Simple Icons](https://simpleicons.org/) and are released un
 [CC0 1.0](https://github.com/simple-icons/simple-icons/blob/develop/LICENSE.md). The brand
 colour recorded in the promo kit manifest (`brand/format-logos/manifest.json`) is applied as
 the `fill` attribute. The marks themselves belong to their owners; follow each owner's
-guidelines when using them. The landing page inlines them as an SVG sprite
-(`src/components/landing/FormatSprite.astro`), so nothing here is served as a file.
+guidelines when using them. The landing page inlines them as an SVG sprite, so nothing here
+is served as a file: `src/lib/landing-svg.ts` loads every SVG in this folder with
+`import.meta.glob(..., { query: '?raw' })`, reads the brand `fill`, and builds `FORMAT_SYMBOLS`,
+a hidden `<svg><defs>` with one `<symbol id="i-<slug>">` per slug in `usedSlugs` (the `logo`
+slugs of the marquee formats in `src/data/formats.ts`, plus the hero graph's upstream sources;
+a missing file fails the build). `src/pages/index.astro` injects `FORMAT_SYMBOLS` once at the top
+of the page, and the marquee and hero graph reference the symbols with `<use href="#i-<slug>">`.
 
 | Format | Slug | Icon title | Brand hex | Usage guidelines | Source |
 |---|---|---|---|---|---|

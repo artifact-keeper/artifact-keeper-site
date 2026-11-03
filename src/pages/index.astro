@@ -47,16 +47,13 @@ import { FORMAT_SYMBOLS } from '../lib/landing-svg';
     var $$ = function (s, c) { return Array.prototype.slice.call((c || d).querySelectorAll(s)); };
     var reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
-    /* ---------- nav: highlight the chapter in view (scroll state lives in Navbar.astro) ---------- */
-    if ("IntersectionObserver" in window) {
-      var links = $$(".nav-links a[href^='#']");
-      var io = new IntersectionObserver(function (es) {
-        es.forEach(function (e) {
-          if (!e.isIntersecting) return;
-          links.forEach(function (a) { a.classList.toggle("active", a.getAttribute("href") === "#" + e.target.id); });
-        });
-      }, { rootMargin: "-45% 0px -50% 0px" });
-      ["story", "gates", "usecases", "formats", "migrate", "deploy"].forEach(function (id) { var el = d.getElementById(id); if (el) io.observe(el); });
+    /* ---------- nav: mark "Story" while chapter 1 is in view (scroll state lives in Navbar.astro) ---------- */
+    var story = d.getElementById("story");
+    if (story && "IntersectionObserver" in window) {
+      var storyLinks = $$("a[href='#story']", $("#nav"));
+      new IntersectionObserver(function (es) {
+        storyLinks.forEach(function (a) { a.classList.toggle("active", es[0].isIntersecting); });
+      }, { rootMargin: "-45% 0px -50% 0px" }).observe(story);
     }
 
     /* ---------- hero loop: SMIL packets + CSS rings, paused off-screen ---------- */

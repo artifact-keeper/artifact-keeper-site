@@ -41,6 +41,7 @@ import { formats } from '../data/formats';
             data-gw-source={wf.getwaitlist?.source}
             data-email={wf.fields.email}
             data-company={wf.fields.company}
+            data-honey={wf.honeypot}
             data-success={wf.successParam}
             accept-charset="UTF-8"
           >
@@ -53,6 +54,7 @@ import { formats } from '../data/formats';
               {Object.entries(wf.hidden).map(([k, v]) => <input type="hidden" name={k} value={v} />)}
               <div class="hp" aria-hidden="true"><label>Leave this empty <input type="text" name={wf.honeypot} tabindex="-1" autocomplete="off" /></label></div>
               <button class="btn btn-primary" type="submit">Join the waitlist</button>
+              <p class="wl-error" id="wl-error" role="alert" hidden></p>
             </div>
             <div class="wl-done" id="wl-done" role="status" aria-live="polite" hidden>
               <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M7 12.5l3.2 3.2L17 9"/></svg>
@@ -75,10 +77,13 @@ import { formats } from '../data/formats';
 <script>
   // Progressive enhancement. Without JS the form is a plain POST to FormSubmit, which redirects
   // back with ?joined=1. With JS: GetWaitlist when an ID is configured (src/data/site.ts), else the
-  // FormSubmit JSON endpoint; every failure falls back to the plain FormSubmit POST.
+  // FormSubmit JSON endpoint. A filled honeypot shows success without sending anything. A 4xx from
+  // GetWaitlist (address rejected or already registered) is shown inline; network errors, 5xx and
+  // any FormSubmit JSON failure fall back to the plain FormSubmit POST so a signup is never lost.
   const form = document.getElementById('wl-form') as HTMLFormElement | null;
   const done = document.getElementById('wl-done');
-  if (form && done) {
+  const errorEl = document.getElementById('wl-error');
+  if (form && done && errorEl) {
     const ds = form.dataset;
     const note = document.getElementById('wl-done-note')!;
 
@@ -86,11 +91,21 @@ import { formats } from '../data/formats';
     // GetWaitlist: "You're on the list. Check your inbox to confirm your spot." (it sends a
     // verification email). FormSubmit: "You're on the list. We will email you when Cloud opens."
     const showDone = (viaGetWaitlist = false) => {
+      errorEl.hidden = true;
       form.classList.add('done');
       done.hidden = false;
       if (viaGetWaitlist) { confirm.hidden = false; note.hidden = true; }
     };
+    const showError = (msg: string) => {
+      errorEl.textContent = msg;
+      errorEl.hidden = false;
+    };
     if (ds.success && new URLSearchParams(location.search).has(ds.success)) showDone();
+
+    /** A GetWaitlist 4xx: the address was refused. The page stays put and says why. */
+    class Rejected extends Error {
+      constructor(readonly already: boolean) { super('rejected'); }
+    }
 
     const viaFormSubmit = async (body: FormData) => {
       const res = await fetch(ds.ajax!, { method: 'POST', body, headers: { Accept: 'application/json' } });
@@ -108,6 +123,10 @@ import { formats } from '../data/formats';
           metadata: { company: body.get(ds.company!) || '', source: ds.gwSource },
         }),
       });
+      if (res.status >= 400 && res.status < 500) {
+        const text = await res.text().catch(() => '');
+        throw new Rejected(/already|duplicate/i.test(text));
+      }
       if (!res.ok) throw new Error(String(res.status));
       return res.json();
     };
@@ -116,10 +135,14 @@ import { formats } from '../data/formats';
       e.preventDefault();
       if (!form.reportValidity()) return;
       const btn = form.querySelector('button[type=submit]') as HTMLButtonElement | null;
-      if (btn) btn.disabled = true;
       const body = new FormData(form);
+      const viaGw = Boolean(ds.gwEndpoint && ds.gwId);
+      // Honeypot filled: a bot. Look successful, send nothing.
+      if (ds.honey && String(body.get(ds.honey) || '').trim()) { showDone(viaGw); return; }
+      errorEl.hidden = true;
+      if (btn) btn.disabled = true;
       try {
-        if (ds.gwEndpoint && ds.gwId) {
+        if (viaGw) {
           await viaGetWaitlist(body);
           showDone(true);
         } else {
@@ -127,8 +150,12 @@ import { formats } from '../data/formats';
           showDone();
         }
       } catch (err) {
-        // Never lose a signup: hand it to FormSubmit with a plain POST (and its redirect).
         if (btn) btn.disabled = false;
+        if (err instanceof Rejected) {
+          showError(err.already ? 'You are already on the list.' : 'That address was not accepted. Check it and try again.');
+          return;
+        }
+        // Network error or 5xx: hand it to FormSubmit with a plain POST (and its redirect).
         HTMLFormElement.prototype.submit.call(form);
       }
     });

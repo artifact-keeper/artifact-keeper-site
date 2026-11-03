@@ -1,10 +1,11 @@
 ---
 import { HERO } from '../../lib/landing-svg';
+import { release } from '../../data/site';
 ---
 <section class="hero" id="hero" aria-labelledby="h1">
   <div class="wrap">
     <div class="hero-copy">
-      <span class="eyebrow"><span class="pip"></span>Open-source artifact registry <span class="sep">·</span> v1.11.10 <span class="sep">·</span> MIT</span>
+      <span class="eyebrow"><span class="pip"></span>Open-source artifact registry <span class="sep">·</span> {release.version} <span class="sep">·</span> MIT</span>
       <h1 id="h1">The artifact registry that <em>knows who's exposed.</em></h1>
       <p class="sub">One Rust server for <b>37 package formats</b>. Every upstream package gated before a developer sees it. Every download attributed. When a CVE lands you get repositories, users and IPs, not guesses.</p>
       <div class="cta-row">
@@ -33,7 +34,7 @@ import { HERO } from '../../lib/landing-svg';
     </div>
 
     <div class="proof">
-      <span><b>v1.11.10</b></span>
+      <span><b>{release.version}</b></span>
       <span><b>MIT</b> licensed</span>
       <span><b class="tnum" data-count="1200" data-suffix="+" data-fmt="comma">1,200+</b> GitHub stars</span>
       <span><b class="tnum" data-count="140" data-suffix="K+">140K+</b> backend pulls on Docker Hub</span>
