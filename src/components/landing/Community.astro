@@ -1,5 +1,5 @@
 ---
-// Chapter 7: community adoption, from the public artifact-keeper/stats dataset.
+// Chapter 1: community adoption, from the public artifact-keeper/stats dataset.
 // Numbers are baked at build (src/data/stats.ts) and refreshed client-side when the
 // raw files are reachable. The WebGL globe (src/scripts/globe.ts + cobe) loads lazily;
 // until then, and wherever WebGL is unavailable, a static SVG projection stands in.
@@ -49,12 +49,12 @@ const dots = places
 // Compact marker list for the globe script: [lat, lon, total, contributors].
 const placeData = JSON.stringify(places.map((p) => [p.lat, p.lon, p.total, p.contributors]));
 ---
-<section class="band alt com" id="community" aria-labelledby="ch7">
+<section class="band alt com" id="community" aria-labelledby="ch-community">
   <div class="wrap">
     <div class="chap-head">
-      <span class="eyebrow"><span class="pip"></span>Chapter 7 <span class="sep">·</span> Community</span>
+      <span class="eyebrow"><span class="pip"></span>Chapter 1 <span class="sep">·</span> Community</span>
       <p class="kicker">Open source, used around the world.</p>
-      <h2 class="h2" id="ch7">Running in <span data-com="countries">{countriesCount}</span> countries.</h2>
+      <h2 class="h2" id="ch-community">Running in <span data-com="countries">{countriesCount}</span> countries.</h2>
       <p class="lead">Stars, forks and contributions on GitHub, placed wherever people list a public location: <strong><span data-com="people">{fmtInt(peopleLocated)}</span> people</strong> so far.</p>
     </div>
     <div class="com-grid">
@@ -152,7 +152,7 @@ const placeData = JSON.stringify(places.map((p) => [p.lat, p.lon, p.total, p.con
       gsap.registerPlugin(ScrollTrigger);
       ScrollTrigger.create({
         trigger: q('.com-stats'), start: 'top 85%', once: true,
-        onEnter: () => { counted = true; tl = gsap.timeline(); nums.forEach((el) => counter(el, tl, 0, 1.6)); },
+        onEnter: () => { counted = true; tl = gsap.timeline(); nums.forEach((el) => counter(el, tl, 0, 1)); },
       });
     }
 
@@ -162,7 +162,7 @@ const placeData = JSON.stringify(places.map((p) => [p.lat, p.lon, p.total, p.con
       const io = new IntersectionObserver((es) => {
         if (!es.some((e) => e.isIntersecting)) return;
         io.disconnect();
-        import('../../scripts/globe').then((m) => m.initGlobe(globe, reduce)).catch(() => { /* fallback SVG stays */ });
+        import('../../scripts/globe').then((m) => m.initGlobe(globe, reduce)).catch((e) => { globe.dataset.globe = `load-failed: ${(e as Error).message}`; });
       }, { rootMargin: '400px 0px' });
       io.observe(globe);
     }

@@ -10,16 +10,15 @@ const THEMES: Record<'dark' | 'light', Pick<COBEOptions, 'dark' | 'baseColor' | 
 };
 const theme = () => THEMES[document.documentElement.dataset.theme === 'light' ? 'light' : 'dark'];
 
+// A canvas only ever hands out one context type, so each probe gets its own canvas.
 function hasWebGL(): boolean {
-  try {
-    const c = document.createElement('canvas');
-    const gl = (c.getContext('webgl2') || c.getContext('webgl')) as WebGLRenderingContext | null;
-    if (!gl) return false;
-    gl.getExtension('WEBGL_lose_context')?.loseContext();
-    return true;
-  } catch {
-    return false;
+  for (const type of ['webgl2', 'webgl'] as const) {
+    try {
+      const gl = document.createElement('canvas').getContext(type) as WebGLRenderingContext | null;
+      if (gl) { gl.getExtension('WEBGL_lose_context')?.loseContext(); return true; }
+    } catch { /* try the next type */ }
   }
+  return false;
 }
 
 function readMarkers(root: HTMLElement): Marker[] {
@@ -37,7 +36,8 @@ function readMarkers(root: HTMLElement): Marker[] {
 
 export function initGlobe(root: HTMLElement, reduce: boolean): void {
   const canvas = root.querySelector('canvas');
-  if (!canvas || !hasWebGL()) return;
+  if (!canvas) return;
+  if (!hasWebGL()) { root.dataset.globe = 'no-webgl'; return; }
 
   let globe: Globe;
   let phi = 4.9; // starts over the Atlantic: Europe and the Americas in view
@@ -48,7 +48,8 @@ export function initGlobe(root: HTMLElement, reduce: boolean): void {
       devicePixelRatio: dpr, width: size, height: size, phi, theta: 0.28, mapSamples: 16000, scale: 1,
       markers: readMarkers(root), markerElevation: 0.01, ...theme(),
     } as COBEOptions);
-  } catch {
+  } catch (e) {
+    root.dataset.globe = `init-failed: ${(e as Error).message}`;
     return;
   }
 
@@ -70,6 +71,7 @@ export function initGlobe(root: HTMLElement, reduce: boolean): void {
 
   draw();
   root.classList.add('is-live');
+  root.dataset.globe = 'live';
   if (reduce) still();
 
   new IntersectionObserver((es) => {
