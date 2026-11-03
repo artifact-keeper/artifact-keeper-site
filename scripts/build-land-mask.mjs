@@ -21,30 +21,49 @@ const land = feature(topo, topo.objects.land);
 const geoms = land.type === 'FeatureCollection' ? land.features.map((f) => f.geometry) : [land.geometry];
 const polygons = geoms.flatMap((g) => (g.type === 'MultiPolygon' ? g.coordinates : g.type === 'Polygon' ? [g.coordinates] : []));
 
-// Each polygon: its rings (outer + holes) and a latitude/longitude bounding box.
+// Each polygon: its rings (outer + holes) and a latitude/longitude bounding box. A ring
+// that jumps across the antimeridian is treated as spanning every longitude, since its
+// unwrapped edges reach past the +-180 edge of the raw coordinates.
 const polys = polygons.map((rings) => {
-  let minLat = 90, maxLat = -90, minLon = 180, maxLon = -180;
-  for (const ring of rings) for (const [lon, lat] of ring) {
-    if (lat < minLat) minLat = lat; if (lat > maxLat) maxLat = lat;
-    if (lon < minLon) minLon = lon; if (lon > maxLon) maxLon = lon;
+  let minLat = 90, maxLat = -90, minLon = 180, maxLon = -180, seam = false;
+  for (const ring of rings) {
+    let prev = ring[ring.length - 1][0];
+    for (const [lon, lat] of ring) {
+      if (lat < minLat) minLat = lat; if (lat > maxLat) maxLat = lat;
+      if (lon < minLon) minLon = lon; if (lon > maxLon) maxLon = lon;
+      if (Math.abs(lon - prev) > 180) seam = true;
+      prev = lon;
+    }
   }
+  if (seam) { minLon = -180; maxLon = 180; }
   return { rings, minLat, maxLat, minLon, maxLon };
 });
 
 // Even-odd ray casting over every ring of the polygon (holes toggle the point back out).
-// The ray runs north along the point's meridian rather than east along its parallel, with
-// each edge taken the short way round. That keeps the two awkward shapes in this dataset
-// right without special cases: rings cut at the antimeridian (Eurasia, Fiji, Wrangel)
-// have seam edges that never cross an interior meridian, and Antarctica, whose ring wraps
-// the whole globe and only closes through the pole, crosses each meridian once, so
-// everything south of its coast reads as inside.
+// The ray runs north along the point's meridian rather than east along its parallel.
+// That keeps Antarctica right without a special case: its ring is cut at the antimeridian
+// and wraps the whole globe, so it crosses each meridian once and everything south of
+// its coast reads as inside.
+//
+// Rings cut at the antimeridian (Eurasia, Antarctica, Fiji, Wrangel) write the seam as
+// -180 on one point and 180 on the next, and their coast edges leading into the seam
+// jump nearly 360 degrees in longitude. Each edge is taken the short way round, so those
+// become ordinary short edges ending on the seam, and the seam itself becomes a vertical
+// edge that no meridian crosses.
 function inside(rings, lon, lat) {
   let c = false;
   for (const ring of rings) {
     for (let k = 0, n = ring.length, m = n - 1; k < n; m = k++) {
-      const [x1, y1] = ring[k], [x2, y2] = ring[m];
-      if (Math.abs(x2 - x1) > 180 || (x1 > lon) === (x2 > lon)) continue;
-      if (y1 + ((y2 - y1) * (lon - x1)) / (x2 - x1) > lat) c = !c;
+      const [x1, y1] = ring[k];
+      let [x2, y2] = ring[m];
+      if (x2 - x1 > 180) x2 -= 360;
+      else if (x1 - x2 > 180) x2 += 360;
+      // An unwrapped edge can sit just beyond the +-180 edge of the map; follow it there.
+      let x = lon;
+      if (Math.min(x1, x2) < -180) x -= 360;
+      else if (Math.max(x1, x2) > 180) x += 360;
+      if ((x1 > x) === (x2 > x)) continue;
+      if (y1 + ((y2 - y1) * (x - x1)) / (x2 - x1) > lat) c = !c;
     }
   }
   return c;
