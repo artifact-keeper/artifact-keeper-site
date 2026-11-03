@@ -3,7 +3,7 @@ import LandingLayout from '../layouts/LandingLayout.astro';
 import Navbar from '../components/landing/Navbar.astro';
 import Footer from '../components/landing/Footer.astro';
 import EnterpriseContact from '../components/landing/EnterpriseContact.astro';
-import { waitlistForm as wf } from '../data/site';
+import { waitlistForm as wf, contacts } from '../data/site';
 import { formats } from '../data/formats';
 ---
 
@@ -26,7 +26,7 @@ import { formats } from '../data/formats';
             <div class="card"><h3><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8.6"/><path d="M3.4 12h17.2M12 3.4c3.2 3.6 3.2 13.6 0 17.2M12 3.4c-3.2 3.6-3.2 13.6 0 17.2"/></svg>Your data, your region</h3></div>
             <div class="card"><h3><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 12h12M12 6l6 6-6 6"/></svg>Migrate in</h3><p>From Artifactory, Nexus or a self-hosted Artifact Keeper.</p></div>
           </div>
-          <div class="cloud-note"><EnterpriseContact text="Cloud will come with optional support plans from OpenTeams, the same team behind enterprise support for self-hosted installs." /></div>
+          <div class="cloud-note"><EnterpriseContact>Cloud will come with optional support plans from <a href={contacts.openteams} target="_blank" rel="noopener">OpenTeams</a>, the same team behind enterprise support for self-hosted installs.</EnterpriseContact></div>
         </div>
 
         <div class="screen waitlist" id="waitlist">
