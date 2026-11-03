@@ -75,6 +75,7 @@ export default defineConfig({
             { label: 'System Packages', slug: 'docs/guides/system-packages' },
             { label: 'Infrastructure', slug: 'docs/guides/infrastructure' },
             { label: 'More Languages', slug: 'docs/guides/more-languages' },
+            { label: 'Agent Plugins', slug: 'docs/guides/agent-plugins' },
             { label: 'More Formats', slug: 'docs/guides/more-formats' },
           ],
         },
