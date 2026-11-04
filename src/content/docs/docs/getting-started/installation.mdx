@@ -3,6 +3,8 @@ title: "Installation"
 description: "Install Artifact Keeper using Docker Compose or build from source"
 ---
 
+import ComingIn from '../../../../components/ComingIn.astro';
+
 :::caution[Upgrading from 1.1.x?]
 This page describes 1.2.x and later. The search backend changed from Meilisearch to OpenSearch. See the [migration guide](/docs/deployment/migration-meili-to-opensearch/) for env var changes, port changes, and rollout steps.
 :::
@@ -21,7 +23,7 @@ The included `docker-compose.yml` provides a complete setup:
 
 | Service | ghcr.io (default) | Docker Hub | Description |
 |---------|-------------------|------------|-------------|
-| **Backend** | `ghcr.io/artifact-keeper/artifact-keeper-backend` | `artifactkeeper/backend` | Rust API server (38 native format handlers) |
+| **Backend** | `ghcr.io/artifact-keeper/artifact-keeper-backend` | `artifactkeeper/backend` | Rust API server (38 native format handlers) <ComingIn inline feature="Agent Plugins" /> |
 | **Web UI** | `ghcr.io/artifact-keeper/artifact-keeper-web` | `artifactkeeper/web` | Next.js frontend |
 | **Caddy** | `caddy:2-alpine` | | Reverse proxy with automatic TLS |
 | **PostgreSQL** | `postgres:18-alpine` | | Metadata database (volume at `/var/lib/postgresql`) |

@@ -8,6 +8,7 @@ import '@fontsource/fira-code/500.css';
 import '@fontsource/fira-code/600.css';
 import '../styles/story.css';
 import { BASE_SPRITE } from '../lib/landing-svg';
+import { formats } from '../data/formats';
 
 interface Props {
   title?: string;
@@ -16,7 +17,7 @@ interface Props {
 
 const {
   title = "Artifact Keeper: the open-source artifact registry that knows who's exposed",
-  description = 'MIT-licensed artifact registry in Rust. 38 native package formats, gated upstreams, attributed downloads and a CVE blast-radius report.',
+  description = `MIT-licensed artifact registry in Rust. ${formats.length} native package formats, gated upstreams, attributed downloads and a CVE blast-radius report.`,
 } = Astro.props;
 
 const canonicalURL = new URL(Astro.url.pathname, Astro.site);

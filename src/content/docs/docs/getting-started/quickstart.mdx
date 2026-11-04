@@ -3,6 +3,8 @@ title: "Quickstart"
 description: "Get Artifact Keeper running in 5 minutes with Docker Compose"
 ---
 
+import ComingIn from '../../../../components/ComingIn.astro';
+
 :::caution[Upgrading from 1.1.x?]
 This page describes 1.2.x and later. The search backend changed from Meilisearch to OpenSearch. See the [migration guide](/docs/deployment/migration-meili-to-opensearch/) for env var changes, port changes, and rollout steps.
 :::
@@ -76,7 +78,7 @@ With `short-name-mode = "enforcing"` in `registries.conf`, unqualified images su
 :::
 
 This starts the full stack:
-- **Backend** — Rust API server with 38 native format handlers
+- **Backend** — Rust API server with 38 native format handlers <ComingIn inline feature="Agent Plugins" />
 - **Web UI** — Next.js frontend
 - **Caddy** — Reverse proxy (HTTP on port 30080, HTTPS on port 30443). The backend's own port 8080 is not published; all API and package traffic goes through Caddy.
 - **PostgreSQL 18** — Metadata storage (data volume mounted at `/var/lib/postgresql`, as PostgreSQL 18 images expect)

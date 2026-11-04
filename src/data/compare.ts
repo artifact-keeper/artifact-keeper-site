@@ -12,6 +12,8 @@
 // Keep each cell to one or two short sentences. Do not claim a competitor lacks
 // something unless its own matrix says "not included".
 
+import { formats, clientAliases } from './formats';
+
 export const compareAsOf = 'November 2026';
 
 export interface CompareRow {
@@ -38,7 +40,7 @@ export const compareRows: CompareRow[] = [
   },
   {
     category: 'Package formats',
-    ak: '38 native formats, 54 with client aliases, in every install. Add formats with WASM plugins.',
+    ak: `${formats.length} native formats, ${formats.length + clientAliases} with client aliases, in every install. Add formats with WASM plugins.`,
     jfrog: '60+ package types in paid editions. Five in the free edition: Maven, Gradle, Ivy, SBT and Generic.',
     sonatype: '27 formats listed in its docs, available in every edition.',
   },

@@ -1,0 +1,36 @@
+---
+// "Coming in Artifact Keeper X" notice for documented features that are not in a release yet.
+//
+//   <ComingIn />                              block notice (top of a guide); children add page-specific text
+//   <ComingIn inline />                       "Coming in 1.12.0" badge next to a mention
+//   <ComingIn inline feature="Agent Plugins" />  "Includes Agent Plugins, coming in 1.12.0" next to a count
+//
+// Every notice hides itself once `release` in src/data/site.ts reaches `version`, so bumping the
+// release there is enough to ship the docs. Then remove the usages: `grep -rn ComingIn src`.
+import { Aside, Badge } from '@astrojs/starlight/components';
+import { isReleased, nextRelease } from '../data/site';
+
+interface Props {
+  /** First release that ships the feature. */
+  version?: string;
+  /** Render a badge instead of a block notice. */
+  inline?: boolean;
+  /** With `inline`: name the unreleased feature a nearby count includes. */
+  feature?: string;
+}
+
+const { version = nextRelease, inline = false, feature } = Astro.props;
+const show = !isReleased(version);
+const badge = feature ? `Includes ${feature}, coming in ${version}` : `Coming in ${version}`;
+---
+{show && (inline ? (
+  <Badge text={badge} variant="caution" />
+) : (
+  <Aside type="caution" title={`Coming in Artifact Keeper ${version}`}>
+    <p>
+      This is not in a release yet: it first ships in Artifact Keeper {version}. Until then it needs a
+      development build of the server.
+    </p>
+    <slot />
+  </Aside>
+))}

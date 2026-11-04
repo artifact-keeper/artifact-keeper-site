@@ -3,6 +3,8 @@ title: "Quickstart Installer"
 description: "One-command setup for Artifact Keeper using the automated installer script"
 ---
 
+import ComingIn from '../../../../components/ComingIn.astro';
+
 The quickstart installer detects your container runtime, generates secure credentials, downloads the compose file, and starts the full stack with a single command.
 
 ## Usage
@@ -45,7 +47,7 @@ The installer brings up the full stack:
 
 | Service | Description |
 |---------|-------------|
-| **Backend** | Rust API server with 38 native format handlers |
+| **Backend** | Rust API server with 38 native format handlers <ComingIn inline feature="Agent Plugins" /> |
 | **Web UI** | Next.js frontend |
 | **Caddy** | Reverse proxy (HTTP + HTTPS with automatic TLS) |
 | **PostgreSQL 18** | Metadata storage |

@@ -1,6 +1,10 @@
 import { defineConfig } from 'astro/config';
 import starlight from '@astrojs/starlight';
 import starlightClientMermaid from '@pasqal-io/starlight-client-mermaid';
+import { isReleased, nextRelease } from './src/data/site.ts';
+
+// Sidebar badge for guides of features that are not released yet (see src/components/ComingIn.astro).
+const comingBadge = isReleased(nextRelease) ? undefined : { text: `Coming in ${nextRelease}`, variant: 'caution' };
 
 export default defineConfig({
   site: 'https://artifactkeeper.com',
@@ -75,7 +79,7 @@ export default defineConfig({
             { label: 'System Packages', slug: 'docs/guides/system-packages' },
             { label: 'Infrastructure', slug: 'docs/guides/infrastructure' },
             { label: 'More Languages', slug: 'docs/guides/more-languages' },
-            { label: 'Agent Plugins', slug: 'docs/guides/agent-plugins' },
+            { label: 'Agent Plugins', slug: 'docs/guides/agent-plugins', badge: comingBadge },
             { label: 'More Formats', slug: 'docs/guides/more-formats' },
           ],
         },
