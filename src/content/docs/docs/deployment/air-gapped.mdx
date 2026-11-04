@@ -1,0 +1,131 @@
+---
+title: "Air-Gapped Deployments"
+description: "Run Artifact Keeper on a disconnected network: topologies, images, cache seeding, offline Remote and scanner settings, background jobs that reach out, and a verification checklist"
+---
+
+import ComingIn from '../../../../components/ComingIn.astro';
+
+This page is a condensed version of the [air-gapped deployment guide](https://github.com/artifact-keeper/artifact-keeper/blob/main/docs/air-gapped.md) in the backend repository. The guide has the full detail, examples and caveats. Read it before you cut the link: once the instance is inside the enclave, you cannot search for the answer.
+
+Several offline features are on the backend's `main` branch but in no release yet. Each one is marked <ComingIn inline /> where it appears, next to what to do on the current release.
+
+## Topologies
+
+| Topology | How content moves | Use when |
+|----------|-------------------|----------|
+| Seed, then disconnect | One instance fills its caches while connected, then the network is removed. | A site that is connected once and then sealed. |
+| Low-side / high-side pair | A connected instance pushes to a disconnected one over the peer mesh. | There is a controlled network path between the two. |
+| Bundles across a physical gap | Export to a file, carry it across, import it. | No network path at all. **Planned** ([#2464](https://github.com/artifact-keeper/artifact-keeper/issues/2464)): `POST /api/v1/bundles/exports` and `POST /api/v1/bundles/imports` answer 501 today. |
+
+**Seed, then disconnect.** Create the Remote repositories and apply the Remote settings below *before* you seed: a raised cache TTL only applies to an entry from its next revalidation. Then pull every version the site will need through Artifact Keeper, refresh the scanner databases, and disconnect.
+
+**Low-side / high-side pair.** Set `PEER_INSTANCE_NAME`, `PEER_PUBLIC_ENDPOINT` and `PEER_API_KEY` on both instances. On the low side, register the high side with `POST /api/v1/peers`, subscribe a repository with `POST /api/v1/peers/{id}/repositories`, and send what it already holds with `POST /api/v1/peers/{id}/repositories/{repo_id}/sync`. The high side needs a repository with the same key. If it is on a private address, list it in `AK_SSRF_ALLOW_PRIVATE_CIDRS` on the low side.
+
+| `replication_mode` | Behaviour |
+|--------------------|-----------|
+| `push` (default) | Each new upload is queued for the peer as it lands. |
+| `mirror` | Queued like `push`. It also stores a cron `replication_schedule`, but nothing acts on it yet: run the subscription's `sync` route for a whole-repository pass. |
+| `none` | Assigned, not replicated. |
+| `pull` | Refused with 400 <ComingIn inline version="1.11.12" />. It never created sync tasks. Existing `pull` rows are logged at startup and reported inactive; re-subscribe them with `push` or `mirror`. Up to 1.11.11, `pull` is accepted but replicates nothing, so do not use it. |
+
+Subscribe on the low side with `push`, so the side that has the content starts every transfer and the high side never opens a connection out.
+
+### Copying the configuration across
+
+<ComingIn inline /> To give the high side the low side's repositories, export them as one document and plan, then apply it on the other instance. Both routes are instance-admin only.
+
+```bash
+curl -H "Authorization: Bearer $LOW_ADMIN_TOKEN" \
+  "$LOW/api/v1/admin/config/export" > ak-config.json
+
+# import.json is {"document": <the export>, "secrets": {"upstream_auth/npm-remote": "..."}}
+curl -X POST -H "Authorization: Bearer $HIGH_ADMIN_TOKEN" -H 'Content-Type: application/json' \
+  --data @import.json "$HIGH/api/v1/admin/config/import?mode=plan"
+curl -X POST -H "Authorization: Bearer $HIGH_ADMIN_TOKEN" -H 'Content-Type: application/json' \
+  --data @import.json "$HIGH/api/v1/admin/config/import?mode=apply"
+```
+
+The document carries each repository and its per-repository settings, including the cache TTL, `on_upstream_not_found`, stale-if-error grace, upstream filter and egress proxy of a Remote. Credentials are never exported: they appear as `secret_ref` placeholders that the import's `secrets` map fills. `apply` is idempotent and never deletes. The document does not carry the cache-only `upstream_mode`, scan policies, curation rules, the age gate or permissions; set those separately. See [config as code](https://github.com/artifact-keeper/artifact-keeper/blob/main/docs/config-as-code.md).
+
+## Images
+
+Pull every image in `docker-compose.yml` while connected, or through an OCI Remote of `ghcr.io` and Docker Hub on a registry you already have inside the enclave. Pin each one by digest (`image: ...@sha256:<digest>`), and at least set `ARTIFACT_KEEPER_VERSION` and `ARTIFACT_KEEPER_WEB_VERSION`.
+
+Two init containers install packages with `apk add`: `pg-certs` on first boot only (its certificates persist in a volume), and `dtrack-init` on every run (`dtrack` profile only). Caddy requests an ACME certificate when `SITE_ADDRESS` is a public domain; offline, give it certificates from your own CA.
+
+## Remote repositories
+
+| Route | Offline value | Why |
+|-------|---------------|-----|
+| `PUT /api/v1/repositories/{key}/cache-ttl` | `{"cache_ttl_seconds": 315360000}` | Mutable paths (indexes, packuments, tags) never revalidate. Set before seeding. |
+| `PUT /api/v1/repositories/{key}/on-upstream-not-found` | `{"on_upstream_not_found": "keep"}` | A yanked package keeps serving while upstream is still reachable. |
+| `PUT /api/v1/repositories/{key}/stale-if-error-grace` | `{"stale_if_error_grace_seconds": 2592000}` | An expired entry keeps serving for up to 30 days when upstream is unreachable. Instance default: `PROXY_STALE_IF_ERROR_GRACE_SECS`. |
+| `PUT /api/v1/repositories/{key}/upstream-mode` <ComingIn inline /> | `{"upstream_mode": "cache_only"}` | Cache-only: see below. |
+| `PUT /api/v1/repositories/{key}/egress-proxy` | `explicit` with a logging forward proxy, or `inherit` | Records every upstream request on a seeding or low-side instance. |
+
+### Cache-only Remotes
+
+**From 1.12.0** <ComingIn inline />, set a seeded Remote's `upstream_mode` to `cache_only` once it is disconnected. It then serves every cached entry, fresh or stale, never revalidates and never contacts its upstream. A stale entry carries `Warning: 110` and `X-AK-Stale-Since`. A miss answers `404` at once with `not in cache; repository '<key>' is cache-only` and counts as `ak_proxy_cache_lookups_total{result="cache_only_miss"}`. The mode also covers the npm `/-/` passthroughs and `npm audit`, the curation upstream sync and the `test-upstream` probe, and a Virtual repository skips a cache-only member that lacks the path. It is Remote-only and needs repository `admin`; set it back to `online` to reconnect. `PROXY_UPSTREAM_MODE=cache_only` in the environment puts every Remote in cache-only mode at once (read at startup).
+
+**Up to 1.11.x**, the workaround is an upstream filter that refuses every path: `PUT /api/v1/repositories/{key}/upstream-filter` with `{"include_patterns": [], "exclude_patterns": [".*"]}`. An unseeded path then answers 404 with no connection attempt, but a cached entry is served only while it is fresh: once it expires it is refused like a miss, and stale-if-error does not apply. Pair it with the maximum cache TTL. On 1.12.0, keep the filter for "never fetch this" and use `upstream_mode` for "disconnected now".
+
+Internal upstreams on private addresses need `AK_SSRF_ALLOW_PRIVATE_CIDRS` (preferred) or `UPSTREAM_ALLOW_PRIVATE_IPS`.
+
+### Seeding the cache
+
+<ComingIn inline /> Instead of replaying every client install, a Remote can fetch a list of paths into its cache as a job and report what happened to each one:
+
+```bash
+curl -X POST "$AK/api/v1/repositories/maven-remote/cache/seed" \
+  -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
+  -d '{"kind": "paths", "content": ["org/apache/commons/commons-lang3/3.14.0/commons-lang3-3.14.0.jar"], "options": {"concurrency": 4}}'
+```
+
+It answers `202` with a job id. `GET /api/v1/repositories/{key}/cache/seed/{job_id}` returns one row per path (`cached`, `already_cached`, `refused`, `failed`) with its checksum, in request order, so two runs can be diffed. A seed goes through the same upstream filter, origin policy, age gate and quota as a client download. Only the `paths` manifest is implemented; the typed manifests (`pypi-requirements`, `npm-lockfile`, `oci-images`, `hf-models`) answer `400` for now. A request lists at most 10,000 paths and needs repository `admin`. See [cache seeding](https://github.com/artifact-keeper/artifact-keeper/blob/main/docs/cache-seed.md).
+
+## Scanners
+
+- **grype** (backend image): the database is baked in at build time and grype is run with `GRYPE_DB_AUTO_UPDATE=false` and `GRYPE_DB_VALIDATE_AGE=false`. Refresh it by pulling a newer backend image, or set `GRYPE_DB_CACHE_DIR` to a mounted directory you fill on a connected host.
+- **trivy server** (compose `trivy` service): seed the `trivy_cache` volume while connected and add `--skip-db-update` to its `command`.
+- **scanner-adapter**: prefer client/server mode with `SCANNER_TRIVY_SERVER`. Otherwise set `SCANNER_TRIVY_SKIP_DB_UPDATE=true` and point `SCANNER_TRIVY_DB_REPOSITORY` at an OCI repository holding a copy of the trivy DB. Up to scanner-adapter 1.6, filesystem scans in standalone mode do not get the skip flag.
+- **scanner-adapter offline mode** <ComingIn inline /> (scanner-adapter 1.7.0): `SCANNER_OFFLINE=true` skips every DB and Java DB download and scans with `--offline-scan`. Carry the DB across with `oras pull ghcr.io/aquasecurity/trivy-db:2` and import the resulting `db.tar.gz` with `PUT /api/v1/vulndb` on the adapter, no restart needed. `GET /api/v1/vulndb` reports its build date, `age_seconds` and `stale`. Both routes need the `SCANNER_ADAPTER_TOKEN` bearer token and answer 403 while it is unset. An import older than the installed DB is refused with 409 unless `?force=true`. See the [scanner-adapter README](https://github.com/artifact-keeper/artifact-keeper/blob/main/docker/scanner-adapter/README.md).
+- **Dependency scanner**: queries OSV.dev at scan time (and the GitHub advisory API only when `GITHUB_TOKEN` is set). Offline its result is recorded as degraded, not clean.
+- **Dependency-Track**: off by default (`DEPENDENCY_TRACK_ENABLED`); it keeps its own NVD mirror.
+
+Artifact Keeper does not warn when a database gets old ([#5177](https://github.com/artifact-keeper/artifact-keeper/issues/5177)). Track the age yourself, for trivy with the adapter's `GET /api/v1/vulndb` once it is available.
+
+## Background jobs that reach out
+
+**From 1.12.0** <ComingIn inline />, one switch pauses every scheduled job that contacts an upstream: set `UPSTREAM_JOBS_PAUSED=true`, or send `PATCH /api/v1/admin/settings/system` with `{"upstream_jobs_paused": true}` (no restart, audited as `SETTING_CHANGED`). The env var pins the switch on. It pauses the curation upstream sync and its popularity lookups, the environment advisory re-evaluation (OSV), the npm replication feed, peer replication transfers and the MCP Remote registry sync. `GET /api/v1/admin/settings/system` reports the state. If the setting cannot be read, the jobs count as paused. Popularity lookups also run at request time, so point `CURATION_POPULARITY_PYPI_URL` and `CURATION_POPULARITY_NPM_URL` at an internal mirror or set them to `off`. Peer heartbeats are not paused; `PEER_HEARTBEAT_ENABLED=false` stops them. See [disconnected operation](https://github.com/artifact-keeper/artifact-keeper/blob/main/docs/operations/disconnected-operation.md).
+
+**Up to 1.11.x**, handle each job:
+
+| Job | How to turn it off |
+|-----|--------------------|
+| npm change feed | Off by default; leave `NPM_UPSTREAM_FEED_ENABLED` unset. |
+| Curation upstream sync | Exclude everything in the source Remote's upstream filter. |
+| Popularity lookups (`popularity` curation rules) | Disable or delete the rule with `PUT /api/v1/curation/rules/{id}` or `DELETE /api/v1/curation/rules/{id}`. Offline, every new package is flagged for review. |
+| Dependency scanner advisories | Runs per scan; leave `GITHUB_TOKEN` unset. |
+| Webhooks, SMTP, LDAP, OIDC, tracing | Point them at services inside the enclave, or leave them unset. |
+
+Webhooks, SMTP, LDAP, OIDC and tracing are not paused by the switch either: they go to services you configured. Crash reporting is opt-in and off by default.
+
+## Recording upstream contact
+
+<ComingIn inline /> Set `AUDIT_UPSTREAM_FETCHES=all` to write an `UPSTREAM_FETCHED` audit entry for every request the proxy sends to an upstream: each cache-miss fetch, revalidation and OCI token exchange, with the repository, host, path (never credentials or the query string), status, result, size, duration and the principal whose request caused it. A cache hit writes nothing, and neither does a miss that a cache-only Remote or the upstream filter refuses. `errors` records only failed requests; the default is `off`. Upstream requests made outside the proxy (curation sync, popularity lookups, the npm change feed and `/-/` passthroughs, the Go sumdb proxy, `test-upstream`) are not recorded yet, so keep an egress proxy for those. See [audit events](https://github.com/artifact-keeper/artifact-keeper/blob/main/docs/audit-events.md).
+
+## Format notes
+
+- **Hugging Face**: set `HF_ENDPOINT` to the Remote and `HF_HUB_DISABLE_XET=1` on clients.
+- **Go**: point `GOPROXY` at the Go Remote and commit `go.sum`. Artifact Keeper's checksum-database route is a pass-through and is not cached, so modules missing from `go.sum` need to be excluded from checksum lookups on the client (see the full guide).
+- **npm**: `npm ci` from a lockfile works offline; `npm audit` and `npm audit signatures` do not. Run them on the low side.
+- **PyPI**: `pip install --require-hashes` works offline; the wheels are immutable cache entries.
+
+## Verification checklist
+
+1. Put the stack or a client on a Docker network with `internal: true` and confirm that a container cannot reach the internet while installs still succeed.
+2. On a seeding or low-side instance, the egress proxy log gains no lines for content that is already cached. With `AUDIT_UPSTREAM_FETCHES=all` <ComingIn inline />, `GET /api/v1/admin/audit?action=UPSTREAM_FETCHED&from=<time of the cut>` returns nothing.
+3. Scrape `GET /api/v1/admin/metrics` (or `/metrics` on `METRICS_PORT`): `ak_proxy_cache_lookups_total{result="hit"}` rises and the `miss_*` results stay flat.
+4. `ak_proxy_stale_if_error_responses_total` stays flat. Without cache-only mode, responses also carry no `X-AK-Stale-Since`; a cache-only Remote marks the stale entries it serves with it.
+5. An unseeded package answers 404 at once.
+6. Subscriptions read back with `GET /api/v1/peers/{id}/repositories/{repo_id}` show `push` or `mirror` and `"effective": "active"`, and `GET /api/v1/peers/{id}/sync/tasks` drains.
