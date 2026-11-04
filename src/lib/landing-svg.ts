@@ -38,7 +38,7 @@ const marqueeRow = (items, dir) => `<div class="mq-row ${dir}"><ul class="mq-tra
 // ---------- hero graph ----------
 const sources = [
   ['npmjs.org', 'npm registry', 'npm'], ['pypi.org', 'Python packages', 'pypi'], ['Maven Central', 'JVM libraries', 'apachemaven'],
-  ['Docker Hub', 'container images', 'docker'], ['huggingface.co', 'models and datasets', 'huggingface'],
+  ['Docker Hub', 'container images', 'docker'], ['huggingface.co', 'AI models', 'huggingface'],
 ];
 const icons = {
   ci: '<rect x="3" y="5" width="18" height="14" rx="2.5"/><path d="M7.5 10l3 2-3 2M12.5 15h4"/>',
