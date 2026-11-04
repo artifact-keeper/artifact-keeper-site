@@ -10,16 +10,16 @@ import { Tabs, TabItem } from '@astrojs/starlight/components';
 <Tabs>
 <TabItem label="curl (Linux/macOS)">
 
-The install script detects your OS and architecture, downloads the correct binary, and places it in `/usr/local/bin`:
+The install script detects your OS and architecture, downloads the correct binary, verifies its checksum, and places it in `/usr/local/bin` (or `~/.local/bin` if that isn't writable):
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/artifact-keeper/artifact-keeper-cli/main/install.sh | sh
 ```
 
-To install to a custom location:
+To choose the directory or the release:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/artifact-keeper/artifact-keeper-cli/main/install.sh | sh -s -- --install-dir ~/.local/bin
+curl -fsSL https://raw.githubusercontent.com/artifact-keeper/artifact-keeper-cli/main/install.sh | sh -s -- --install-dir ~/bin --version v1.11.0
 ```
 
 </TabItem>
@@ -35,36 +35,10 @@ Updates are handled through `brew upgrade ak`.
 <TabItem label="Cargo">
 
 ```bash
-cargo install artifact-keeper-cli
+cargo install --locked --git https://github.com/artifact-keeper/artifact-keeper-cli artifact-keeper-cli
 ```
 
-Requires Rust 1.86 or later. This builds from source, so it may take a few minutes.
-
-</TabItem>
-<TabItem label="Snap">
-
-```bash
-snap install ak --classic
-```
-
-The `--classic` flag is needed because the CLI accesses files outside the snap sandbox (config files, keychains, and package manager configs).
-
-</TabItem>
-<TabItem label="Docker">
-
-Run the CLI as a container without installing anything locally:
-
-```bash
-docker run --rm ghcr.io/artifact-keeper/ak:latest --help
-```
-
-To use it interactively with your config and credentials mounted:
-
-```bash
-docker run --rm -it \
-  -v ~/.config/artifact-keeper:/root/.config/artifact-keeper \
-  ghcr.io/artifact-keeper/ak:latest repo list
-```
+Requires Rust 1.88 or later. This builds from source, so it may take a few minutes.
 
 </TabItem>
 <TabItem label="GitHub Releases">
@@ -89,6 +63,18 @@ sudo mv ak-linux-amd64 /usr/local/bin/ak
 </TabItem>
 </Tabs>
 
+The `.deb` and `.rpm` packages for x86_64 and ARM64 are on the same releases page.
+
+Linux binaries and packages are statically linked against musl, so they run on any distribution, including Alpine and distroless images, with no glibc requirement. The trade-off is that they don't use glibc's NSS: hostnames resolve through `/etc/hosts` and the DNS servers in `/etc/resolv.conf` only. A name that only an LDAP or `systemd-resolved` NSS plugin can resolve won't work, so use one DNS can resolve or add it to `/etc/hosts`.
+
+## Supported Server Versions
+
+The first two numbers of the `ak` version tell you the server version it's built for. The last number is the CLI's own and doesn't match the server's patch number, so `ak` 1.11.0 is built from API 1.11.10. New commands may ship in CLI patch releases (1.11.x).
+
+A 1.11.x CLI supports servers on 1.10 and 1.11. Each `ak` minor supports the server minor it's built for and the one before.
+
+Other server versions aren't tested. `ak doctor` shows each server's version and warns when it's unsupported: upgrade the server if it's older, or `ak` if the server is newer.
+
 ## Verify Installation
 
 After installing, confirm the CLI is available:
@@ -100,7 +86,7 @@ ak --version
 Expected output:
 
 ```
-ak 1.0.0
+ak 1.11.0
 ```
 
 ## Shell Completions
@@ -157,6 +143,7 @@ Set these in your shell profile or CI environment to customize default behavior.
 | `AK_TOKEN` | API token (alternative to keychain) |
 | `AK_NO_INPUT` | Disable interactive prompts |
 | `AK_COLOR` | Color mode (`auto`/`always`/`never`) |
+| `AK_CREDENTIAL_STORE` | Set to `file` to skip the OS keychain and keep credentials in a 0600 file |
 | `AK_CONFIG_DIR` | Override config directory (default: `~/.config/artifact-keeper/`) |
 | `NO_COLOR` | Standard no-color flag (see [no-color.org](https://no-color.org)) |
 
@@ -172,4 +159,4 @@ url = "https://registry.company.com"
 api_version = "v1"
 ```
 
-Credentials are stored in your OS keychain rather than in the config file. The CLI uses macOS Keychain on macOS, Secret Service (via D-Bus) on Linux, and Windows Credential Manager on Windows. If none of these are available, you can pass a token through the `AK_TOKEN` environment variable instead.
+Credentials are stored in your OS keychain rather than in the config file. The CLI uses macOS Keychain on macOS, the kernel keyring on Linux, and Windows Credential Manager on Windows. If none of these suit you, set `AK_CREDENTIAL_STORE=file`, or pass a token through the `AK_TOKEN` environment variable.

@@ -45,26 +45,36 @@ ak instance info prod
 
 ## `ak auth`
 
-Authenticate with a registry instance. Credentials are stored in your OS keychain (macOS Keychain, Secret Service on Linux, Windows Credential Manager). For environments without a keychain, use the `AK_TOKEN` environment variable.
+Authenticate with a registry instance. Credentials are stored in your OS keychain (macOS Keychain, the kernel keyring on Linux, Windows Credential Manager). For environments without a keychain, set `AK_CREDENTIAL_STORE=file` or use the `AK_TOKEN` environment variable.
 
 ```
-ak auth login                      # Browser-based login (opens default browser)
+ak auth login                      # Prompts for a username and password, or a token
 ak auth login --token              # Paste a token at the prompt (headless/CI)
+ak auth login --oidc-device        # Device login for SSO (backend 1.12.0 or newer)
 ak auth logout                     # Clear stored credentials for the current instance
 ak auth whoami                     # Show the authenticated user and permissions
 ak auth switch <username>          # Switch between multiple accounts on the same instance
 ak auth token create <name>        # Create a new API token
 ak auth token list                 # List your API tokens
-ak auth token revoke <name>        # Revoke an API token
+ak auth revoke-token <id>          # Revoke an API token
 ```
 
-**Interactive login (opens a browser):**
+**Interactive login:**
+
+`ak auth login` doesn't open a browser. It asks for your username and password, or for a token, and saves the result to your keychain.
 
 ```bash
 ak auth login
-# Browser opens → authenticate → token is saved to keychain
 ak auth whoami
 ```
+
+**Device login, for SSO and machines with no browser:**
+
+```bash
+ak auth login --oidc-device
+```
+
+This prints a URL and a short code to approve from any browser, then waits for you to approve. It needs backend 1.12.0 or newer with `DEVICE_AUTH_ENABLED=true`, and otherwise says so and stops.
 
 **Headless login for CI/CD:**
 
@@ -86,8 +96,8 @@ ak auth token create ci-deploy
 # List all tokens
 ak auth token list
 
-# Revoke a token that is no longer needed
-ak auth token revoke ci-deploy
+# Revoke a token that is no longer needed, by the ID from the list
+ak auth revoke-token <id>
 ```
 
 ## `ak repo`
@@ -154,6 +164,9 @@ Key flags:
 
 ```bash
 ak artifact push my-pypi-repo './dist/*.whl'
+
+# Set the stored Content-Type yourself. By default it's detected from the file extension
+ak artifact push my-generic-repo ./data.bin --content-type application/x-custom
 ```
 
 **Search for artifacts across repositories:**
@@ -203,6 +216,8 @@ ak config list
 ```
 
 ## `ak doctor`
+
+`ak doctor` also shows each server's version, and warns if `ak` doesn't [support it](/docs/cli/installation/#supported-server-versions).
 
 Run diagnostics to verify your CLI setup. This checks instance connectivity, authentication status, and whether common package managers are detected on your system.
 

@@ -52,6 +52,7 @@ export default defineConfig({
             { label: 'Federation Commands', slug: 'docs/cli/federation-commands' },
             { label: 'Admin Commands', slug: 'docs/cli/admin-commands' },
             { label: 'TUI Dashboard', slug: 'docs/cli/tui' },
+            { label: 'Command Reference', slug: 'docs/cli/reference' },
           ],
         },
         {
