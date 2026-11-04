@@ -1,4 +1,4 @@
-// The 37 native package formats Artifact Keeper serves (docs: /docs/package-formats/).
+// The 38 native package formats Artifact Keeper serves (docs: /docs/package-formats/).
 // `name` is the label shown on the landing page, `key` the repository format key,
 // `logo` a Simple Icons slug in src/assets/format-logos/ (or null for a text tile `tile`).
 // The marquee shows them in this order: row 1 is languages and schemas, row 2 the rest.
@@ -58,12 +58,13 @@ export const formats: Format[] = [
   { name: 'ML Model', key: 'mlmodel', category: 'ML / AI', clients: ['Generic model storage'], logo: null, tile: 'ml' },
   { name: 'VS Code', key: 'vscode', category: 'Editor extensions', clients: ['VS Code', 'Cursor', 'Windsurf', 'Kiro'], logo: null, tile: 'vsix' },
   { name: 'JetBrains', key: 'jetbrains', category: 'Editor extensions', clients: ['IntelliJ', 'PyCharm', 'WebStorm'], logo: 'jetbrains' },
+  { name: 'Agent Plugins', key: 'agentplugins', category: 'Editor extensions', clients: ['Claude Code', 'Cursor', 'Codex', 'GitHub Copilot'], logo: null, tile: 'agent' },
   { name: 'Git LFS', key: 'gitlfs', category: 'Other', clients: ['git lfs'], logo: 'gitlfs' },
   { name: 'P2', key: 'p2', category: 'Other', clients: ['Eclipse IDE'], logo: 'eclipseide' },
   { name: 'Generic', key: 'generic', category: 'Other', clients: ['curl', 'wget', 'any HTTP client'], logo: null, tile: 'bin' },
 ];
 
-if (formats.length !== 37) throw new Error(`expected 37 native formats, found ${formats.length}`);
+if (formats.length !== 38) throw new Error(`expected 38 native formats, found ${formats.length}`);
 
 /** Marquee rows: row 1 is languages and schemas, row 2 everything else. */
 export const marqueeRows: Format[][] = [

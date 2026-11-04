@@ -1,0 +1,428 @@
+---
+title: "Agent Plugins Guide"
+description: "Host Claude Code, Cursor, Codex and GitHub Copilot plugin bundles in an Agent Plugins repository and install them from a generated marketplace"
+---
+
+An Agent Plugins repository stores AI coding-agent plugin bundles as versioned zips and generates the marketplace documents that the agents and the `ak` CLI read. You publish a plugin once, and every supported agent installs it from the same repository:
+
+- **Claude Code** reads the repository natively: `claude plugin marketplace add <url>`, no extra tooling.
+- **Cursor**, **Codex** and **GitHub Copilot / VS Code** do not accept a hosted marketplace URL, so `ak agent plugins install` downloads, verifies and unpacks the plugin into the directory each agent loads plugins from.
+
+Everything that applies to other hosted artifacts applies here: authentication and repository visibility, scan-on-upload and quarantine holds, publish quotas, immutable versions, download statistics, the Packages catalog, peer replication and the audit log.
+
+:::note
+Agent Plugins repositories were added in [artifact-keeper#5251](https://github.com/artifact-keeper/artifact-keeper/issues/5251). They are hosted only in this release; see [Limits and what is not supported yet](#limits-and-what-is-not-supported-yet).
+:::
+
+## Endpoint
+
+All Agent Plugins operations use the `/agentplugins` endpoint:
+
+```
+https://ak.example.com/agentplugins/{repository-key}
+```
+
+| Method and path | Purpose |
+|-----------------|---------|
+| `PUT /agentplugins/{repo}/{name}/{version}/{name}-{version}.zip` | Publish a version (`write:artifacts`) |
+| `GET`, `HEAD /agentplugins/{repo}/{name}/{version}/{name}-{version}.zip` | Download a version |
+| `GET /agentplugins/{repo}/marketplace.json` | Unified index of every plugin |
+| `GET /agentplugins/{repo}/claude-marketplace.json` | Claude Code marketplace |
+| `GET /agentplugins/{repo}/cursor-marketplace.json` | Index for Cursor installs |
+| `GET /agentplugins/{repo}/codex-marketplace.json` | Index for Codex installs |
+| `GET /agentplugins/{repo}/vscode-marketplace.json` | Index for GitHub Copilot / VS Code installs |
+| `GET /agentplugins/{repo}/{name}/index.json` | Every version of one plugin, newest first |
+| `GET /agentplugins/t/{token}/{repo}/...` | The read routes above, authenticated by a token in the path (see [Private repositories](#private-repositories)) |
+
+Index documents are generated on request from the database, so they always reflect deletes and quarantine holds. They carry an `ETag` and answer `If-None-Match` with `304 Not Modified`.
+
+## What an agent plugin bundle is
+
+A plugin is a directory of skills, commands, agents, hooks and MCP or LSP server configuration, plus a manifest that names it. Artifact Keeper stores it as a zip. The plugin root is either the top of the zip or exactly one top-level directory that holds everything, the two shapes Claude Code accepts for an archive.
+
+Artifact Keeper recognises two layouts, and a bundle can carry both.
+
+### Harness manifest directories
+
+Each agent has its own manifest directory at the plugin root:
+
+| Directory | Agent |
+|-----------|-------|
+| `.claude-plugin/plugin.json` | Claude Code |
+| `.cursor-plugin/plugin.json` | Cursor |
+| `.codex-plugin/plugin.json` | Codex |
+
+A Claude Code plugin looks like this:
+
+```
+deploy-tools/
+├── .claude-plugin/
+│   └── plugin.json
+├── skills/
+│   └── deploy/
+│       └── SKILL.md
+├── commands/
+│   └── rollback.md
+├── agents/
+│   └── reviewer.md
+├── hooks/
+│   └── hooks.json
+└── .mcp.json
+```
+
+```json
+{
+  "name": "deploy-tools",
+  "version": "1.2.0",
+  "description": "Deployment commands and a review agent",
+  "author": { "name": "Example Team" },
+  "license": "MIT"
+}
+```
+
+### Agent Plugins Standard
+
+The [Agent Plugins Standard](https://agent-plugins.org) uses a single `plugin.json` at the plugin root whose `$schema` points at agent-plugins.org, with `skills/`, an optional `mcp.json`, and vendor extension directories such as `com.example/`:
+
+```json
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+  "name": "deploy-tools",
+  "version": "1.2.0",
+  "description": "Deployment commands and a review agent"
+}
+```
+
+A root `plugin.json` counts as a Standard manifest only when its `$schema` starts with `https://agent-plugins.org/schemas/`.
+
+### How a bundle is detected
+
+On publish, Artifact Keeper looks for these markers, relative to the plugin root, and tags the version with every harness it finds:
+
+| Harness tag | Marker |
+|-------------|--------|
+| `claude` | `.claude-plugin/plugin.json` |
+| `standard` | `plugin.json` with an agent-plugins.org `$schema` |
+| `cursor` | `.cursor-plugin/plugin.json` |
+| `codex` | `.codex-plugin/plugin.json` |
+| `gemini` | `gemini-extension.json` (recorded, no index or installer) |
+
+The first marker found, in that order, supplies the description, author, homepage, license and keywords shown in the indexes and the web UI. Artifact Keeper also records which components the bundle contains (skills, commands, agents, hooks, MCP, LSP, `bin/`).
+
+## Creating a repository
+
+Create a hosted repository with the format key `agentplugins`. With the `ak` CLI:
+
+```bash
+ak repo create plugins --pkg-format agentplugins --repo-type local
+```
+
+Or with the REST API:
+
+```bash
+curl -X POST https://ak.example.com/api/v1/repositories \
+  -H "Authorization: Bearer $AK_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "key": "plugins",
+    "name": "Agent Plugins",
+    "format": "agentplugins",
+    "repo_type": "hosted"
+  }'
+```
+
+`hosted` and `local` are the same repository type. A request with `"repo_type": "remote"` or `"virtual"` is refused with `400`.
+
+The repository key `t` is reserved for this format, because `/agentplugins/t/...` is the [token-in-path route](#private-repositories). Creating an Agent Plugins repository with the key `t`, or renaming one to it, is refused.
+
+## Publishing plugins
+
+### With the ak CLI
+
+```bash
+ak agent plugins publish ./my-plugin --repo plugins --version 1.0.0
+```
+
+The CLI checks the manifests and the publish rules locally, writes `--version` into every manifest it finds, zips the plugin with its files at the archive root (deterministic order, no symlinks), computes the SHA-256, uploads with an `X-Checksum-Sha256` header, and prints the publish response together with the `claude plugin marketplace add` command for the repository. Add `--dry-run` to list the files that would go into the zip without uploading.
+
+### With curl
+
+Upload a zip you built yourself to its canonical path:
+
+```bash
+curl -T my-plugin-1.0.0.zip \
+  -H "Authorization: Bearer $AK_TOKEN" \
+  https://ak.example.com/agentplugins/plugins/my-plugin/1.0.0/my-plugin-1.0.0.zip
+```
+
+Basic auth (`-u user:password`) and `X-API-Key` work too. Add `-H "X-Checksum-Sha256: <hex>"` to have the server refuse a body whose digest differs. A successful publish returns `201`:
+
+```json
+{
+  "name": "my-plugin",
+  "version": "1.0.0",
+  "sha256": "6bfa...",
+  "size_bytes": 48213,
+  "harnesses": ["claude", "standard"],
+  "download_url": "https://ak.example.com/agentplugins/plugins/my-plugin/1.0.0/my-plugin-1.0.0.zip",
+  "marketplaces": {
+    "claude": "https://ak.example.com/agentplugins/plugins/claude-marketplace.json",
+    "cursor": "https://ak.example.com/agentplugins/plugins/cursor-marketplace.json",
+    "codex": "https://ak.example.com/agentplugins/plugins/codex-marketplace.json",
+    "vscode": "https://ak.example.com/agentplugins/plugins/vscode-marketplace.json",
+    "all": "https://ak.example.com/agentplugins/plugins/marketplace.json"
+  }
+}
+```
+
+### Publish rules
+
+The path is authoritative: the name and version come from `{name}/{version}/{name}-{version}.zip`, not from the manifest. A publish is refused with `400` when:
+
+- **The name is not a valid slug.** It must match `^[a-z0-9][a-z0-9-]*$` (lowercase letters, digits and hyphens, starting with a letter or digit), at most 64 characters. This is the set of names that Claude Code, Cursor and the Agent Plugins Standard all accept.
+- **The version is not SemVer 2.0.** `1.0.0` and `2.0.0-rc.1` are valid; `1.0` and `v1.0.0` are not.
+- **The version carries build metadata.** `1.0.0+build` is refused: build metadata has no SemVer precedence, so `1.0.0` and `1.0.0+build` could not both be immutable versions with a well-defined latest. Use a pre-release or a new version instead.
+- **The filename does not match the path.** It must be exactly `{name}-{version}.zip`.
+- **A manifest disagrees with the path.** When a manifest has a `name`, it must equal the slug. When it has a `version`, it must equal the path version. The error names the manifest that conflicted.
+- **No manifest marker is found**, the zip is malformed or exceeds the archive limits, an entry name is absolute, contains `..` or a backslash, or is a symlink, or the plugin root is ambiguous (two or more top-level directories and no marker at the zip root).
+
+The version check matters for Claude Code. Claude Code takes a plugin's version from its `plugin.json` first and from the marketplace entry second, and downloads a new copy only when that version string changes. A manifest left at an old `version` would keep every user on their cached copy forever, so Artifact Keeper refuses it at publish time. `ak agent plugins publish --version` rewrites the manifests for you.
+
+**Versions are immutable.** Publishing a version that already exists returns `409 Conflict`. You can remove a version:
+
+```bash
+ak agent plugins delete my-plugin --version 1.0.0 --repo plugins
+
+# or with the REST API
+curl -X DELETE -H "Authorization: Bearer $AK_TOKEN" \
+  https://ak.example.com/api/v1/repositories/plugins/artifacts/my-plugin/1.0.0/my-plugin-1.0.0.zip
+```
+
+Every index drops a deleted version on the next request. A deleted version can be re-published only with identical content, which restores it; re-publishing it with different bytes is `409`, and any other change needs a new version number. Claude Code downloads again only when the version string changes, so new bytes under an old version would never reach existing installs.
+
+**Only the native route is indexed.** Plugins published through `/agentplugins` (or replicated from a peer that published them that way) are the only ones indexed and served. A file placed in the repository through the generic REST upload (`PUT /api/v1/repositories/{key}/artifacts/{path}`) was never validated as a plugin bundle, so this format ignores it, even at a path that looks like a version. The generic route stays open because peer replication delivers through it.
+
+## Installing plugins
+
+### Claude Code
+
+Claude Code reads the repository's `claude-marketplace.json` directly. Add it once:
+
+```bash
+claude plugin marketplace add https://ak.example.com/agentplugins/plugins/claude-marketplace.json
+```
+
+Claude Code names the marketplace from the document's `name`, which is the repository key (characters Claude Code does not allow become `-`). Browse it with `/plugin` inside a session, or install from the shell with `<plugin>@<marketplace>`:
+
+```bash
+claude plugin install deploy-tools@plugins
+```
+
+Each entry is an `archive` source with the zip's `sha256`, so Claude Code verifies every download. Background auto-update is off by default for third-party marketplaces. Turn it on under **Marketplaces** in `/plugin`, or have an administrator set `"autoUpdate": true` in managed settings. Without it, run `claude plugin marketplace update plugins` or `claude plugin update deploy-tools@plugins` to pick up a new version.
+
+:::caution[Claude Code needs HTTPS]
+Claude Code refuses `archive` URLs that are not `https://`, and refuses loopback hosts. The URLs in the generated documents are built from `AK_EXTERNAL_URL` when it is set, otherwise from `X-Forwarded-Proto` and `Host`. Behind a TLS-terminating reverse proxy, set `AK_EXTERNAL_URL=https://ak.example.com` so the archive URLs are not emitted as `http://`. See [Reverse Proxy & TLS](/docs/deployment/reverse-proxy/) and [Environment Variables](/docs/reference/environment/).
+:::
+
+#### Private repositories
+
+`claude plugin marketplace add` has no option for credentials, so a private repository offers a token-in-path route. Mint a read-only token scoped to the repository, with an expiry:
+
+```bash
+curl -X POST https://ak.example.com/api/v1/repositories/plugins/tokens \
+  -H "Authorization: Bearer $AK_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"name": "claude-code-readers", "scopes": ["read:artifacts"], "expires_in_days": 90}'
+```
+
+Then add the marketplace with the token from the response's `token` field in the path:
+
+```bash
+claude plugin marketplace add https://ak.example.com/agentplugins/t/<token>/plugins/claude-marketplace.json
+```
+
+Archive URLs in that document keep the `/t/<token>/` prefix, so installs and updates authenticate the same way. Responses on this route are sent with `Cache-Control: private, no-store`.
+
+:::caution[The token is part of the URL]
+The token is stored in plain text in Claude Code's `known_marketplaces.json` and appears in server and proxy access logs. Use a read-only, repository-scoped token with an expiry, never a personal token with write scopes, and revoke it with `DELETE /api/v1/repositories/plugins/tokens/{token_id}` when it leaks or is no longer needed.
+:::
+
+For machines you manage, keep the token out of the URL with `extraKnownMarketplaces` and `headers` in managed settings. Claude Code sends these headers with the catalog fetch and with every archive download on the same origin (scheme, host and port):
+
+```json
+{
+  "extraKnownMarketplaces": {
+    "plugins": {
+      "source": {
+        "source": "url",
+        "url": "https://ak.example.com/agentplugins/plugins/claude-marketplace.json",
+        "headers": { "Authorization": "Bearer <token>" }
+      },
+      "autoUpdate": true
+    }
+  }
+}
+```
+
+The key must match the marketplace `name` (the repository key). For a short-lived credential, set `headersHelper` to a command that prints the headers as JSON instead of listing them in `headers`. Alternatively, `ak agent plugins install <name> --repo plugins --harness claude` installs with the credential stored by `ak auth login`.
+
+### Cursor
+
+Cursor's team marketplaces import git repositories only, so install with the CLI:
+
+```bash
+ak agent plugins install deploy-tools --repo plugins --harness cursor
+```
+
+The plugin is unpacked into `~/.cursor/plugins/local/deploy-tools`. Reload the Cursor window to pick it up.
+
+### Codex
+
+```bash
+ak agent plugins install deploy-tools --repo plugins --harness codex
+```
+
+The plugin is unpacked into `~/.agents/plugins/local/ak/plugins/deploy-tools`, next to a local marketplace directory. When `codex` is on `PATH`, the CLI registers that marketplace with `codex plugin marketplace add`; otherwise it prints the command to run.
+
+### GitHub Copilot / VS Code
+
+```bash
+ak agent plugins install deploy-tools --repo plugins --harness vscode
+```
+
+When the `copilot` CLI is on `PATH`, the CLI runs `copilot plugin install` on the unpacked directory; otherwise it copies the plugin to `~/.copilot/installed-plugins/ak-plugins/deploy-tools`. In VS Code, open **Chat: Manage Plugin Marketplaces** from the Command Palette to see it.
+
+### Common install options
+
+| Option | Effect |
+|--------|--------|
+| `--harness claude,cursor` | Install for several agents in one command |
+| `--version 1.1.0` | Install a specific version instead of `latest` (the highest SemVer) |
+| `--path ./vendor/plugins` | Unpack to `DIR/<name>` and skip the agent post-steps |
+
+The CLI resolves the version from `{name}/index.json`, verifies the SHA-256, refuses zips whose entries would escape the target directory, and writes `.ak/plugin-info.json` (instance, repository, slug, version, SHA-256, harness, install time) inside the plugin directory. It prints a warning, and installs anyway, when the plugin was not tagged for the chosen harness: Claude Code layout plugins also load in VS Code, for example.
+
+The rest of the lifecycle uses that file:
+
+```bash
+ak agent plugins list --harness cursor --check-updates   # current, behind, ahead or unknown
+ak agent plugins update deploy-tools --harness cursor    # or --all
+ak agent plugins uninstall deploy-tools --harness cursor
+ak agent plugins search deploy --repo plugins --harness codex
+```
+
+### OpenCode and Gemini CLI
+
+- **OpenCode** plugins are npm packages. Publish and install them from an [npm repository](/docs/guides/npm/); an Agent Plugins repository is not needed.
+- **Gemini CLI** is not supported. A `gemini-extension.json` is recorded as the `gemini` tag, but no index or installer uses it.
+
+## Which plugins appear in which index
+
+Each version is tagged with the harnesses detected in its zip, and the tags decide which documents list it:
+
+| Index document | Lists plugins tagged |
+|----------------|----------------------|
+| `marketplace.json` | all |
+| `claude-marketplace.json` | `claude` or `standard` |
+| `cursor-marketplace.json` | `cursor` or `standard` |
+| `codex-marketplace.json` | `codex` or `standard` |
+| `vscode-marketplace.json` | `standard` |
+
+A Standard-layout plugin appears in the Claude Code marketplace because Claude Code loads its skills. Claude Code does not read a Standard `mcp.json`, so MCP servers in that file are not started there; ship a `.mcp.json` alongside it if you need them in Claude Code.
+
+Every index lists one entry per plugin, at the newest version that index may list, by SemVer ordering (`2.0.0-rc.1` sorts below `2.0.0`):
+
+- **Only downloadable versions are listed.** The indexes and the download route share one gate: quarantine, holds and the repository's scan policy. A version whose download would be refused is skipped before the latest is chosen. Under a `block_unscanned` policy, a newly published plugin appears once its scan passes.
+- **Each index picks per harness.** The newest version is chosen among the versions compatible with that index. If a plugin's newest version is Cursor-only, it still appears in `claude-marketplace.json` at its newest Claude-compatible version.
+
+## Index documents
+
+### marketplace.json
+
+The unified index lists every plugin. Artifact Keeper's own fields sit under `metadata`, which Claude Code ignores, so this file is also a valid Claude Code marketplace:
+
+```json
+{
+  "$schema": "https://artifactkeeper.com/schemas/agent-plugins/marketplace-v1.json",
+  "name": "plugins",
+  "owner": { "name": "Artifact Keeper", "url": "https://ak.example.com" },
+  "metadata": { "generated_at": "2026-11-03T18:00:00Z", "repository": "plugins", "plugin_count": 1 },
+  "plugins": [
+    {
+      "name": "deploy-tools",
+      "description": "Deployment commands and a review agent",
+      "version": "1.2.0",
+      "source": {
+        "source": "archive",
+        "url": "https://ak.example.com/agentplugins/plugins/deploy-tools/1.2.0/deploy-tools-1.2.0.zip",
+        "sha256": "6bfa..."
+      },
+      "metadata": {
+        "harnesses": ["claude", "standard"],
+        "size_bytes": 48213,
+        "versions_url": "https://ak.example.com/agentplugins/plugins/deploy-tools/index.json",
+        "components": { "skills": ["deploy"], "commands": 3, "agents": 1, "hooks": true, "mcp": true, "lsp": false, "bin": false }
+      }
+    }
+  ]
+}
+```
+
+### claude-marketplace.json
+
+The same document restricted to the plugins in the membership table, with no `$schema` and a `name` sanitised to Claude Code's rules (ASCII letters, digits, `.`, `_` and `-`, starting with a letter or digit). The `cursor-`, `codex-` and `vscode-marketplace.json` documents have the same shape:
+
+```json
+{
+  "name": "plugins",
+  "owner": { "name": "Artifact Keeper", "url": "https://ak.example.com" },
+  "plugins": [
+    {
+      "name": "deploy-tools",
+      "version": "1.2.0",
+      "source": {
+        "source": "archive",
+        "url": "https://ak.example.com/agentplugins/plugins/deploy-tools/1.2.0/deploy-tools-1.2.0.zip",
+        "sha256": "6bfa..."
+      }
+    }
+  ]
+}
+```
+
+### `<name>/index.json`
+
+Every version of one plugin, newest first. The `ak` CLI uses it to resolve `latest` and to check for updates:
+
+```json
+{
+  "name": "deploy-tools",
+  "latest": "1.2.0",
+  "versions": [
+    {
+      "version": "1.2.0",
+      "sha256": "6bfa...",
+      "size_bytes": 48213,
+      "harnesses": ["claude", "standard"],
+      "published_at": "2026-11-03T17:55:12Z",
+      "url": "https://ak.example.com/agentplugins/plugins/deploy-tools/1.2.0/deploy-tools-1.2.0.zip"
+    },
+    { "version": "1.1.0", "sha256": "...", "size_bytes": 47120, "harnesses": ["claude"], "published_at": "...", "url": "..." }
+  ]
+}
+```
+
+## Limits and what is not supported yet
+
+- **Hosted only.** Remote repositories (proxying a marketplace hosted elsewhere) and virtual repositories (merging several Agent Plugins repositories) are not supported yet. Creating either is refused with `400`.
+- **No content policy yet.** A repository cannot yet refuse plugins that ship hooks, a `bin/` directory or MCP servers. The component inventory is already recorded on every version, so such a policy will not need a re-index. Until then, use [vulnerability scanning](/docs/security/scanning/), quarantine holds and repository permissions to control what is published.
+- **Claude Code archive limits.** Claude Code downloads at most 256 MiB per archive and refuses a zip whose uncompressed content is more than 50 times its size, regardless of what the server accepts.
+- **No signature verification on install.** `ak agent plugins install` verifies the SHA-256 from the index, not a signature or attestation.
+- **Skills repositories** and installers for Gemini CLI and OpenCode are not part of this format.
+
+## Next Steps
+
+- [Package Formats](/docs/package-formats/) for every supported format
+- [Authentication & RBAC](/docs/advanced/auth/) for tokens and repository permissions
+- [Vulnerability Scanning](/docs/security/scanning/) for scan-on-upload and quarantine
+- [Reverse Proxy & TLS](/docs/deployment/reverse-proxy/) for HTTPS in front of Artifact Keeper

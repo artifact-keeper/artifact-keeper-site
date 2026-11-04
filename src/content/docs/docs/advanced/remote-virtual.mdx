@@ -19,6 +19,8 @@ Remote proxy and virtual resolution is supported for **all** package formats:
 
 npm, PyPI, Maven, Cargo, Go, Hex, RubyGems, NuGet, Helm, Conan, Composer, CocoaPods, Swift SPM, Pub (Dart/Flutter), Sbt, CRAN, Conda, RPM, Debian, Alpine, Git LFS, Chef, Puppet, Ansible, Terraform, VS Code Extensions, JetBrains Plugins, Hugging Face, and Protobuf/BSR.
 
+Agent Plugins repositories are the exception: they are hosted only, and creating a remote or virtual Agent Plugins repository is refused with `400`. See the [Agent Plugins guide](/docs/guides/agent-plugins/).
+
 ## Creating a Remote Repository
 
 A remote repository acts as a pull-through cache. When a client requests a package that isn't cached locally, Artifact Keeper fetches it from the upstream registry, caches it, and serves it to the client. Subsequent requests are served from the local cache.

@@ -38,7 +38,7 @@ export const compareRows: CompareRow[] = [
   },
   {
     category: 'Package formats',
-    ak: '37 native formats, 53 with client aliases, in every install. Add formats with WASM plugins.',
+    ak: '38 native formats, 54 with client aliases, in every install. Add formats with WASM plugins.',
     jfrog: '60+ package types in paid editions. Five in the free edition: Maven, Gradle, Ivy, SBT and Generic.',
     sonatype: '27 formats listed in its docs, available in every edition.',
   },
