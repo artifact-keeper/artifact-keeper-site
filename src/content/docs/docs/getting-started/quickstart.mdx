@@ -78,7 +78,7 @@ With `short-name-mode = "enforcing"` in `registries.conf`, unqualified images su
 :::
 
 This starts the full stack:
-- **Backend** — Rust API server with 38 native format handlers <ComingIn inline feature="Agent Plugins" />
+- **Backend** — Rust API server with 39 native format handlers <ComingIn inline feature="Agent Plugins and MCP Registry" />
 - **Web UI** — Next.js frontend
 - **Caddy** — Reverse proxy (HTTP on port 30080, HTTPS on port 30443). The backend's own port 8080 is not published; all API and package traffic goes through Caddy.
 - **PostgreSQL 18** — Metadata storage (data volume mounted at `/var/lib/postgresql`, as PostgreSQL 18 images expect)
@@ -214,7 +214,7 @@ twine upload --repository-url http://localhost:30080/pypi/my-pypi-repo/ \
 
 - [Installation Guide](/docs/getting-started/installation) — Build from source or customize your deployment
 - [Configuration Reference](/docs/getting-started/configuration) — Storage, authentication, and integrations
-- [Package Formats](/docs/package-formats) — All 38 supported formats and their endpoints
+- [Package Formats](/docs/package-formats) — All 39 supported formats and their endpoints
 - [Docker Deployment](/docs/deployment/docker) — Production Docker Compose setup
 
 ## Stopping the Services

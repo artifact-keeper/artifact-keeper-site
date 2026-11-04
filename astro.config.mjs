@@ -80,6 +80,7 @@ export default defineConfig({
             { label: 'Infrastructure', slug: 'docs/guides/infrastructure' },
             { label: 'More Languages', slug: 'docs/guides/more-languages' },
             { label: 'Agent Plugins', slug: 'docs/guides/agent-plugins', badge: comingBadge },
+            { label: 'MCP Registry', slug: 'docs/guides/mcp-registry', badge: comingBadge },
             { label: 'More Formats', slug: 'docs/guides/more-formats' },
           ],
         },

@@ -15,7 +15,7 @@ Artifact Keeper is designed as a modular, layered system. This page walks throug
 graph LR
     Client["Browser / CLI<br/>Package Manager"]
     Frontend["Frontend<br/>React 19 · Ant Design 6<br/>TanStack Query 5"]
-    Backend["Backend<br/>Rust · Axum<br/>38 format handlers"]
+    Backend["Backend<br/>Rust · Axum<br/>39 format handlers"]
     DB[(PostgreSQL 16)]
     Storage["Storage<br/>Filesystem / S3"]
     Search["OpenSearch<br/>Full-text search"]
@@ -277,7 +277,7 @@ artifact-keeper/
 ├── backend/            # Rust backend
 │   ├── src/
 │   │   ├── api/        # Handlers (50+), middleware, routes
-│   │   ├── formats/    # 38 native format handler implementations
+│   │   ├── formats/    # 39 native format handler implementations
 │   │   ├── services/   # Business logic (35+ services)
 │   │   ├── models/     # Data models (18 types)
 │   │   └── storage/    # FS and S3 backends
