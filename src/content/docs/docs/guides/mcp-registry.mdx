@@ -1,0 +1,401 @@
+---
+title: "MCP Registry Guide"
+description: "Host a private catalog of Model Context Protocol servers that VS Code, GitHub Copilot and mcp-publisher use in place of the public MCP registry"
+---
+
+import ComingIn from '../../../../components/ComingIn.astro';
+
+<ComingIn />
+
+An MCP Registry repository is a private catalog of [Model Context Protocol](https://modelcontextprotocol.io) servers. It speaks the MCP **registry API v0.1** (with the `/v0` alias) and stores **server.json** documents (schema `2025-12-11`). Clients that read the official registry (`https://registry.modelcontextprotocol.io`) can read your repository instead:
+
+- **VS Code** shows it in the MCP server gallery.
+- **GitHub Copilot** uses it as the organization's private MCP registry.
+- **`mcp-publisher`** publishes to it.
+
+The registry only says which servers exist and how to run them. It is not the MCP protocol a server speaks to its client. The packages a server runs (an npm package, a PyPI distribution, a container image) live in ordinary Artifact Keeper repositories. By default the registry refuses any server whose packages are not there, pins the exact version or image digest, and hides a server whose package is held. A server is listed only while everything it runs passes the same gates as any other download.
+
+:::note
+MCP Registry repositories are tracked in [artifact-keeper#5253](https://github.com/artifact-keeper/artifact-keeper/issues/5253). This guide covers hosted (Local and Staging) repositories. Remote and Virtual repositories are summarised in [Remote and Virtual repositories](#remote-and-virtual-repositories). Every route, field and refusal is specified in the backend reference, [docs/mcp-registry.md](https://github.com/artifact-keeper/artifact-keeper/blob/main/docs/mcp-registry.md).
+:::
+
+For a hands-on run, the [private MCP registry walkthrough](https://github.com/artifact-keeper/walkthroughs/tree/main/private-mcp-registry) sets up a registry, publishes servers through it and points clients at it.
+
+## Endpoint
+
+Every MCP Registry repository is served under `/mcp`:
+
+```
+https://ak.example.com/mcp/{repository-key}
+```
+
+Every route below is also served under `/v0` with identical bodies. `{serverName}` is the full server name, either URL-encoded (`com.acme%2Fweather`) or with a literal slash (`com.acme/weather`).
+
+| Method and path | Access | Purpose |
+|-----------------|--------|---------|
+| `GET /v0.1/servers` | read | List server versions. Query: `cursor`, `limit`, `search`, `version`, `updated_since`, `include_deleted` |
+| `GET /v0.1/servers/{serverName}/versions` | read | Every servable version of one server |
+| `GET /v0.1/servers/{serverName}/versions/{version}` | read | One version; `{version}` may be `latest` |
+| `POST /v0.1/publish` | write | Publish a server.json |
+| `POST /v0.1/validate` | none on a public repository, read on a private one | Run the publish checks without writing anything |
+| `PATCH /v0.1/servers/{serverName}/versions/{version}/status` | write | Set `active`, `deprecated` or `deleted` on one version |
+| `PATCH /v0.1/servers/{serverName}/status` | write | The same for every version of the server |
+| `PUT /v0.1/servers/{serverName}/versions/{version}` | repository admin | Replace a version's document |
+| `DELETE /v0.1/servers/{serverName}/versions/{version}` | write | Soft delete (status `deleted`) |
+| `PUT /v0.1/servers/{serverName}/versions/{version}/bundles/{file}.mcpb` | write | Upload an MCPB bundle before publishing the version (see [MCPB bundles](#mcpb-bundles)) |
+| `GET /v0.1/servers/{serverName}/versions/{version}/bundles/{file}.mcpb` | read | Download a bundle of a served version |
+| `GET /v0.1/servers/{serverName}/versions/{version}/capabilities` | read | Capability snapshots (tools, resources, prompts) of a version; `/capabilities/diff` compares two |
+| `POST /v0.1/servers/{serverName}/versions/{version}/capabilities` | write | Report a CI- or gateway-observed capability list |
+| `POST /v0.1/servers/{serverName}/versions/{version}/capabilities/probe` | repository admin | Queue introspection jobs, when the repository's settings allow them |
+| `GET /v0.1/x/com.artifactkeeper/holds` | repository holder | Held versions and why (see [Holds listing](#holds-listing)) |
+| `GET /v0.1/ping`, `/health`, `/version` | read | Liveness, a database-checked health answer, the Artifact Keeper version |
+| `GET /v0.1/openapi.yaml` | read | The upstream registry API specification |
+| `POST /v0/auth/github-oidc` | none (the OIDC token is the credential) | `mcp-publisher login github-oidc` (see [From GitHub Actions](#from-github-actions)) |
+
+Listings use upstream's envelope: `{"servers": [{"server": {...}, "_meta": {...}}], "metadata": {"nextCursor": "...", "count": N}}`. The last page has no `nextCursor`. `limit` defaults to 30 and is capped at 100, and `search` is a case-insensitive substring of the name of at least 3 characters.
+
+Reads follow the repository's visibility: a public repository is readable anonymously, and a private one needs a credential. An anonymous read of a private repository gets the `401` challenge every format route gives; an authenticated caller with no grant on it gets the unknown-name `404`. The read routes answer CORS with `Access-Control-Allow-Origin: *`, methods `GET, OPTIONS` and headers `Authorization, Content-Type`, without credentials.
+
+## Creating a repository
+
+Create a repository with the format key `mcp`. The package policy, the mapped repositories and the namespace allowlist are fields of the repository API, on create and on update:
+
+```bash
+curl -X POST https://ak.example.com/api/v1/repositories \
+  -H "Authorization: Bearer $AK_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "key": "mcp-local",
+    "name": "MCP servers",
+    "format": "mcp",
+    "repo_type": "local",
+    "mcp_package_policy": "own-repos",
+    "mcp_package_repos": {"npm": "npm-local", "pypi": "pypi-remote", "oci": "docker-local"},
+    "mcp_namespace_allow": ["com.acme"]
+  }'
+```
+
+Change them later with `PATCH /api/v1/repositories/{key}`. Every repository response echoes the effective values, with `own-repos` when no policy is set.
+
+### Package policy
+
+`mcp_package_policy` decides what a server's `packages[]` may name:
+
+- **`own-repos`** (the default, also when the setting is absent). Every `packages[]` entry must name something this instance already hosts or has proxied, in the repository mapped to its `registryType`. The publish looks the package up in the database and never contacts the package's registry. The version is pinned, and every read serves the package's Artifact Keeper coordinates, gated like any download.
+- **`open`**. An explicit opt-out for a catalog of servers whose packages live elsewhere. `packages[]` is stored and served verbatim after the shape checks: nothing is resolved, rewritten or gated, so a held or vulnerable package does not hide the server. Treat an `open` repository as a list of links, not as a control.
+
+Switching a repository from `open` to `own-repos` does not resolve versions already published. They are held as unresolvable until you publish them again as a new version.
+
+### Mapped repositories
+
+`mcp_package_repos` maps each `registryType` (`npm`, `pypi`, `nuget`, `cargo`, `oci`, `mcpb`) to the repository that holds those packages. Each value must be an existing repository whose format serves that registry type: an npm, Yarn or pnpm repository for `npm`, a Docker, Podman or ORAS repository for `oci`, and an MCP or Generic repository for `mcpb`. It may be Local, Remote or Virtual.
+
+Whoever saves the mapping must be able to read each repository it names: an administrator, or `read` through a grant. A public repository needs no grant, but an `internal` one does, because the mapping re-exports what the repository holds to every reader of the MCP registry. A repository the caller cannot read is refused with the same message as one that does not exist.
+
+The same rule holds for a publisher. A publish naming a package whose mapped repository the publisher's account cannot read is refused with `422 mcp_package_not_found` and a detail that names no repository, whether the package exists there or not. Publishing is therefore not a way to learn what a private repository holds. A publisher who can read the repository gets the precise answer. `mcpb` entries are matched by `fileSha256` and are not checked this way.
+
+### Namespace allowlist
+
+Server names have the form `namespace/name` (3 to 200 characters). `mcp_namespace_allow` restricts which namespaces this repository accepts. An entry is a namespace prefix: `com.acme` admits `com.acme/x` and `com.acme.team/x`, not `com.acmecorp/x`. An empty list admits any namespace. A name outside the list is refused with `403 mcp_namespace_not_allowed`.
+
+The `io.modelcontextprotocol` namespace and its sub-namespaces are reserved on every repository and refused with `403 mcp_namespace_reserved`.
+
+Upstream's ownership proofs (DNS, GitHub OIDC, `mcpName` in `package.json`) are not applied at publish. In a private registry, the repository's permissions decide who may publish, optionally per namespace (see [namespace grants](#namespace-grants)).
+
+### Namespace proofs
+
+An instance administrator can record proof that the owner of a domain controls a reverse-DNS namespace (`com.acme` is `acme.com`, `io.github.acme` is `acme.github.io`) through `/api/v1/admin/mcp/namespace-proofs`. Create a proof with `{"namespace": "com.acme", "method": "dns"}` (or `"http"`), have the domain's owner publish the challenge it returns (a TXT record at `_ak-mcp-challenge.<domain>`, or a file at `https://<domain>/.well-known/ak-mcp-challenge`), then `POST .../namespace-proofs/{id}/verify`. The verify call is the only time Artifact Keeper contacts the domain. The DNS check uses a DNS-over-HTTPS resolver (`MCP_NAMESPACE_PROOF_DOH_URL`, default `https://cloudflare-dns.com/dns-query`).
+
+A verified proof is evidence that is shown and audited (`MCP_NAMESPACE_PROOF_VERIFIED` or `MCP_NAMESPACE_PROOF_FAILED`). It grants nothing and is not checked on publish; namespace grants decide who may write.
+
+## Publishing servers
+
+Under `own-repos`, publish (or pull through a Remote repository) the server's package first, then publish the server.json. Publishing and status changes need repository `write` and, for an API token, the `write:artifacts` scope. Any Artifact Keeper credential works as the bearer token; there is no separate registry login.
+
+### With curl
+
+```bash
+curl -X POST https://ak.example.com/mcp/mcp-local/v0.1/publish \
+  -H "Authorization: Bearer $AK_TOKEN" \
+  -H "Content-Type: application/json" \
+  --data @server.json
+```
+
+A successful publish answers `200` with `{server, _meta}`, exactly as the version will be served. A server.json for an npm package might look like this:
+
+```json
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "com.acme/weather",
+  "description": "Forecasts for Acme sites",
+  "version": "1.2.0",
+  "packages": [
+    {
+      "registryType": "npm",
+      "identifier": "@acme/weather-mcp",
+      "version": "1.2.0",
+      "transport": { "type": "stdio" }
+    }
+  ]
+}
+```
+
+Artifact Keeper looks up `@acme/weather-mcp@1.2.0` in `npm-local`, pins it, and serves `registryBaseUrl` pointing at that repository.
+
+To check a document without writing it, send it to `POST /v0.1/validate`. It answers `200` with `{valid, issues, packages}` and stores, pins and audits nothing. No credential is needed on a public repository, which is what `mcp-publisher validate` expects. Package resolution is checked only for a caller who can read every mapped repository; anyone else gets `outcome: "unchecked"` for each package.
+
+### With mcp-publisher
+
+`mcp-publisher` reads its registry URL and token from `~/.config/mcp-publisher/token.json`. Write the file yourself with an Artifact Keeper API token instead of running `mcp-publisher login`:
+
+```bash
+mkdir -p ~/.config/mcp-publisher
+cat > ~/.config/mcp-publisher/token.json <<EOF
+{"token": "$AK_TOKEN", "method": "none", "registry": "https://ak.example.com/mcp/mcp-local"}
+EOF
+mcp-publisher publish
+```
+
+### From GitHub Actions
+
+`mcp-publisher login github-oidc` works too: `POST /mcp/{repo}/v0/auth/github-oidc` is bridged to Artifact Keeper's CI OIDC exchange. Set it up once:
+
+1. An administrator creates a CI OIDC provider for `https://token.actions.githubusercontent.com` whose `audience` is the registry URL's scheme and host, lowercased, without a path (`https://ak.example.com`).
+2. Add an identity mapping with claim filters such as `repository_owner`.
+3. Grant the mapping's service account `write` on the repository.
+
+In the workflow, with `permissions: id-token: write`:
+
+```bash
+mcp-publisher login github-oidc --registry https://ak.example.com/mcp/mcp-local
+mcp-publisher publish
+```
+
+The exchange returns a short-lived Artifact Keeper token (the provider's `token_ttl_secs`, default 900 seconds). Every other `/auth/*` login answers `501 mcp_auth_not_supported`.
+
+### Namespace grants
+
+To limit a publisher to some namespaces, give its permission rule `conditions.mcp_namespaces` (patterns such as `com.acme/*` or `io.github.{repository_owner}/*`), and set `mcp_require_namespace_grant: true` on the repository so that plain repository `write` is not enough. A rule whose patterns use a `{claim}` placeholder must also name `conditions.mcp_namespace_issuer` (for GitHub Actions, `https://token.actions.githubusercontent.com`), so a claim from another CI provider never matches. A write outside the granted namespaces is refused with `403 mcp_namespace_not_granted`.
+
+A namespace rule applies only to MCP writes on the `/mcp/{repo}` surface (publish, status change, delete, bundle upload, capability reports). It grants nothing through the generic artifact API, and its own `read` does not make a private registry readable: give the publisher an unconditioned `read` through a group or a role if it needs one.
+
+### Versions are write-once
+
+Publishing a `name@version` that the repository has ever stored returns `409 mcp_version_exists`, even with identical bytes. That includes a version that was deleted, moved to the trash or purged from it. Publish a new version instead.
+
+Every stored `name@version` is recorded in a tombstone ledger, written by a database trigger on every server.json insert, so publish, peer replication and promotion are all covered. The ledger is not linked to the artifact row: purging the trash does not clear it, a promotion into the repository of a recorded version is refused with `409`, and a Remote never ingests a purged version again. The ledger is removed only with the repository. The one exception is a version whose package resolution through a Remote failed: it was never served, so publishing the same `name@version` again replaces it (see [Pinning and drift](#pinning-and-drift)).
+
+`PATCH .../status` deprecates or deletes a version (`{"status": "deprecated", "statusMessage": "..."}`). A `deprecated` version is still listed and can still be `latest`. A `deleted` version answers `404` unless the request adds `include_deleted=true`.
+
+`DELETE .../versions/{version}` is the soft delete: it sets status `deleted` and keeps the artifact, its bytes and its tombstone. It is the only way to delete a server version. The generic `DELETE /api/v1/repositories/{key}/artifacts/...` refuses an MCP repository with `400`, administrators included (trusted peer replication excepted), because it would bypass the namespace gate.
+
+### MCPB bundles
+
+An MCPB bundle (`.mcpb`) is uploaded beside a version **before** the version is published:
+
+```bash
+curl -X PUT -H "Authorization: Bearer $AK_TOKEN" --data-binary @echo.mcpb \
+  https://ak.example.com/mcp/mcp-local/v0.1/servers/com.acme/echo/versions/1.0.0/bundles/echo.mcpb
+```
+
+The upload answers `201` with the bundle's `fileSha256`, its signature state and a ready `packageEntry`. A bundle is at most 256 MiB (`413 mcp_bundle_too_large`), and other bytes under the same file name are `409 mcp_bundle_exists`. A document with no `mcpb` entry gets one `packages[]` entry per uploaded bundle at publish, so `fileSha256` never has to be computed by hand.
+
+Artifact Keeper verifies the signature block that `mcpb sign` appends. A signature counts as `valid` only when its certificate's SHA-256 fingerprint is in `MCP_TRUSTED_BUNDLE_SIGNERS`; any other verified signature is `self_signed`. A present but invalid signature is always refused (`422 mcp_bundle_signature_invalid`). With `mcp_require_bundle_signature: true` on the repository, an unsigned bundle is refused with `422 mcp_bundle_unsigned`, a `self_signed` one with `422 mcp_bundle_signer_untrusted`, and a publish that pins a bundle without a `valid` signature with `422 mcp_bundle_signature_required`.
+
+## Pointing clients at the registry
+
+- **VS Code**: set `"chat.mcp.gallery.serviceUrl": "https://ak.example.com/mcp/mcp-local"` (or the `McpGalleryServiceUrl` policy). The gallery reads `/v0.1/servers` and `/versions/latest`.
+- **GitHub Copilot**: set the organization's MCP registry URL to `https://ak.example.com/mcp/mcp-local`. Copilot appends `/v0.1/servers` itself and checks the CORS headers described in [Endpoint](#endpoint).
+- **Claude Code** has no registry subscription. Configure servers directly, with the coordinates the registry serves.
+
+Pair the registry with the clients' own allowlists so developers cannot route around it, such as Copilot's "Registry only" policy.
+
+**Serving one repository at the bare host.** Set `MCP_DEFAULT_REPO=<repository-key>` to serve `https://ak.example.com/v0.1/...` and `/v0/...` exactly as `https://ak.example.com/mcp/<repository-key>/v0.1/...`, for clients that are given only a host. It is off by default. Served coordinates keep the `/mcp/<repository-key>` form.
+
+**Behind a reverse proxy**, forward `Host` or `X-Forwarded-Host` and `X-Forwarded-Proto`, or set `AK_EXTERNAL_URL`. The served package coordinates are built from the request's external base URL. See [Reverse Proxy & TLS](/docs/deployment/reverse-proxy/).
+
+## Pinning and drift
+
+Under `own-repos`, a publish pins every package, and every read serves Artifact Keeper's coordinates for it:
+
+| Registry type | What must be published | What is served |
+|---------------|------------------------|----------------|
+| `npm`, `pypi`, `nuget`, `cargo` | An exact `version` that is in the mapped repository | `identifier` and `version` unchanged, `registryBaseUrl` set to the mapped repository (`https://ak.example.com/npm/<repo>`, `/pypi/<repo>`, `/nuget/<repo>/v3/index.json`, `/cargo/<repo>`) |
+| `oci` | A specific tag or digest in `identifier`, named as `<ak-host>/<repo>/<image>:<tag>` for a Local or Staging repository | `<ak-host>/<repo>/<path>:<tag>@sha256:<digest>`, or `@sha256:<digest>` alone when the publish named only a digest |
+| `mcpb` | A `fileSha256` that matches a bundle uploaded for the version or found in the mapped repository | The bundle's Artifact Keeper URL |
+
+Names and versions match the way each backing format stores them: an npm identifier is percent-decoded (`%40acme%2Fx` is `@acme/x`), PyPI names are PEP 503-normalised, NuGet ids are case-insensitive and versions are compared in NuGet's normalised form (`1.0` and `1.0.0` are one version), and Cargo names are case-insensitive with `-` and `_` treated as equal.
+
+For OCI, Artifact Keeper resolves the tag to the image (or image index) digest at publish. `:latest` and tagless images are refused. A multi-arch image pins the index digest and gates on the runner architecture's child, which is what the scanner scanned. The submitted identifier, digest, media type, platform children and backing repository are recorded in the package's `_meta["com.artifactkeeper/resolved"]`.
+
+**A moved tag does not change a published version.** When a pinned tag later moves (a re-push, an upstream refresh, or a delete and re-push), the version keeps serving the pinned digest, the stored package records `drift`, and `MCP_PIN_DRIFT_DETECTED` is written to the audit log. To ship a new image, publish a new server version. The gate always evaluates the pinned digest, never whatever the tag names now. If every record of the pinned digest is gone, the version is held as unresolvable rather than served ungated.
+
+In a Local or Staging OCI repository, the pin also protects the pinned manifest. Storage GC keeps it when its tag moves or is deleted. A `DELETE /v2/<name>/manifests/sha256:<digest>` of a digest that a server version pins (as the index or the gated child digest) is refused with `405` and the OCI error code `UNSUPPORTED`. The message names no MCP repository or server. Deleting the tag is still allowed. There is no override flag, and a version in any status pins its digest, `deleted` included, as long as its artifact is not in the trash.
+
+A package that is not yet in a mapped Remote repository is not refused. The publish answers `202` with `"status": "resolving"`, a background job pulls the package through the Remote under the publisher's credential, and the version is served once every package is pinned. `mcp-publisher publish` reports this `202` as an error even though the version was stored. Do not run it again: while the version is resolving, a second publish of the same `name@version` is `409 mcp_version_exists`. Pull the package through the Remote first (then the publish answers `200`), check with `POST /v0.1/validate` that every package reports `outcome: "pinned"`, or use `curl`.
+
+A fill that fails for good (the package is not upstream, the Remote refuses it, or 8 attempts with backoff run out) leaves the version stored and hidden, with the reason under `resolution` in its metadata. Such a version never took the version number: publish the package, then the same server version again.
+
+## What a client sees when a version is held
+
+A version is **held** when Artifact Keeper will not hand its recipe to a client. That happens when its server.json is quarantined or refused by scan policy, or when a package it pins is any of these:
+
+- quarantined
+- refused by scan policy, or by the stored proxy-scan verdict of the Remote it was pulled through
+- younger than that Remote's age gate
+- gone
+
+A held version is left out of every listing, `search` and `latest`. `latest` falls back to the newest version that is servable now, and `isLatest` follows it. An exact read of a held version answers `404`:
+
+```json
+{"detail":"Server not found","status":404,"title":"Not Found","type":"about:blank"}
+```
+
+It is sent as `application/problem+json` with `Cache-Control: no-store`. That body is byte for byte the answer for a name that does not exist, with the same headers, so a reader cannot tell a held version from a missing one. Releasing the hold restores the version on the next read.
+
+A **repository holder** (an administrator, or a user with `read` on the repository through a grant) gets the reason instead: an RFC 9457 problem body that is still a `404`, with `error`, `name`, `version`, `hold`, `instance` and, for a package hold, the `package` as submitted (`npm:@acme/db-tool@2.0.0`) and the `gate`. It never names the backing repository, an artifact id, a finding or a policy.
+
+| Why the version is held | `error` for a repository holder |
+|-------------------------|---------------------------------|
+| server.json quarantined | `mcp_pending_review` |
+| server.json refused by scan policy | `mcp_rejected` |
+| Pinned package quarantined, or refused by scan policy or its Remote's proxy-scan verdict | `mcp_backing_artifact_blocked` |
+| Pinned package younger than its Remote's age gate | `mcp_age_gate_blocked` |
+| Pinned package gone, or the package policy changed | `mcp_unresolvable` |
+| Packages still being pulled through a Remote | `mcp_resolving` |
+| Name matches the repository's `mcp_server_deny` list | `mcp_rejected` |
+| Remote only: name or version not approved yet, or upstream bytes changed since approval | `mcp_pending_review` |
+| Remote only: name or version blocked | `mcp_rejected` |
+
+When a gate cannot be evaluated (a database error), the read fails closed with `503 mcp_gate_unavailable`, and the version is left out of listings. Every refusal is `application/problem+json` with `Cache-Control: no-store` and is audited as `MCP_SERVER_DOWNLOAD_REFUSED`.
+
+### Why 404 and not 403, 409 or 451
+
+VS Code treats a `404` on `/versions/latest` as "not in the registry". Under Copilot's "registry only" policy, that disables the server. Any other non-2xx status is a transient failure that keeps a previously verified server enabled. On the surface that decides what an agent may run, a status the client ignores is not a control, so the registry answers `404`. The artifact routes (`/api/v1/repositories/{key}/artifacts/...`) keep the usual `409` and `403` for a repository holder. Any other caller gets the route's plain `404` for a version that readers are not served, and `GET /api/v1/packages` shows such a caller the server's newest servable version, or no row.
+
+### Holds listing
+
+`GET /mcp/{repo}/v0.1/x/com.artifactkeeper/holds` lists the versions a client would not be handed, for CI tooling ("why is my server not in the gallery?"). It takes `cursor`, `limit` and `search` like `/servers`. Each entry is the refusal body a repository holder gets on an exact read, with `status` set to the HTTP status of that read. Only a repository holder gets the list; every other caller, including an anonymous reader of a public repository, gets the unknown-name `404`. A Virtual repository answers `404` here; ask its members.
+
+## Refusal codes
+
+Every refusal on the `/mcp` surface is `application/problem+json` with an `error` code. Match on `error`, not on `detail`, whose wording can differ between checks.
+
+### Publishing
+
+| Status | `error` | When |
+|--------|---------|------|
+| `400` | `mcp_invalid_server_json` | The document does not parse or fails the schema, has a duplicate JSON key, or nests too deep |
+| `403` | `mcp_forbidden` | The token lacks `write:artifacts`, is scoped to other repositories, or the credential may not write here |
+| `403` | `mcp_namespace_reserved` | The name is in `io.modelcontextprotocol` or a sub-namespace |
+| `403` | `mcp_namespace_not_allowed` | The namespace is not in `mcp_namespace_allow` |
+| `403` | `mcp_server_denied` | The name matches the repository's `mcp_server_deny` list |
+| `403` | `mcp_namespace_not_granted` | `mcp_require_namespace_grant` is on and the credential holds no grant for the namespace |
+| `405` | `mcp_read_only` | The repository is a Remote or a Virtual; publish to a hosted repository |
+| `409` | `mcp_version_exists` | The repository has stored this `name@version` before |
+| `409` | `mcp_promotion_only` | The repository accepts only promoted artifacts |
+| `409` | `mcp_version_resolving`, `mcp_edit_conflict` | An admin edit (`PUT`) of a version whose packages are still resolving, or one that another write changed meanwhile |
+| `413` | `mcp_too_large` | The body is over 256 KiB |
+| `422` | `mcp_external_registry` | The `registryType` has no mapped repository, `registryBaseUrl` names anything other than the mapped repository, or an OCI image is named on another host |
+| `422` | `mcp_package_not_found` | The exact package version or image tag/digest is not in the mapped hosted repository, the publisher cannot read the mapped repository, or no bundle matches an `mcpb` entry's `fileSha256` |
+| `422` | `mcp_package_version_unpinned` | An npm, PyPI, NuGet or Cargo entry has no `version` |
+| `422` | `mcp_oci_floating_tag` | An OCI identifier is `:latest`, or has no tag and no digest |
+| `422` | `mcp_oci_legacy_fields` | An OCI entry carries `version`, `registryBaseUrl` or `fileSha256`; the tag or digest belongs in `identifier` |
+| `422` | `mcp_oci_not_an_image` | The pinned manifest is not a runnable image or image index |
+| `422` | `mcp_bundle_signature_required` | `mcp_require_bundle_signature` is on and an `mcpb` bundle has no signature from a trusted signer |
+| `422` | `mcp_oci_label_mismatch` | `mcp_require_oci_label` is on and the pinned image has no matching `io.modelcontextprotocol.server.name` label |
+| `422` | `mcp_lint_blocked` | The publish lint found a `block` finding, such as a credential pasted into a default value or a launcher argument that re-routes installs (`--registry`, `--index-url`) |
+
+Each `422` has one `detail` line naming the `packages[]` entry and the fix.
+
+### Reading
+
+| Status | `error` | When |
+|--------|---------|------|
+| `400` | `mcp_invalid_query` | A malformed `limit`, `cursor`, `updated_since` or `include_deleted`, or `include_deleted=false` with `updated_since` |
+| `401` | `mcp_unauthorized` | An anonymous read of a private repository |
+| `404` | (none for readers) | Unknown name, held version, deleted version, or a private repository the caller has no grant on |
+| `422` | `mcp_search_too_short` | `search` is shorter than 3 characters |
+| `501` | `mcp_not_implemented` | `/validate` or a bundle download on a Virtual repository; call a member |
+| `503` | `mcp_gate_unavailable` | A gate could not be evaluated; retry later |
+
+## Limits
+
+- A publish body is at most **256 KiB** (`413`), and documents nest at most **32** levels deep.
+- A server has at most **16** packages, **8** remotes and **64** entries per list.
+- The publisher's own `_meta` is reduced to `io.modelcontextprotocol.registry/publisher-provided`, at most 4096 bytes, as upstream does.
+- Descriptions, titles, argument and variable text, and every string of the publisher-provided `_meta` refuse control characters, bidirectional marks, zero-width and invisible formatting characters, and Unicode tag characters. URLs must be absolute `http` or `https`.
+- One `/servers` request gates at most 1000 rows and answers a `nextCursor` whenever it stops early, so a page can be short without being the last. `/versions` lists at most the newest 1000 versions of a server.
+- Artifact Keeper never dereferences a URL in a server.json (`websiteUrl`, `icons`, `repository.url`, `remotes[].url`). Publish, list and read are database and object-storage operations only.
+- Server versions enter an MCP repository only through `POST .../publish`. The generic artifact upload routes refuse an MCP repository with `400`, except for trusted peer replication.
+
+## Remote and Virtual repositories
+
+### Remote
+
+A Remote MCP repository's `upstream_url` is another registry, without `/v0.1`: the official registry (`https://registry.modelcontextprotocol.io`), another Artifact Keeper (`https://ak.example.com/mcp/<key>`) or any server of the v0.1 API. It is an allowlist populated from that registry, not a mirror:
+
+```json
+{
+  "key": "mcp-official", "format": "mcp", "repo_type": "remote",
+  "upstream_url": "https://registry.modelcontextprotocol.io",
+  "mcp_package_repos": {"npm": "npm-remote", "pypi": "pypi-remote", "oci": "ghcr-remote"},
+  "mcp_auto_approve_namespaces": ["io.github.modelcontextprotocol/*"],
+  "mcp_server_deny": ["*.evil/*"]
+}
+```
+
+- **Sync.** Every hour (`MCP_REMOTE_SYNC_INTERVAL_SECS`, minimum 60) and on demand (`POST /api/v1/repositories/{key}/mcp/sync`), the Remote records every upstream server name in its catalog, so browsing never calls upstream. A new name starts `pending`. A name matching `mcp_auto_approve_namespaces` starts `approved`, and a lookalike of a known name starts in `review` with a typosquat flag, whatever the auto-approve list says.
+- **Posture.** With `mcp_remote_posture: approval_required` (the default), only approved names are served. `allow_with_gates` serves every name that is not denied, blocked or flagged, with every gate still on. An instance administrator can lock the posture (`mcp_remote_posture_locked`).
+- **Approval.** Repository administrators approve, block or pin names and `name@version` rows through `/api/v1/repositories/{key}/mcp/catalog`, one at a time or in bulk by pattern. Approving a name ingests it right away.
+- **Pinning.** Every package is pinned at sync through the Remote's own `mcp_package_repos`, exactly as a publish pins it. A package that is not in a backing repository yet leaves the version stored but not served; pull the package through its Remote, and the next sync pins and serves the version. The sync never pulls packages itself.
+- **Drift.** An ingested `name@version` is never overwritten. When the upstream bytes change, the stored document is kept, the version is held for review and `MCP_SERVER_CONTENT_DRIFT` is audited. Approving it again serves the stored document.
+- **Writes.** Publish and status changes answer `405 mcp_read_only`. `POST /validate` checks a document against the Remote's own settings.
+
+### Virtual
+
+A Virtual merges MCP repositories (Local, Staging and Remote members) on the same `/mcp/{repo}/v0.1` routes. It resolves nothing itself: every version it serves is a member's stored version, decided by that member's own gates.
+
+- Hosted members answer first, by priority, then Remote members. A name that any hosted member holds is never served from a Remote member, so an upstream server cannot take over an internal name.
+- `mcp_server_deny` on the Virtual hides matching names on top of the members' own deny lists.
+- Writes answer `405 mcp_read_only`. `/validate` and bundle downloads answer `501 mcp_not_implemented`, and the holds listing answers `404`: call a member instead.
+
+## Lint, health and capabilities
+
+- **Lint.** Every server version is linted offline: pasted credentials, credential-like variables not marked `isSecret`, instructions aimed at the model, hidden characters, launcher arguments that re-route installs or widen a container, and destructive or shell-like tool names. A `block` finding refuses a publish or status change with `422 mcp_lint_blocked`. Findings are stored as scan findings, so a scan policy holds a version until they are acknowledged.
+- **Health.** `GET /api/v1/repositories/{key}/mcp/servers/{serverName}/versions/{version}/health` rolls up the pinned packages' scans and gates and the lint findings into one `ok`, `warning`, `critical` or `unknown` status, for a repository holder.
+- **Capabilities.** A publisher can declare a server's tools in `_meta["com.artifactkeeper/capabilities"]`, a CI pipeline or gateway can report what it observed, and the optional `ak-mcp-introspector` worker can probe remote servers or run stdio packages in a sandbox. A changed tool list for the same version raises a `tool_drift` finding. No snapshot marks a server safe: tool lists are claims made by the server.
+
+The rules, the health shape and the capability API are in the reference, under [Lint and health](https://github.com/artifact-keeper/artifact-keeper/blob/main/docs/mcp-registry.md#lint-and-health) and [Capabilities and introspection](https://github.com/artifact-keeper/artifact-keeper/blob/main/docs/mcp-registry.md#capabilities-and-introspection).
+
+### Sandboxed introspection
+
+`ak-mcp-introspector run --sandbox` installs and starts a server package that a publisher chose, which is attacker-controlled code. It is off by default (`mcp_sandbox_introspection: on` per repository). Before turning it on, follow the [sandbox reference deployment](https://github.com/artifact-keeper/artifact-keeper/blob/main/docs/security/mcp-sandbox.md). It runs each guest under gVisor (`runsc`) or a microVM runtime, on a dedicated host with rootless Podman or as Kubernetes pods with a gVisor `RuntimeClass`, on a network that reaches only Artifact Keeper. A plain container runtime is refused unless `AK_MCP_SANDBOX_ALLOW_DEFAULT_RUNTIME=true`. Check the deployment with `ak-mcp-introspector sandbox-probe` first.
+
+## Environment variables
+
+| Variable | Default | Effect |
+|----------|---------|--------|
+| `MCP_DEFAULT_REPO` | unset | Serve one repository's registry API at the bare host (`/v0.1/...`, `/v0/...`) |
+| `MCP_REMOTE_SYNC_INTERVAL_SECS` | `3600` | Remote sync interval in seconds, at least 60 |
+| `MCP_RESOLVER_INTERVAL_SECS` | `15` | Tick of the job that pulls packages through a Remote after a `202` publish |
+| `MCP_TRUSTED_BUNDLE_SIGNERS` | empty | SHA-256 fingerprints of trusted MCPB signing certificates, comma or whitespace separated |
+| `MCP_NAMESPACE_PROOF_DOH_URL` | `https://cloudflare-dns.com/dns-query` | DNS-over-HTTPS resolver for DNS namespace proofs |
+
+## Known gaps
+
+- **`202` and `mcp-publisher`.** `mcp-publisher publish` reports a `202 resolving` as an error. Pull packages through the Remote before publishing, or publish with `curl`.
+- **Drift from promotion and imports.** Drift detection covers pushes and Remote refreshes, not tag writes made by promotion or migration imports.
+- **Private repositories.** An anonymous read of a private repository answers `401`, the challenge every format route gives, not `404`.
+- **Ownership proofs and logins.** Upstream's ownership proofs are not enforced on publish (an administrator's [namespace proofs](#namespace-proofs) are evidence only), and the only supported `mcp-publisher` login is `github-oidc`.
+
+## Next Steps
+
+- [Private MCP registry walkthrough](https://github.com/artifact-keeper/walkthroughs/tree/main/private-mcp-registry) for a hands-on run
+- [MCP registry reference](https://github.com/artifact-keeper/artifact-keeper/blob/main/docs/mcp-registry.md) for every route, field and refusal
+- [Package Formats](/docs/package-formats/) for every supported format
+- [Agent Plugins](/docs/guides/agent-plugins/) for hosting coding-agent plugin bundles
+- [Remote & Virtual Repositories](/docs/advanced/remote-virtual/) for pulling packages through a Remote
+- [Authentication & RBAC](/docs/advanced/auth/) for tokens and repository permissions
+- [Vulnerability Scanning](/docs/security/scanning/) for scan-on-upload and quarantine
+- [Age Gate](/docs/security/age-gate/) for holding new package versions

@@ -1,13 +1,13 @@
 ---
 title: "Package Formats"
-description: "All 38 native package formats (54 with client aliases) supported by Artifact Keeper"
+description: "All 39 native package formats (55 with client aliases) supported by Artifact Keeper"
 ---
 
 import ComingIn from '../../../components/ComingIn.astro';
 
 # Package Formats
 
-Artifact Keeper supports **38 native package formats (54 with client aliases)** <ComingIn inline feature="Agent Plugins" /> out of the box. Every format is included at no extra cost — no feature gates, no tier restrictions. Each speaks the native wire protocol that your package manager already expects.
+Artifact Keeper supports **39 native package formats (55 with client aliases)** <ComingIn inline feature="Agent Plugins and MCP Registry" /> out of the box. Every format is included at no extra cost — no feature gates, no tier restrictions. Each speaks the native wire protocol that your package manager already expects.
 
 This page is a quick reference index. Click through to the detailed guide pages for configuration examples, native client setup, and best practices.
 
@@ -15,7 +15,7 @@ This page is a quick reference index. Click through to the detailed guide pages 
 
 ## Complete Format Reference
 
-**38 native formats** with full wire-protocol support, plus **16 aliases** for alternative clients that share an underlying protocol. Custom formats can be added at any time via [WASM plugins](/docs/advanced/plugins/).
+**39 native formats** with full wire-protocol support, plus **16 aliases** for alternative clients that share an underlying protocol. Custom formats can be added at any time via [WASM plugins](/docs/advanced/plugins/).
 
 | # | Format | Key | Category | Native Clients |
 |---|--------|-----|----------|----------------|
@@ -54,9 +54,10 @@ This page is a quick reference index. Click through to the detailed guide pages 
 | 33 | VS Code | `vscode` | Editor Extensions | VS Code, Cursor, Windsurf, Kiro |
 | 34 | JetBrains | `jetbrains` | Editor Extensions | IntelliJ, PyCharm, WebStorm |
 | 35 | Agent Plugins <ComingIn inline /> | `agentplugins` | Editor Extensions | Claude Code (native); Cursor, Codex, GitHub Copilot / VS Code (via `ak`) |
-| 36 | Git LFS | `gitlfs` | Other | git lfs |
-| 37 | P2 | `p2` | Other | Eclipse IDE |
-| 38 | Generic | `generic` | Other | curl, wget, any HTTP client |
+| 36 | MCP Registry <ComingIn inline /> | `mcp` | Editor Extensions | VS Code, GitHub Copilot, mcp-publisher |
+| 37 | Git LFS | `gitlfs` | Other | git lfs |
+| 38 | P2 | `p2` | Other | Eclipse IDE |
+| 39 | Generic | `generic` | Other | curl, wget, any HTTP client |
 
 ---
 
@@ -158,8 +159,11 @@ Debian, RPM, Alpine, and Conda repositories support GPG/RSA signing for reposito
 | **VS Code** | `vscode` | VS Code, Cursor, Windsurf, Kiro | [More Formats](/docs/guides/more-formats/) |
 | **JetBrains** | `jetbrains` | IntelliJ, PyCharm, WebStorm, etc. | [More Formats](/docs/guides/more-formats/) |
 | **Agent Plugins** <ComingIn inline /> | `agentplugins` | Claude Code (native); Cursor, Codex, GitHub Copilot / VS Code (via `ak agent plugins install`) | [Agent Plugins Guide](/docs/guides/agent-plugins/) |
+| **MCP Registry** <ComingIn inline /> | `mcp` | VS Code MCP gallery, GitHub Copilot, mcp-publisher | [MCP Registry Guide](/docs/guides/mcp-registry/) |
 
 <ComingIn inline /> **Agent Plugins** repositories store AI coding-agent plugin bundles as versioned zips and generate the marketplace documents the agents read. They are hosted only: remote and virtual Agent Plugins repositories are not supported.
+
+<ComingIn inline /> **MCP Registry** repositories are private catalogs of Model Context Protocol servers that speak the MCP registry API v0.1, so VS Code, GitHub Copilot and `mcp-publisher` can use them in place of the public registry. By default every package a server runs must already be in one of your Artifact Keeper repositories, pinned and gated like any download.
 
 **JupyterLab Extensions** (`jupyter`, from 1.10.0) is an [alias](#format-aliases) of PyPI rather than a separate format: prebuilt extensions are PyPI wheels, source extensions are npm packages, and nbextensions ship through either or Conda. See [JupyterLab Extensions](/docs/guides/more-formats/#jupyterlab-extensions) for the one-line Extension Manager configuration.
 

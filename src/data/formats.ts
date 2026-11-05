@@ -1,4 +1,4 @@
-// The 38 native package formats Artifact Keeper serves (docs: /docs/package-formats/).
+// The 39 native package formats Artifact Keeper serves (docs: /docs/package-formats/).
 // A format with `since` is not released yet: the landing pages count and show it only once
 // `release` in site.ts reaches that version.
 // `name` is the label shown on the landing page, `key` the repository format key,
@@ -65,12 +65,13 @@ export const allFormats: Format[] = [
   { name: 'VS Code', key: 'vscode', category: 'Editor extensions', clients: ['VS Code', 'Cursor', 'Windsurf', 'Kiro'], logo: null, tile: 'vsix' },
   { name: 'JetBrains', key: 'jetbrains', category: 'Editor extensions', clients: ['IntelliJ', 'PyCharm', 'WebStorm'], logo: 'jetbrains' },
   { name: 'Agent Plugins', key: 'agentplugins', category: 'Editor extensions', clients: ['Claude Code', 'Cursor', 'Codex', 'GitHub Copilot'], logo: null, tile: 'agent', since: nextRelease },
+  { name: 'MCP Registry', key: 'mcp', category: 'Editor extensions', clients: ['VS Code', 'GitHub Copilot', 'mcp-publisher'], logo: null, tile: 'mcp', since: nextRelease },
   { name: 'Git LFS', key: 'gitlfs', category: 'Other', clients: ['git lfs'], logo: 'gitlfs' },
   { name: 'P2', key: 'p2', category: 'Other', clients: ['Eclipse IDE'], logo: 'eclipseide' },
   { name: 'Generic', key: 'generic', category: 'Other', clients: ['curl', 'wget', 'any HTTP client'], logo: null, tile: 'bin' },
 ];
 
-if (allFormats.length !== 38) throw new Error(`expected 38 native formats, found ${allFormats.length}`);
+if (allFormats.length !== 39) throw new Error(`expected 39 native formats, found ${allFormats.length}`);
 
 /** The formats in the current release: what the landing pages count and show. */
 export const formats: Format[] = allFormats.filter((f) => !f.since || isReleased(f.since));

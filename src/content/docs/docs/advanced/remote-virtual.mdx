@@ -23,6 +23,8 @@ npm, PyPI, Maven, Cargo, Go, Hex, RubyGems, NuGet, Helm, Conan, Composer, CocoaP
 
 <ComingIn inline /> Agent Plugins repositories are the exception: they are hosted only, and creating a remote or virtual Agent Plugins repository is refused with `400`. See the [Agent Plugins guide](/docs/guides/agent-plugins/).
 
+<ComingIn inline /> MCP Registry repositories support Remote and Virtual too, with their own rules: by default a Remote MCP repository serves only the upstream servers an administrator approved, and a Virtual never serves a name from a Remote member when a hosted member holds it. See the [MCP Registry guide](/docs/guides/mcp-registry/#remote-and-virtual-repositories).
+
 ## Creating a Remote Repository
 
 A remote repository acts as a pull-through cache. When a client requests a package that isn't cached locally, Artifact Keeper fetches it from the upstream registry, caches it, and serves it to the client. Subsequent requests are served from the local cache.
