@@ -161,7 +161,7 @@ Debian, RPM, Alpine, and Conda repositories support GPG/RSA signing for reposito
 | **Agent Plugins** <ComingIn inline /> | `agentplugins` | Claude Code (native); Cursor, Codex, GitHub Copilot / VS Code (via `ak agent plugins install`) | [Agent Plugins Guide](/docs/guides/agent-plugins/) |
 | **MCP Registry** <ComingIn inline /> | `mcp` | VS Code MCP gallery, GitHub Copilot, mcp-publisher | [MCP Registry Guide](/docs/guides/mcp-registry/) |
 
-<ComingIn inline /> **Agent Plugins** repositories store AI coding-agent plugin bundles as versioned zips and generate the marketplace documents the agents read. They are hosted only: remote and virtual Agent Plugins repositories are not supported.
+<ComingIn inline /> **Agent Plugins** repositories store AI coding-agent plugin bundles as versioned zips and generate the marketplace documents the agents read. They can be hosted, or remote repositories that proxy a hosted Agent Plugins repository on another Artifact Keeper; virtual Agent Plugins repositories are not supported yet.
 
 <ComingIn inline /> **MCP Registry** repositories are private catalogs of Model Context Protocol servers that speak the MCP registry API v0.1, so VS Code, GitHub Copilot and `mcp-publisher` can use them in place of the public registry. By default every package a server runs must already be in one of your Artifact Keeper repositories, pinned and gated like any download.
 
@@ -214,7 +214,7 @@ Every format supports the full Artifact Keeper feature set:
 | Vulnerability Scanning | Language packages, containers, archives |
 | Repository Metadata Signing | Debian, RPM, Alpine, Conda |
 | Peer Replication | All formats |
-| Virtual Repositories | All formats except Agent Plugins (hosted only) |
+| Virtual Repositories | All formats except Agent Plugins (hosted and remote only) |
 | Webhooks | All formats |
 
 ---

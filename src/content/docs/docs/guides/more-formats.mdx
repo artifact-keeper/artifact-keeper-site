@@ -25,21 +25,25 @@ Install the HuggingFace Hub library:
 pip install huggingface_hub
 ```
 
-Configure authentication:
-
-```python
-from huggingface_hub import login
-
-# Login with token
-login(token="your_artifact_keeper_token")
-```
-
-Or set environment variable:
+Point the client at the repository with environment variables. `huggingface_hub`
+takes its server from `HF_ENDPOINT` and its credential from `HF_TOKEN`, and
+`transformers` and `sentence-transformers` read the same variables:
 
 ```bash
-export HUGGING_FACE_HUB_TOKEN=your_artifact_keeper_token
 export HF_ENDPOINT=https://artifacts.example.com/huggingface/main
+export HF_TOKEN=your_artifact_keeper_token
 ```
+
+`HF_ENDPOINT` includes the `/huggingface/<repo_key>` prefix, with no trailing
+slash. `HF_TOKEN` is an **Artifact Keeper** API token, not a Hugging Face one
+(`read:artifacts` is enough to download); `huggingface_hub` sends it as
+`Authorization: Bearer <token>`. Leave it unset for a public repository.
+
+Do not use `login()` or `hf auth login` for Artifact Keeper: they check the
+token with the Hub's `whoami` call, which Artifact Keeper does not implement.
+And do not leave a real Hugging Face token in `HF_TOKEN` (or in
+`~/.cache/huggingface/token` from an earlier login) while `HF_ENDPOINT` points
+at Artifact Keeper: it is sent to Artifact Keeper, which refuses it with `401`.
 
 #### Uploading Models
 
@@ -65,7 +69,8 @@ for size limits and streaming.
 
 #### Downloading Models
 
-Download models from your private repository:
+With `HF_ENDPOINT` and `HF_TOKEN` set as above, download models from your
+private repository:
 
 ```python
 from huggingface_hub import hf_hub_download
@@ -75,14 +80,10 @@ from transformers import AutoModel
 model_path = hf_hub_download(
     repo_id="myorg/my-model",
     filename="model.safetensors",
-    endpoint="https://artifacts.example.com/huggingface/main",
 )
 
-# Load model with transformers
-model = AutoModel.from_pretrained(
-    "myorg/my-model",
-    endpoint="https://artifacts.example.com/huggingface/main",
-)
+# Load model with transformers (reads HF_ENDPOINT too)
+model = AutoModel.from_pretrained("myorg/my-model")
 ```
 
 #### Snapshots and Revisions
@@ -92,11 +93,10 @@ Work with specific model versions:
 ```python
 from huggingface_hub import snapshot_download
 
-# Download entire model snapshot
+# Download entire model snapshot (from HF_ENDPOINT)
 snapshot_download(
     repo_id="myorg/my-model",
     revision="v1.0.0",
-    endpoint="https://artifacts.example.com/huggingface/main",
 )
 ```
 
@@ -111,27 +111,28 @@ runs these calls end to end against a hosted repository and a Hub remote.
 #### Remote Repositories and Xet Storage
 
 When a HuggingFace repository is configured as **remote** (pull-through to
-`https://huggingface.co`), disabling Xet on the client is recommended:
+`https://huggingface.co`), point `HF_ENDPOINT` at it and download as usual:
 
 ```bash
-export HF_HUB_DISABLE_XET=1
 export HF_ENDPOINT=https://artifacts.example.com/huggingface/hf-remote
 
 hf download openai-community/gpt2
 ```
 
-:::caution
-Without `HF_HUB_DISABLE_XET=1`, `hf download` fails with a `404` on
-`/api/models/{model_id}/xet-read-token/{revision}`.
-
 The Hub now serves most models through Xet, its content-addressed storage
-backend. `huggingface_hub` detects Xet-backed files from the upstream file
-listing and then requests a Xet access token, which Artifact Keeper does not
-issue. Setting the variable makes the client use the ordinary `/resolve/`
-download path, which is fully supported.
+backend, and `huggingface_hub` switches to Xet when the file metadata says a
+file is Xet-backed. Artifact Keeper does not issue Xet access tokens, so it
+strips the Xet fields (`xetHash`, `xetEnabled`) from the metadata it proxies,
+and clients keep using the ordinary `/resolve/` download path, which is fully
+supported and goes through the cache.
+
+:::tip
+If a client still tries Xet (a `404` on
+`/api/models/{model_id}/xet-read-token/{revision}` in its log), set
+`HF_HUB_DISABLE_XET=1` on the client.
 :::
 
-Disabling Xet does not change what you get: the downloaded files are
+Using `/resolve/` instead of Xet does not change what you get: the downloaded files are
 byte-identical, and integrity is still verified against the upstream checksum.
 Only the transfer mechanism differs — plain HTTP range downloads instead of
 Xet's chunked deduplication.
@@ -324,7 +325,7 @@ publishPlugin {
 
 ### Agent Plugins
 
-<ComingIn inline /> Host Claude Code, Cursor, Codex and GitHub Copilot plugin bundles in a hosted `agentplugins` repository. Claude Code adds the generated marketplace directly with `claude plugin marketplace add`; the other agents install through `ak agent plugins install`. See the [Agent Plugins guide](/docs/guides/agent-plugins/).
+<ComingIn inline /> Host Claude Code, Cursor, Codex and GitHub Copilot plugin bundles in a hosted `agentplugins` repository, or proxy another Artifact Keeper's with a remote one. Claude Code adds the generated marketplace directly with `claude plugin marketplace add`; the other agents install through `ak agent plugins install`. See the [Agent Plugins guide](/docs/guides/agent-plugins/).
 
 ### MCP Registry
 
@@ -791,7 +792,7 @@ jobs:
 
 ## Remote & Virtual Repositories
 
-All formats on this page support remote proxy and virtual repository aggregation, except Agent Plugins, which is hosted only.
+All formats on this page support remote proxy and virtual repository aggregation, except Agent Plugins <ComingIn inline />: an Agent Plugins remote proxies only another Artifact Keeper's hosted Agent Plugins repository, and virtual Agent Plugins repositories are not supported yet.
 
 ### Common Upstream URLs
 

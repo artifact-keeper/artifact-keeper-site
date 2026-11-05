@@ -21,7 +21,7 @@ Remote proxy and virtual resolution is supported for **all** package formats:
 
 npm, PyPI, Maven, Cargo, Go, Hex, RubyGems, NuGet, Helm, Conan, Composer, CocoaPods, Swift SPM, Pub (Dart/Flutter), Sbt, CRAN, Conda, RPM, Debian, Alpine, Git LFS, Chef, Puppet, Ansible, Terraform, VS Code Extensions, JetBrains Plugins, Hugging Face, and Protobuf/BSR.
 
-<ComingIn inline /> Agent Plugins repositories are the exception: they are hosted only, and creating a remote or virtual Agent Plugins repository is refused with `400`. See the [Agent Plugins guide](/docs/guides/agent-plugins/).
+<ComingIn inline /> Agent Plugins repositories support Remote with one rule: the upstream is a hosted Agent Plugins repository on another Artifact Keeper (`https://central.example.com/agentplugins/<key>`), not a GitHub-hosted marketplace, and every archive is checked against the SHA-256 the upstream lists before it is cached. Virtual Agent Plugins repositories are not supported yet: creating one is refused with `400`. See the [Agent Plugins guide](/docs/guides/agent-plugins/#remote-repositories).
 
 <ComingIn inline /> MCP Registry repositories support Remote and Virtual too, with their own rules: by default a Remote MCP repository serves only the upstream servers an administrator approved, and a Virtual never serves a name from a Remote member when a hosted member holds it. See the [MCP Registry guide](/docs/guides/mcp-registry/#remote-and-virtual-repositories).
 
