@@ -43,27 +43,25 @@ export HF_ENDPOINT=https://artifacts.example.com/huggingface/main
 
 #### Uploading Models
 
-Upload a model to Artifact Keeper:
+`huggingface_hub`'s `upload_file`, `upload_folder` and `create_commit` use the
+Hub's commit API, which Artifact Keeper does not implement. Upload files to a
+local repository one at a time with Artifact Keeper's own route, naming the
+file in `X-Filename` (a path such as `onnx/model.onnx` is allowed):
 
-```python
-from huggingface_hub import HfApi
-
-api = HfApi(endpoint="https://artifacts.example.com/huggingface/main")
-
-# Upload entire model directory
-api.upload_folder(
-    folder_path="./my-model",
-    repo_id="myorg/my-model",
-    repo_type="model",
-)
-
-# Upload single file
-api.upload_file(
-    path_or_fileobj="./model.safetensors",
-    path_in_repo="model.safetensors",
-    repo_id="myorg/my-model",
-)
+```bash
+curl -X POST \
+  -H "Authorization: Bearer $AK_TOKEN" \
+  -H "X-Filename: model.safetensors" \
+  --data-binary @model.safetensors \
+  https://artifacts.example.com/huggingface/main/api/models/myorg/my-model/upload/main
 ```
+
+The token needs `write:artifacts` and write permission on the repository. A
+published file is immutable: uploading to a path that already holds a file
+answers `409`. Upload every file of a revision to that revision (`upload/v1.0.0`
+for `revision="v1.0.0"`). See
+[Publishing to a Local repository](https://github.com/artifact-keeper/artifact-keeper/blob/main/docs/huggingface.md#publishing-to-a-local-repository)
+for size limits and streaming.
 
 #### Downloading Models
 
@@ -102,6 +100,14 @@ snapshot_download(
 )
 ```
 
+`snapshot_download` and `hf download` against a hosted (local) repository need
+the fix in [artifact-keeper#5300](https://github.com/artifact-keeper/artifact-keeper/pull/5300),
+which is on `main` and on the 1.11.x patch line <ComingIn inline version="1.11.12" />.
+Earlier releases leave out the `id` field `huggingface_hub` requires in model
+info, so the first call fails. The
+[private model hub walkthrough](https://github.com/artifact-keeper/walkthroughs/tree/main/private-model-hub)
+runs these calls end to end against a hosted repository and a Hub remote.
+
 #### Remote Repositories and Xet Storage
 
 When a HuggingFace repository is configured as **remote** (pull-through to
@@ -133,6 +139,27 @@ Xet's chunked deduplication.
 This applies to remote (proxying) repositories only. Hosted repositories that
 you upload models to yourself are unaffected, since their files never come from
 the Hub.
+
+#### Restricting Which Models a Remote Can Fetch
+
+An upstream filter limits a remote repository to the models you approve. A
+Hugging Face remote requests model info as `api/models/<org>/<name>...` and
+files as `<org>/<name>/resolve/...`, so the pattern must match both shapes:
+a filter on only one of them makes `snapshot_download` and `hf download` fail
+on their first call.
+
+```bash
+curl -X PUT https://artifacts.example.com/api/v1/repositories/hf-remote/upstream-filter \
+  -H "Authorization: Bearer $AK_ADMIN_TOKEN" \
+  -H 'Content-Type: application/json' \
+  -d '{"include_patterns": ["^(api/models/)?(sentence-transformers|Qwen)/[^/]+(/|$)"]}'
+```
+
+A refused model answers `404` without the Hub being contacted. See
+[Restricting which models a Remote can fetch](https://github.com/artifact-keeper/artifact-keeper/blob/main/docs/huggingface.md#restricting-which-models-a-remote-can-fetch)
+for look-alike organisations, single models and case, and
+[Upstream filters](https://github.com/artifact-keeper/artifact-keeper/blob/main/docs/upstream-filter.md)
+for how filters work in every format.
 
 ### ML Model (Generic)
 
@@ -725,14 +752,14 @@ jobs:
 
       - name: Upload ML Model
         run: |
-          pip install huggingface_hub
-          python -c "
-          from huggingface_hub import HfApi
-          api = HfApi(endpoint='https://artifacts.example.com/huggingface/main')
-          api.upload_folder(folder_path='./models', repo_id='myorg/model')
-          "
-        env:
-          HUGGING_FACE_HUB_TOKEN: ${{ secrets.ARTIFACT_KEEPER_TOKEN }}
+          cd models
+          find . -type f | sed 's|^\./||' | while read -r f; do
+            curl -fsS -X POST \
+              -H "Authorization: Bearer ${{ secrets.ARTIFACT_KEEPER_TOKEN }}" \
+              -H "X-Filename: $f" \
+              --data-binary "@$f" \
+              https://artifacts.example.com/huggingface/main/api/models/myorg/model/upload/${{ github.ref_name }}
+          done
 ```
 
 ## Best Practices
