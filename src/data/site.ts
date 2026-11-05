@@ -4,6 +4,23 @@
 export const release = { version: 'v1.11.10', date: '2026-10-29' };
 
 /**
+ * The release that ships the documented but unreleased features. Pages mark them with
+ * <ComingIn /> (src/components/ComingIn.astro) and formats.ts gives them `since`.
+ */
+export const nextRelease = '1.12.0';
+
+const parts = (v: string) => v.replace(/^v/, '').split('.').map((n) => parseInt(n, 10) || 0);
+
+/** True once `release` above is `version` or newer: "Coming in" notices hide themselves. */
+export function isReleased(version: string): boolean {
+  const [have, want] = [parts(release.version), parts(version)];
+  for (let i = 0; i < 3; i++) {
+    if ((have[i] ?? 0) !== (want[i] ?? 0)) return (have[i] ?? 0) > (want[i] ?? 0);
+  }
+  return true;
+}
+
+/**
  * Contact points.
  * - `support`: community and product contact (footer, Cloud fallback card, privacy page).
  * - `enterprise`: address for enterprise support and services (OpenTeams). While it is

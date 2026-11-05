@@ -3,6 +3,12 @@ title: "Agent Plugins Guide"
 description: "Host Claude Code, Cursor, Codex and GitHub Copilot plugin bundles in an Agent Plugins repository and install them from a generated marketplace"
 ---
 
+import ComingIn from '../../../../components/ComingIn.astro';
+
+<ComingIn>
+  The `ak agent plugins` commands on this page (`publish`, `install`, `list`, `update`, `uninstall`, `search`, `delete`) come with the 1.12.0 `ak` CLI.
+</ComingIn>
+
 An Agent Plugins repository stores AI coding-agent plugin bundles as versioned zips and generates the marketplace documents that the agents and the `ak` CLI read. You publish a plugin once, and every supported agent installs it from the same repository:
 
 - **Claude Code** reads the repository natively: `claude plugin marketplace add <url>`, no extra tooling.
@@ -11,7 +17,7 @@ An Agent Plugins repository stores AI coding-agent plugin bundles as versioned z
 Everything that applies to other hosted artifacts applies here: authentication and repository visibility, scan-on-upload and quarantine holds, publish quotas, immutable versions, download statistics, the Packages catalog, peer replication and the audit log.
 
 :::note
-Agent Plugins repositories were added in [artifact-keeper#5251](https://github.com/artifact-keeper/artifact-keeper/issues/5251). They are hosted only in this release; see [Limits and what is not supported yet](#limits-and-what-is-not-supported-yet).
+Agent Plugins repositories were added in [artifact-keeper#5251](https://github.com/artifact-keeper/artifact-keeper/issues/5251). They are hosted only; see [Limits and what is not supported yet](#limits-and-what-is-not-supported-yet).
 :::
 
 ## Endpoint

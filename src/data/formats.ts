@@ -1,7 +1,11 @@
 // The 38 native package formats Artifact Keeper serves (docs: /docs/package-formats/).
+// A format with `since` is not released yet: the landing pages count and show it only once
+// `release` in site.ts reaches that version.
 // `name` is the label shown on the landing page, `key` the repository format key,
 // `logo` a Simple Icons slug in src/assets/format-logos/ (or null for a text tile `tile`).
 // The marquee shows them in this order: row 1 is languages and schemas, row 2 the rest.
+
+import { isReleased, nextRelease } from './site';
 
 export type Category =
   | 'Languages'
@@ -21,9 +25,11 @@ export interface Format {
   clients: string[];
   logo: string | null;
   tile?: string;
+  /** First release that ships this format, while that release is not out yet. */
+  since?: string;
 }
 
-export const formats: Format[] = [
+export const allFormats: Format[] = [
   { name: 'Maven', key: 'maven', category: 'Languages', clients: ['Maven', 'Gradle'], logo: 'apachemaven' },
   { name: 'npm', key: 'npm', category: 'Languages', clients: ['npm', 'Yarn', 'pnpm', 'Bower'], logo: 'npm' },
   { name: 'PyPI', key: 'pypi', category: 'Languages', clients: ['pip', 'Poetry', 'pipenv', 'twine'], logo: 'pypi' },
@@ -58,13 +64,16 @@ export const formats: Format[] = [
   { name: 'ML Model', key: 'mlmodel', category: 'ML / AI', clients: ['Generic model storage'], logo: null, tile: 'ml' },
   { name: 'VS Code', key: 'vscode', category: 'Editor extensions', clients: ['VS Code', 'Cursor', 'Windsurf', 'Kiro'], logo: null, tile: 'vsix' },
   { name: 'JetBrains', key: 'jetbrains', category: 'Editor extensions', clients: ['IntelliJ', 'PyCharm', 'WebStorm'], logo: 'jetbrains' },
-  { name: 'Agent Plugins', key: 'agentplugins', category: 'Editor extensions', clients: ['Claude Code', 'Cursor', 'Codex', 'GitHub Copilot'], logo: null, tile: 'agent' },
+  { name: 'Agent Plugins', key: 'agentplugins', category: 'Editor extensions', clients: ['Claude Code', 'Cursor', 'Codex', 'GitHub Copilot'], logo: null, tile: 'agent', since: nextRelease },
   { name: 'Git LFS', key: 'gitlfs', category: 'Other', clients: ['git lfs'], logo: 'gitlfs' },
   { name: 'P2', key: 'p2', category: 'Other', clients: ['Eclipse IDE'], logo: 'eclipseide' },
   { name: 'Generic', key: 'generic', category: 'Other', clients: ['curl', 'wget', 'any HTTP client'], logo: null, tile: 'bin' },
 ];
 
-if (formats.length !== 38) throw new Error(`expected 38 native formats, found ${formats.length}`);
+if (allFormats.length !== 38) throw new Error(`expected 38 native formats, found ${allFormats.length}`);
+
+/** The formats in the current release: what the landing pages count and show. */
+export const formats: Format[] = allFormats.filter((f) => !f.since || isReleased(f.since));
 
 /** Marquee rows: row 1 is languages and schemas, row 2 everything else. */
 export const marqueeRows: Format[][] = [
