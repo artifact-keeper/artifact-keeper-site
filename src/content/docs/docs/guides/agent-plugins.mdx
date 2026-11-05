@@ -17,7 +17,7 @@ An Agent Plugins repository stores AI coding-agent plugin bundles as versioned z
 Everything that applies to other hosted artifacts applies here: authentication and repository visibility, scan-on-upload and quarantine holds, publish quotas, immutable versions, download statistics, the Packages catalog, peer replication and the audit log.
 
 :::note
-Agent Plugins repositories were added in [artifact-keeper#5251](https://github.com/artifact-keeper/artifact-keeper/issues/5251). They are hosted only; see [Limits and what is not supported yet](#limits-and-what-is-not-supported-yet).
+Agent Plugins repositories were added in [artifact-keeper#5251](https://github.com/artifact-keeper/artifact-keeper/issues/5251). They can be hosted, or [Remote](#remote-repositories) repositories that proxy a hosted Agent Plugins repository on another Artifact Keeper ([artifact-keeper#5289](https://github.com/artifact-keeper/artifact-keeper/issues/5289)). Virtual repositories are not supported yet; see [Limits and what is not supported yet](#limits-and-what-is-not-supported-yet).
 :::
 
 ## Endpoint
@@ -137,7 +137,7 @@ curl -X POST https://ak.example.com/api/v1/repositories \
   }'
 ```
 
-`hosted` and `local` are the same repository type. A request with `"repo_type": "remote"` or `"virtual"` is refused with `400`.
+`hosted` and `local` are the same repository type. To proxy another Artifact Keeper instead, create a [Remote repository](#remote-repositories). A request with `"repo_type": "virtual"` is refused with `400`.
 
 The repository key `t` is reserved for this format, because `/agentplugins/t/...` is the [token-in-path route](#private-repositories). Creating an Agent Plugins repository with the key `t`, or renaming one to it, is refused.
 
@@ -322,6 +322,43 @@ ak agent plugins search deploy --repo plugins --harness codex
 - **OpenCode** plugins are npm packages. Publish and install them from an [npm repository](/docs/guides/npm/); an Agent Plugins repository is not needed.
 - **Gemini CLI** is not supported. A `gemini-extension.json` is recorded as the `gemini` tag, but no index or installer uses it.
 
+## Remote repositories
+
+<ComingIn inline /> A Remote Agent Plugins repository proxies and caches a hosted Agent Plugins repository on **another Artifact Keeper**: a site behind a one-way link, a lab enclave or a regional cache serves the central instance's plugins, with the same SHA-256 on every instance, without republishing them. It does not proxy a GitHub-hosted marketplace or any other marketplace format.
+
+Create it with `"repo_type": "remote"` and the central repository's base URL as `upstream_url`:
+
+```bash
+curl -X POST https://site.example.org/api/v1/repositories \
+  -H "Authorization: Bearer $AK_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "key": "plugins-remote",
+    "name": "Central plugins",
+    "format": "agentplugins",
+    "repo_type": "remote",
+    "upstream_url": "https://central.example.com/agentplugins/plugins"
+  }'
+```
+
+For a private central repository, give the Remote upstream credentials (Basic or bearer token) as for any other Remote, or use the token-in-path form as the upstream URL, `https://central.example.com/agentplugins/t/<token>/plugins`, with a read-only, repository-scoped token minted on the central instance. The key `t` is reserved for Remotes too.
+
+Clients use a Remote exactly like a hosted repository, with the same routes, documents and [token-in-path](#private-repositories) variants:
+
+```bash
+claude plugin marketplace add https://site.example.org/agentplugins/plugins-remote/claude-marketplace.json
+ak agent plugins install deploy-tools --repo plugins-remote --harness cursor
+```
+
+How it behaves:
+
+- **Documents.** `marketplace.json`, the per-harness documents and `{name}/index.json` are fetched from the upstream through the proxy cache and revalidated after the cache TTL (five minutes by default). Every archive `url` and `versions_url` is rewritten to point at the Remote, and every `sha256` is kept exactly as the upstream lists it, so `claude plugin install` and `ak agent plugins install` verify the same bytes on every instance. The marketplace `name` comes from the Remote's key.
+- **What is listed.** Only what the upstream lists, in its order. An entry is proxied only when it is an `archive` source with a SHA-256 and a URL ending in `/{name}/{version}/{name}-{version}.zip`; anything else (a git or GitHub source, another layout) is left out.
+- **Archives are checked before they are cached or served.** A download reads the upstream `{name}/index.json` for the version's SHA-256, fetches the zip from the Remote's `upstream_url`, and hashes it. A mismatch answers `502` and is never cached. A matching archive is cached as immutable and later downloads do not contact the upstream. A version the upstream index does not list is `404`.
+- **Upstream outages.** Cached archives keep being served while the plugin's upstream index can still be read from the cache: past its TTL it is served stale for the stale-if-error grace (`PROXY_STALE_IF_ERROR_GRACE_SECS`, one hour by default, up to 30 days). Raise the grace or the Remote's cache TTL for a site that must install through a long outage.
+- **Like every other Remote.** The upstream filter (`include_patterns` / `exclude_patterns`, matched against the upstream-relative path), the origin policy, upstream credentials, the proxy cache cap and cache purge all apply. See [Remote & Virtual Repositories](/docs/advanced/remote-virtual/).
+- **Read-only.** Publishing to a Remote answers `405`.
+
 ## Which plugins appear in which index
 
 Each version is tagged with the harnesses detected in its zip, and the tags decide which documents list it:
@@ -420,7 +457,9 @@ Every version of one plugin, newest first. The `ak` CLI uses it to resolve `late
 
 ## Limits and what is not supported yet
 
-- **Hosted only.** Remote repositories (proxying a marketplace hosted elsewhere) and virtual repositories (merging several Agent Plugins repositories) are not supported yet. Creating either is refused with `400`.
+- **No virtual repositories yet.** A virtual repository merging hosted and Remote Agent Plugins repositories is not supported: creating one is refused with `400`.
+- **Remotes proxy Artifact Keeper only.** A [Remote](#remote-repositories) proxies another Artifact Keeper's hosted Agent Plugins repository, not a GitHub-hosted marketplace (its git sources would have to be re-archived, which changes the SHA-256).
+- **Remote archive size.** A Remote checks each archive in memory before serving it, so it proxies archives up to 256 MiB (Claude Code's own limit). Plugins pulled through a Remote are not scanned yet.
 - **No content policy yet.** A repository cannot yet refuse plugins that ship hooks, a `bin/` directory or MCP servers. The component inventory is already recorded on every version, so such a policy will not need a re-index. Until then, use [vulnerability scanning](/docs/security/scanning/), quarantine holds and repository permissions to control what is published.
 - **Claude Code archive limits.** Claude Code downloads at most 256 MiB per archive and refuses a zip whose uncompressed content is more than 50 times its size, regardless of what the server accepts.
 - **No signature verification on install.** `ak agent plugins install` verifies the SHA-256 from the index, not a signature or attestation.
