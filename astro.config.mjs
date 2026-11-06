@@ -46,6 +46,12 @@ export default defineConfig({
           ],
         },
         {
+          label: 'Use Cases',
+          items: [
+            { label: 'Off-Grid AI Stack', slug: 'docs/use-cases/off-grid-ai-stack', badge: comingBadge },
+          ],
+        },
+        {
           label: 'CLI (ak)',
           items: [
             { label: 'Quick Start', slug: 'docs/cli/quickstart' },
