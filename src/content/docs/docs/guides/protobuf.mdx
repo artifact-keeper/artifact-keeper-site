@@ -1,9 +1,18 @@
 ---
 title: "Protobuf / BSR Guide"
-description: "Using Artifact Keeper as a Buf Schema Registry compatible protobuf module host"
+description: "Hosting protobuf modules in Artifact Keeper through its BSR-shaped JSON Connect API"
 ---
 
-Artifact Keeper provides a Buf Schema Registry (BSR) compatible endpoint for hosting and distributing protobuf modules. It implements the Connect RPC protocol used by the `buf` CLI.
+Artifact Keeper hosts and distributes protobuf modules through an HTTP API modelled on the Buf Schema Registry (BSR) Connect RPC services. The API speaks Connect's JSON codec: every request and response is `Content-Type: application/json`.
+
+:::caution[The `buf` CLI does not work with Artifact Keeper yet]
+`buf push` and `buf dep update` cannot use an Artifact Keeper protobuf repository today, for two reasons:
+
+- The hosted endpoints accept JSON only. The `buf` CLI sends binary protobuf (`application/proto`), which they reject with `415 Unsupported Media Type`, and their request and response shapes are not the `buf.registry.module.v1` schema the CLI expects.
+- No `buf.yaml` can address a repository. A module name is exactly `registry/owner/name`; `buf` sends its requests to the root of the `registry` host, while Artifact Keeper serves each repository under `/proto/{repo_key}`. `buf push` has no `--registry` flag, and a name such as `ak.example.com/proto/protobuf-local/acme/payments` is rejected with `must be in the form registry/owner/name`.
+
+`buf` CLI support is tracked in [artifact-keeper/artifact-keeper#5066](https://github.com/artifact-keeper/artifact-keeper/issues/5066). Until it lands, publish and fetch modules with the JSON calls on this page.
+:::
 
 ## Endpoint
 
@@ -13,7 +22,7 @@ Protobuf operations use the `/proto/{repo_key}` endpoint:
 http://localhost:8080/proto/my-protobuf-repo
 ```
 
-This implements the BSR Connect RPC services: `ModuleService`, `CommitService`, `UploadService`, `DownloadService`, `LabelService`, `GraphService`, and `ResourceService`.
+Under it, Artifact Keeper serves JSON versions of the BSR Connect RPC services `ModuleService`, `CommitService`, `UploadService`, `DownloadService`, `LabelService`, `GraphService` and `ResourceService`. See the [API reference](#connect-rpc-api-reference) for the methods.
 
 ## Configuration
 
@@ -34,35 +43,15 @@ curl -X POST http://localhost:8080/api/v1/repositories \
   }'
 ```
 
-### Configure buf CLI
+### Authentication
 
-In your `buf.yaml`, point at your Artifact Keeper instance as the registry:
-
-```yaml
-version: v2
-name: buf.build/acme/payments
-deps: []
-```
-
-The `buf` CLI communicates using Connect RPC over HTTP. Set the `BUF_TOKEN` environment variable for authentication:
-
-```bash
-export BUF_TOKEN="your-api-token-or-password"
-```
+Write calls (`Upload`, `CreateModules`, `CreateOrUpdateLabels`) need credentials: an API token as `Authorization: Bearer $TOKEN`, or Basic auth with a username and password. Read calls on a public repository work without them.
 
 ## Publishing Modules
 
-### Push with buf CLI
-
-Push a module to Artifact Keeper:
-
-```bash
-buf push --registry http://localhost:8080/proto/protobuf-local
-```
-
 ### Push via Connect RPC (curl)
 
-You can also push directly via the Upload endpoint:
+Push a module with the Upload endpoint:
 
 ```bash
 # Base64-encode your proto file content
@@ -258,6 +247,23 @@ Authentication supports both Basic auth (`username:password`) and Bearer tokens 
 
 ## Integration with CI/CD
 
+Until the `buf` CLI is supported (see the caution at the top of this page), a pipeline publishes with the Upload call. This script uploads every file under `proto/` as module `acme/payments` and labels the commit with the tag being built; it needs `jq` and `curl`, and works the same from GitHub Actions or GitLab CI:
+
+```bash
+#!/usr/bin/env bash
+# publish-protos.sh <registry-url> <repo-key> <label>
+set -euo pipefail
+files=$(find proto -type f -name '*.proto' -printf '%P\n' | sort | while read -r f; do
+  jq -n --arg path "$f" --arg content "$(base64 -w0 < "proto/$f")" '{path: $path, content: $content}'
+done | jq -s .)
+jq -n --argjson files "$files" --arg label "$3" \
+  '{contents: [{moduleRef: {owner: "acme", module: "payments"}, files: $files, labelRefs: [{name: $label}]}]}' |
+curl --fail-with-body -X POST "$1/proto/$2/buf.registry.module.v1beta1.UploadService/Upload" \
+  -H "Authorization: Bearer $ARTIFACT_KEEPER_TOKEN" \
+  -H "Content-Type: application/json" \
+  --data-binary @-
+```
+
 ### GitHub Actions
 
 ```yaml
@@ -273,27 +279,22 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: bufbuild/buf-setup-action@v1
-        with:
-          version: 'latest'
-
       - name: Push to Artifact Keeper
         env:
-          BUF_TOKEN: ${{ secrets.ARTIFACT_KEEPER_TOKEN }}
-        run: |
-          buf push --registry ${{ vars.REGISTRY_URL }}/proto/protobuf-local
+          ARTIFACT_KEEPER_TOKEN: ${{ secrets.ARTIFACT_KEEPER_TOKEN }}
+        run: ./publish-protos.sh "${{ vars.REGISTRY_URL }}" protobuf-local "${GITHUB_REF_NAME}"
 ```
 
 ### GitLab CI
 
 ```yaml
 publish-protos:
-  image: bufbuild/buf:latest
+  image: alpine:3.20
   stage: deploy
+  before_script:
+    - apk add --no-cache bash curl jq findutils coreutils
   script:
-    - buf push --registry ${REGISTRY_URL}/proto/protobuf-local
-  variables:
-    BUF_TOKEN: ${ARTIFACT_KEEPER_TOKEN}
+    - ./publish-protos.sh "${REGISTRY_URL}" protobuf-local "${CI_COMMIT_TAG}"
   only:
     - tags
 ```
@@ -339,7 +340,7 @@ To migrate modules from the public BSR to a self-hosted Artifact Keeper instance
      }'
    ```
 
-4. **Point your `buf` CLI** at the virtual repository and your modules resolve from local first, falling back to the upstream BSR.
+4. **Resolving through the virtual repository with the `buf` CLI is not possible yet.** Like every other `buf` workflow it waits on [#5066](https://github.com/artifact-keeper/artifact-keeper/issues/5066); see the caution at the top of this page.
 
 ## Troubleshooting
 
