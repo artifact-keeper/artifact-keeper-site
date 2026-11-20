@@ -1,7 +1,10 @@
 // The Artifact Keeper release the landing pages show (hero, proof row, footer, "Coming in"
-// notices), read at build time from the latest GitHub release so it never needs a manual bump.
-// Any network or shape failure falls back to the committed snapshot so the build never fails
-// offline, and the snapshot never moves the version backwards. A successful production build
+// notices): the highest stable vX.Y.Z among the recent GitHub releases, read at build time so it
+// never needs a manual bump. Not `releases/latest`: patches on an older line (a 1.11.x after a
+// 1.12.x) are published later and GitHub would call them latest.
+// If the API fails, the build keeps what the live site already shows (/release.json), then the
+// committed snapshot, so an API outage never moves the site backwards and an offline build never
+// fails. The version never goes below the snapshot. A successful production build
 // refreshes the snapshot on disk, like src/data/stats.ts.
 // .github/workflows/release-check.yml redeploys the site when a newer release is published.
 import { writeFile } from 'node:fs/promises';
@@ -15,7 +18,8 @@ export interface Release {
   date: string;
 }
 
-export const LATEST_RELEASE_API = 'https://api.github.com/repos/artifact-keeper/artifact-keeper/releases/latest';
+export const RELEASES_API = 'https://api.github.com/repos/artifact-keeper/artifact-keeper/releases?per_page=30';
+const LIVE_RELEASE_URL = 'https://artifactkeeper.com/release.json';
 const SNAPSHOT_PATH = join(process.cwd(), 'src/data/release-snapshot.json');
 const TAG = /^v\d+\.\d+\.\d+$/;
 const DATE = /^\d{4}-\d{2}-\d{2}$/;
@@ -40,6 +44,30 @@ export function fromGitHub(body: unknown): Release | null {
   return DATE.test(date) ? { version: r.tag_name, date } : null;
 }
 
+/** The highest stable release in a GitHub releases list, or null if there is none. */
+export function highest(body: unknown): Release | null {
+  if (!Array.isArray(body)) return null;
+  let best: Release | null = null;
+  for (const item of body) {
+    const r = fromGitHub(item);
+    if (r && (!best || compareVersions(r.version, best.version) > 0)) best = r;
+  }
+  return best;
+}
+
+/** What the deployed site shows, if it is reachable and newer than `floor`. */
+async function liveRelease(floor: Release): Promise<Release | null> {
+  try {
+    const res = await fetch(LIVE_RELEASE_URL, { signal: AbortSignal.timeout(10_000) });
+    if (!res.ok) return null;
+    const r = (await res.json()) as Partial<Release>;
+    const ok = typeof r.version === 'string' && TAG.test(r.version) && typeof r.date === 'string' && DATE.test(r.date);
+    return ok && compareVersions(r.version!, floor.version) > 0 ? { version: r.version!, date: r.date! } : null;
+  } catch {
+    return null;
+  }
+}
+
 async function load(): Promise<Release> {
   const snapshot = snapshotJson as Release;
   try {
@@ -47,12 +75,12 @@ async function load(): Promise<Release> {
     // Optional: the deploy workflow passes its token so shared runners don't hit the anonymous rate limit.
     const token = process.env.GITHUB_TOKEN;
     if (token) headers.Authorization = `Bearer ${token}`;
-    const res = await fetch(LATEST_RELEASE_API, { headers, signal: AbortSignal.timeout(10_000) });
+    const res = await fetch(RELEASES_API, { headers, signal: AbortSignal.timeout(10_000) });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    const fresh = fromGitHub(await res.json());
-    if (!fresh) throw new Error('latest release is not a vX.Y.Z tag with a publication date');
+    const fresh = highest(await res.json());
+    if (!fresh) throw new Error('no stable vX.Y.Z release with a publication date');
     if (compareVersions(fresh.version, snapshot.version) < 0) {
-      throw new Error(`latest release ${fresh.version} is older than the snapshot`);
+      throw new Error(`highest release ${fresh.version} is older than the snapshot`);
     }
     if (import.meta.env.PROD && (fresh.version !== snapshot.version || fresh.date !== snapshot.date)) {
       try {
@@ -63,8 +91,10 @@ async function load(): Promise<Release> {
     }
     return fresh;
   } catch (e) {
-    console.warn(`[release] using committed snapshot ${snapshot.version}: ${(e as Error).message}`);
-    return snapshot;
+    const live = await liveRelease(snapshot);
+    const used = live ?? snapshot;
+    console.warn(`[release] using ${live ? 'the live site\'s' : 'committed snapshot'} ${used.version}: ${(e as Error).message}`);
+    return used;
   }
 }
 
