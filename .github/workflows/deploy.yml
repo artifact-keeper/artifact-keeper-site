@@ -38,6 +38,9 @@ jobs:
 
       - name: Build site
         run: npm run build
+        env:
+          # src/data/release.ts reads the latest release; the token avoids the anonymous rate limit.
+          GITHUB_TOKEN: ${{ github.token }}
 
       # Internal links only: --offline skips every http(s) URL, so external
       # flakiness cannot fail the build. --index-files makes /dir/ links

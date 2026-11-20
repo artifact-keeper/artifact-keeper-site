@@ -1,23 +1,24 @@
 // Site-wide constants for the landing pages (/, /cloud/, /privacy/).
+import { compareVersions, release } from './release';
 
-/** Release shown in the hero eyebrow, the proof row, the footer and the OG image. */
-export const release = { version: 'v1.11.10', date: '2026-10-29' };
+/**
+ * Release shown in the hero eyebrow, the proof row, the footer and the OG image: the latest
+ * GitHub release, read at build time (src/data/release.ts). No manual bump is needed.
+ */
+export { release };
 
 /**
  * The release that ships the documented but unreleased features. Pages mark them with
  * <ComingIn /> (src/components/ComingIn.astro) and formats.ts gives them `since`.
+ * Once `release` reaches it, the marked features show as released automatically. Move it
+ * forward only when marking features for a later release, and give features that already
+ * shipped an explicit `since`/`version` first so they stay visible.
  */
 export const nextRelease = '1.12.0';
 
-const parts = (v: string) => v.replace(/^v/, '').split('.').map((n) => parseInt(n, 10) || 0);
-
-/** True once `release` above is `version` or newer: "Coming in" notices hide themselves. */
+/** True once `release` is `version` or newer: "Coming in" notices hide themselves. */
 export function isReleased(version: string): boolean {
-  const [have, want] = [parts(release.version), parts(version)];
-  for (let i = 0; i < 3; i++) {
-    if ((have[i] ?? 0) !== (want[i] ?? 0)) return (have[i] ?? 0) > (want[i] ?? 0);
-  }
-  return true;
+  return compareVersions(release.version, version) >= 0;
 }
 
 /**
