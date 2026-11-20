@@ -1,0 +1,65 @@
+name: Release Check
+
+# Redeploys the site when a newer Artifact Keeper release is out than the one the live site
+# shows (/release.json, written at build time from src/data/release.ts). A release appears on
+# artifactkeeper.com within about 30 minutes, with no manual bump. Most runs only compare two
+# strings and exit; a full Pages deploy happens only when the versions differ.
+
+on:
+  schedule:
+    - cron: "*/30 * * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: write # to start Deploy Site
+
+concurrency:
+  group: release-check
+  cancel-in-progress: false
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Redeploy if the live site shows an older release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          # Highest stable vX.Y.Z, matching src/data/release.ts. Not releases/latest: a patch on an
+          # older line (1.11.x after 1.12.x) is published later and GitHub calls it latest.
+          if ! latest=$(gh api 'repos/artifact-keeper/artifact-keeper/releases?per_page=30' \
+              --jq '[.[] | select(.draft | not) | select(.prerelease | not) | .tag_name
+                     | select(test("^v[0-9]+\\.[0-9]+\\.[0-9]+$"))] | .[]' | sort -V | tail -1); then
+            echo "::warning::could not list releases; trying again at the next check"
+            exit 0
+          fi
+          if [ -z "$latest" ]; then
+            echo "::warning::no stable vX.Y.Z release found; nothing to do"
+            exit 0
+          fi
+          live=$(curl -fsS --max-time 20 "https://artifactkeeper.com/release.json?t=$(date +%s)" | jq -r '.version // empty' || true)
+          echo "highest release: $latest, live site: ${live:-unknown}"
+          # Redeploy only when the release is newer than what the site shows (or the site's version is unknown).
+          if [ -n "$live" ] && [ "$(printf '%s\n%s\n' "$live" "$latest" | sort -V | tail -1)" = "$live" ]; then
+            exit 0
+          fi
+          # Don't stack deploys: if one is queued or running, let it finish (the next check re-tests).
+          active=$(gh run list -R "$REPO" --workflow deploy.yml --branch main --limit 10 --json status,event \
+            --jq '[.[] | select(.event != "pull_request") | select(.status != "completed")] | length')
+          if [ "$active" != "0" ]; then
+            echo "Deploy Site is already running; leaving it."
+            exit 0
+          fi
+          # Don't retry a failing deploy every 30 minutes: at most one release-triggered deploy per 3 hours.
+          recent=$(gh run list -R "$REPO" --workflow deploy.yml --event workflow_dispatch --limit 5 \
+            --json createdAt --jq "[.[] | select(.createdAt > \"$(date -u -d '3 hours ago' +%Y-%m-%dT%H:%M:%SZ)\")] | length")
+          if [ "$recent" != "0" ]; then
+            echo "::warning::a release-triggered deploy ran in the last 3 hours and the site still shows ${live:-unknown}; check Deploy Site"
+            exit 0
+          fi
+          echo "Starting Deploy Site for $latest"
+          gh workflow run deploy.yml -R "$REPO" --ref main
