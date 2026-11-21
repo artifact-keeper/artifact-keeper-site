@@ -29,6 +29,7 @@ export default defineConfig({
       ],
       social: {
         github: 'https://github.com/artifact-keeper',
+        discord: 'https://discord.gg/8T7NW2PeS2',
       },
       customCss: ['./src/styles/custom.css'],
       disable404Route: false,
