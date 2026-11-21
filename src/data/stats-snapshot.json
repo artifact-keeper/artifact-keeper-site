@@ -1,14 +1,14 @@
 {
-  "updated": "2026-11-02 16:09 UTC",
+  "updated": "2026-11-20 15:34 UTC",
   "metrics": {
-    "stars": 1225,
-    "forks": 172,
-    "contributors": 82,
-    "dockerPulls": 410349,
-    "dockerPullsBackend": 148649,
-    "releaseDownloads": 5680,
-    "releases": 56,
-    "mergedPrs": 2442
+    "stars": 1312,
+    "forks": 188,
+    "contributors": 92,
+    "dockerPulls": 520159,
+    "dockerPullsBackend": 201328,
+    "releaseDownloads": 7092,
+    "releases": 63,
+    "mergedPrs": 2938
   },
   "countriesCount": 63,
   "peopleLocated": 602,
